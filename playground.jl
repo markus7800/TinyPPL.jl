@@ -1,5 +1,5 @@
 using PPL.Distributions
-using PPL.TraceBased
+using PPL.Trace
 
 @ppl function geometric(p::Float64, observed::Bool)
     i = 0
@@ -40,3 +40,19 @@ P_true = [exp(logpdf(Geometric(0.5), i) + logpdf(Normal(i, 1.0), observations[:X
 
 maximum(abs.(P_hat .- P_true))
 
+using PPL.Distributions
+using PPL.Graph
+
+foppl = quote
+    let A ~ Bernoulli(0.5),
+        B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
+        C ~ Bernoulli(B == 1 ? 0.9 : 0.7),
+        D = (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ true
+        
+        A + C
+    end
+end;
+
+pgm = compile_pgm(foppl);
+
+@time traces, retvals, lps = importance_sampling(pgm, 1_000_000);

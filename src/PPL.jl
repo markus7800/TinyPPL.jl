@@ -1,5 +1,6 @@
 
 module PPL
     include("distributions/distributions.jl")
-    include("trace_based/trace_based.jl")
+    include("trace/trace.jl")
+    include("graph/graph.jl")
 end
