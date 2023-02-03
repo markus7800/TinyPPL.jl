@@ -1,5 +1,6 @@
 import MacroTools
-import Distributions
+import Distributions: logpdf
+using ..PPL.Distributions
 
 function unwrap_let(expr)
     if expr isa Expr
@@ -420,7 +421,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
             end
         ))
         # display(f)
-        push!(distributions, Main.eval(f))
+        push!(distributions, eval(f))
 
         if haskey(spgm.Y, sym)
             y = spgm.Y[sym]
@@ -434,7 +435,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
                 end
             ))
             # display(f)
-            push!(observed_values, Main.eval(f))
+            push!(observed_values, eval(f))
         else
             push!(observed_values, nothing)
         end
@@ -451,7 +452,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
         end
     ))
     # display(f)
-    return_expr = Main.eval(f)
+    return_expr = eval(f)
 
     order = get_topolocial_order(n_variables, edges)
     spgm, E = to_human_readable(spgm, symbolic_E, ix_to_sym, sym_to_ix)

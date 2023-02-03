@@ -40,7 +40,6 @@ P_true = [exp(logpdf(Geometric(0.5), i) + logpdf(Normal(i, 1.0), observations[:X
 
 maximum(abs.(P_hat .- P_true))
 
-using PPL.Distributions
 using PPL.Graph
 
 model = @pgm begin
@@ -51,7 +50,7 @@ model = @pgm begin
         
         A + C
     end
-end
+end;
 
 @time traces, retvals, lps = importance_sampling(model, 1_000_000);
 
