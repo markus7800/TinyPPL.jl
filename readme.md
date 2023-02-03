@@ -1,4 +1,10 @@
 
+# TinyPPL
+
+Minimal implementation of common probabilistic programming language design paradigms in JULIA.
+
+## Overview
+
 univariate
 
 - trace-based
