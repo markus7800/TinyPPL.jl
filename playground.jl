@@ -1,5 +1,5 @@
 using PPL.Distributions
-using PPL.Trace
+using PPL.TraceBased
 
 @ppl function geometric(p::Float64, observed::Bool)
     i = 0
@@ -40,9 +40,36 @@ P_true = [exp(logpdf(Geometric(0.5), i) + logpdf(Normal(i, 1.0), observations[:X
 
 maximum(abs.(P_hat .- P_true))
 
+
+@ppl function LinReg(xs)
+    function f(slope, intercept, x)
+        intercept + slope * x
+    end
+
+    slope = {:slope} ~ Normal(0.0, 10.)
+    intercept = {:intercept} ~ Normal(0.0, 10.)
+
+    for i in 1:length(xs)
+        {(:y, i)} ~ Normal(f(slope, intercept, xs[i]), 1.)
+    end
+
+    return slope
+end
+
+xs = [1., 2., 3., 4., 5.]
+ys = [2.1, 3.9, 5.3, 7.7, 10.2]
+
+observations = Dict((:y,i) => ys[i] for i in 1:length(ys));
+@time traces, retvals, lps = importance_sampling(LinReg, (xs,), observations, 1_000_000);
+
+W = exp.(lps);
+retvals'W
+
+
+
 using PPL.Graph
 
-model = @pgm begin
+model = @pgm Flip begin
     let A ~ Bernoulli(0.5),
         B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
         C ~ Bernoulli(B == 1 ? 0.9 : 0.7),
@@ -53,7 +80,7 @@ model = @pgm begin
 end;
 
 
-model = @pgm begin
+model = @pgm Flip2 begin
     function plus(x, y)
         let a = 1, b = 1
             x + y + a - b
@@ -67,6 +94,26 @@ model = @pgm begin
         plus(A, C)
     end
 end;
+
+@time traces, retvals, lps = importance_sampling(model, 1_000_000);
+
+W = exp.(lps);
+retvals'W
+
+model = @pgm LinReg begin
+    function f(slope, intercept, x)
+        intercept + slope * x
+    end
+    let xs = [1., 2., 3., 4., 5.],
+        ys = [2.1, 3.9, 5.3, 7.7, 10.2],
+        slope ~ Normal(0.0, 10.),
+        intercept ~ Normal(0.0, 10.)
+
+        [(Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i]) for i in 1:5]
+        slope
+        # [ys[i] for i in 1:5]
+    end
+end
 
 @time traces, retvals, lps = importance_sampling(model, 1_000_000);
 

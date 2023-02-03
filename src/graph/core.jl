@@ -246,6 +246,49 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         E = Expr(:call, Eh, Es...)
         return G, E
 
+    elseif expr.head == :vect
+        G = EmptyPGM()
+        E = []
+        for v in expr.args
+            Gv, Ev = transpile(t, phi, v)
+            G = graph_disjoint_union(G, Gv)
+            push!(E, Ev)
+        end
+        return G, Expr(:vect, E...)
+
+    elseif expr.head == :ref
+        @assert length(expr.args) == 2
+
+        G_arr, arr = transpile(t, phi, expr.args[1])
+        if expr.args[2] isa Int && arr.head == :vect
+            return G_arr, arr.args[expr.args[2]]
+        end
+        G_ix, ix = transpile(t, phi, expr.args[2])
+        G = graph_disjoint_union(G_arr, G_ix)
+        E = Expr(:ref, arr, ix)
+        return G, E
+
+    elseif expr.head == :comprehension
+        @assert length(expr.args) == 1
+        @assert expr.args[1].head == :generator
+        gen = expr.args[1]
+        body = gen.args[1]
+        loop = gen.args[2] # has to be static
+        @assert loop.head == :(=)
+        
+        loop_var = loop.args[1]
+        range = loop.args[2]        
+
+        G = EmptyPGM()
+        E = []
+        for i in eval(range)
+            e = substitute(loop_var, i, body)
+            Gi, Ei = transpile(t, phi, e)
+            G = graph_disjoint_union(G, Gi)
+            push!(E, Ei)
+        end
+        return G, Expr(:vect, E...)
+
     elseif expr.head == :sample
         dist = expr.args[1]
         G, E = transpile(t, phi, dist)
@@ -330,6 +373,7 @@ function transpile_program(expr::Expr)
 end
 
 struct PGM
+    name::Symbol
     n_variables::Int
     edges::Set{Pair{Int,Int}} # edges
     distributions::Vector{Function} # distributions not pdfs
@@ -341,6 +385,7 @@ struct PGM
 end
 
 function Base.show(io::IO, pgm::PGM)
+    println(io, pgm.name)
     println(io, pgm.symbolic_pgm)
     println(io, "Return expression")
     println(pgm.symbolic_return_expr)
@@ -401,16 +446,15 @@ function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, ix_to_sym,
         end
     end
 
-    new_E = copy(E)
     for j in 1:n_variables
         sub_sym = human_readable_symbol(spgm, ix_to_sym[j], j)
-        new_E = substitute(ix_to_sym[j], sub_sym, new_E)
+        E = substitute(ix_to_sym[j], sub_sym, E)
     end
 
-    new_spgm, new_E
+    new_spgm, E
 end
 
-function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
+function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol})
     n_variables = length(spgm.V)
     sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(spgm.V))
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
@@ -425,9 +469,9 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
         for j in 1:n_variables
             d = substitute(ix_to_sym[j], :($X[$j]), d)
         end
-        f_name = Symbol("dist_$i")
+        f_name = Symbol("$(name)_dist_$i")
         f = rmlines(:(
-            function $f_name($X)
+            function $f_name($X::Vector{Float64})
                 $d
             end
         ))
@@ -439,9 +483,9 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
             for j in 1:n_variables
                 y = substitute(ix_to_sym[j], :($X[$j]), y)
             end
-            f_name = Symbol("obs_$i")
+            f_name = Symbol("$(name)_obs_$i")
             f = rmlines(:(
-                function $f_name($X)
+                function $f_name($X::Vector{Float64})
                     $y
                 end
             ))
@@ -452,13 +496,14 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
         end
     end
 
-    f_name = Symbol("return")
-    symbolic_E = copy(E)
+    spgm, symbolic_E = to_human_readable(spgm, E, ix_to_sym, sym_to_ix)
+
+    f_name = Symbol("$(name)_return")
     for j in 1:n_variables
         E = substitute(ix_to_sym[j], :($X[$j]), E)
     end
     f = rmlines(:(
-        function $f_name($X)
+        function $f_name($X::Vector{Float64})
             $E
         end
     ))
@@ -466,17 +511,17 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
     return_expr = eval(f)
 
     order = get_topolocial_order(n_variables, edges)
-    spgm, E = to_human_readable(spgm, symbolic_E, ix_to_sym, sym_to_ix)
     return PGM(
+        name,
         n_variables, edges,
         distributions, observed_values,
         return_expr,
-        spgm, E,
+        spgm, symbolic_E,
         order)
 end
 
 
-macro pgm(foppl)
+macro pgm(name, foppl)
     foppl = rmlines(foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, s_ ~ dist_) ? :($s = $(Expr(:sample, dist))) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ s_) ? Expr(:observe, dist, s) : expr,  foppl);
@@ -484,7 +529,7 @@ macro pgm(foppl)
     
     G, E = transpile_program(foppl);
     
-    pgm = compile_symbolic_pgm(G, E);
+    pgm = compile_symbolic_pgm(name, G, E);
 
     return pgm
 end
