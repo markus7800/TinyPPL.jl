@@ -1,5 +1,5 @@
 import MacroTools
-import Distributions: logpdf
+import ..PPL.Distributions: logpdf
 using ..PPL.Distributions
 
 function unwrap_let(expr)
@@ -346,7 +346,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
     end
 end
 
-function Distributions.logpdf(b::Bool, x::Float64)
+function logpdf(b::Bool, x::Float64)
     return 0.
 end
 

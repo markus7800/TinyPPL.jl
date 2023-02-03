@@ -1,7 +1,6 @@
-import ProgressLogging: @progress
 import Distributions: logpdf
 
-function importance_sampling(pgm::PGM, n_samples::Int)
+function likelihood_weighting(pgm::PGM, n_samples::Int)
 
     retvals = Vector{Float64}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
@@ -33,4 +32,4 @@ function importance_sampling(pgm::PGM, n_samples::Int)
     return trace, retvals, normalise(logprobs)
 end
 
-export importance_sampling
+export likelihood_weighting
