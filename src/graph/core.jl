@@ -420,7 +420,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
             end
         ))
         # display(f)
-        push!(distributions, eval(f))
+        push!(distributions, Main.eval(f))
 
         if haskey(spgm.Y, sym)
             y = spgm.Y[sym]
@@ -434,7 +434,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
                 end
             ))
             # display(f)
-            push!(observed_values, eval(f))
+            push!(observed_values, Main.eval(f))
         else
             push!(observed_values, nothing)
         end
@@ -451,7 +451,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
         end
     ))
     # display(f)
-    return_expr = eval(f)
+    return_expr = Main.eval(f)
 
     order = get_topolocial_order(n_variables, edges)
     spgm, E = to_human_readable(spgm, symbolic_E, ix_to_sym, sym_to_ix)
@@ -464,7 +464,7 @@ function compile_symbolic_pgm(spgm::SymbolicPGM, E::Union{Expr, Symbol})
 end
 
 
-function compile_pgm(foppl)
+macro pgm(foppl)
     foppl = rmlines(foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, s_ ~ dist_) ? :($s = $(Expr(:sample, dist))) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ s_) ? Expr(:observe, dist, s) : expr,  foppl);
@@ -477,4 +477,4 @@ function compile_pgm(foppl)
     return pgm
 end
 
-export compile_pgm
+export @pgm

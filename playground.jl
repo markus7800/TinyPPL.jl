@@ -43,7 +43,7 @@ maximum(abs.(P_hat .- P_true))
 using PPL.Distributions
 using PPL.Graph
 
-foppl = quote
+model = @pgm begin
     let A ~ Bernoulli(0.5),
         B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
         C ~ Bernoulli(B == 1 ? 0.9 : 0.7),
@@ -51,8 +51,9 @@ foppl = quote
         
         A + C
     end
-end;
+end
 
-pgm = compile_pgm(foppl);
+@time traces, retvals, lps = importance_sampling(model, 1_000_000);
 
-@time traces, retvals, lps = importance_sampling(pgm, 1_000_000);
+W = exp.(lps);
+retvals'W

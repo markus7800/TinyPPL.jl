@@ -1,4 +1,5 @@
 import ProgressLogging: @progress
+import Distributions: logpdf
 
 function importance_sampling(pgm::PGM, n_samples::Int)
 
