@@ -1,6 +1,6 @@
 import MacroTools
-import ..PPL.Distributions: logpdf
-using ..PPL.Distributions
+import ..TinyPPL.Distributions: logpdf
+using ..TinyPPL.Distributions
 
 function unwrap_let(expr)
     if expr isa Expr
@@ -98,7 +98,7 @@ function substitute(var::Symbol, with, in_expr)
 end
 
 
-# Computes the Probabilistic Graphical Model of a FOPPL program.
+# Computes the Probabilistic Graphical Model of a FOTinyPPL program.
 
 struct SymbolicPGM
     V::Set{Symbol} # vertices

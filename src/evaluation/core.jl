@@ -8,7 +8,7 @@ function walk(expr, sampler, constraints)
         return quote
             let distribution = $(esc(dist))($(args...)),
                 obs = haskey($constraints, $symbol) ? $constraints[$symbol] : nothing,
-                value = sample($sampler, distribution, obs)
+                value = sample($sampler, $symbol, distribution, obs)
                 value
             end
         end

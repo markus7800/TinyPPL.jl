@@ -1,6 +1,6 @@
-using PPL
+using TinyPPL
 using Test
 
-@testset "PPL.jl" begin
+@testset "TinyPPL.jl" begin
     # Write your tests here.
 end

@@ -1,5 +1,5 @@
 module Evaluation
-    import ..PPL.Distributions: Distribution, logpdf
+    import ..TinyPPL.Distributions: Distribution, logpdf
     import ProgressLogging: @progress
 
     include("../utils/utils.jl")

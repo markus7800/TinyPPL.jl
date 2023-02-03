@@ -1,5 +1,5 @@
-using PPL.Distributions
-using PPL.TraceBased
+using TinyTinyPPL.Distributions
+using TinyPPL.TraceBased
 
 @ppl function geometric(p::Float64, observed::Bool)
     i = 0
@@ -67,7 +67,7 @@ retvals'W
 
 
 
-using PPL.Graph
+using TinyPPL.Graph
 
 model = @pgm Flip begin
     let A ~ Bernoulli(0.5),
@@ -120,8 +120,8 @@ end
 W = exp.(lps);
 retvals'W
 
-using PPL.Distributions
-using PPL.Evaluation
+using TinyPPL.Distributions
+using TinyPPL.Evaluation
 
 @ppl function geometric(p::Float64, observed::Bool)
     i = 0
@@ -140,7 +140,7 @@ observations = Dict(:X => 5);
 sampler = Forward();
 @time [geometric(0.5, true, sampler, observations) for _ in 1:5_000_000];
 
-@time retvals, lps = likelihood_weighting(geometric, (0.5, true), observations, 1_000_000);
+@time traces, retvals, lps = likelihood_weighting(geometric, (0.5, true), observations, 1_000_000);
 
 W = exp.(lps);
 P_hat = [sum(W[retvals .== i]) for i in 0:10]

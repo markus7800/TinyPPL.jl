@@ -1,4 +1,4 @@
-name = "PPL"
+name = "TinyPPL"
 uuid = "7d3b7143-6434-42f5-a03e-fdc02c8b5cd0"
 authors = ["Markus Boeck"]
 version = "0.1.0"
