@@ -52,6 +52,22 @@ model = @pgm begin
     end
 end;
 
+
+model = @pgm begin
+    function plus(x, y)
+        let a = 1, b = 1
+            x + y + a - b
+        end
+    end
+    let A ~ Bernoulli(0.5),
+        B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
+        C ~ Bernoulli(B == 1 ? 0.9 : 0.7),
+        D = (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ true
+        
+        plus(A, C)
+    end
+end;
+
 @time traces, retvals, lps = importance_sampling(model, 1_000_000);
 
 W = exp.(lps);

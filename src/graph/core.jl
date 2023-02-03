@@ -148,11 +148,10 @@ end
 
 struct PGMTranspiler
     procs::Dict{Symbol, Expr}
-    proc_names::Set{Symbol}
     all_let_variables::Set{Symbol}
     variables::Set{Symbol}
     function PGMTranspiler()
-        return new(Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Set{Symbol}())
+        return new(Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}())
     end
 end
 
@@ -230,18 +229,18 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         G = graph_disjoint_union(G, Gh)
         @assert Eh isa Symbol
 
-        if Eh in t.proc_names
-            # TODO: procedures
-            # @assert Eh in t.proc_names Eh
-            # proc = t.procs[Eh]
-            # e_proc = proc.body
-            # @assert length(proc.args) == length(Es)
-            # for (arg, Ei) in zip(proc.args, Es)
-            #     e_proc = substitute(arg, Ei, e_proc)
-            # end
-            # G_proc, E = transpile(t, phi, e_proc)
-            # G = graph_disjoint_union(G, G_proc)
-            # return G_proc, E
+        if Eh in keys(t.procs)
+            f = t.procs[Eh]
+            f_def = f.args[1]
+            body = f.args[2]
+            arguments = f_def.args[2:end]
+            @assert length(arguments) == length(Es)
+            for (arg, Ei) in zip(arguments, Es)
+                body = substitute(arg, Ei, body)
+            end
+            G_proc, E = transpile(t, phi, body)
+            G = graph_disjoint_union(G, G_proc)
+            return G_proc, E
         end
 
         E = Expr(:call, Eh, Es...)
@@ -315,7 +314,19 @@ function transpile_program(expr::Expr)
     if !isempty(all_let_variables)
         push!(t.all_let_variables, all_let_variables...)
     end
-    return transpile(t, true, expr)
+
+    main = expr.args[end]
+    if length(expr.args) > 1
+        for f in expr.args[1:end-1]
+            @assert f.head == :function
+            f_def = f.args[1]
+            f_name = f_def.args[1]
+            t.procs[f_name] = f
+        end
+    end
+    
+
+    return transpile(t, true, main)
 end
 
 struct PGM
