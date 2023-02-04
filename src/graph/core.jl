@@ -521,7 +521,7 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
 end
 
 
-macro pgm(name, foppl)
+macro ppl(name, foppl)
     foppl = rmlines(foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, s_ ~ dist_) ? :($s = $(Expr(:sample, dist))) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ s_) ? Expr(:observe, dist, s) : expr,  foppl);
@@ -534,4 +534,4 @@ macro pgm(name, foppl)
     return pgm
 end
 
-export @pgm
+export @ppl

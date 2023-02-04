@@ -69,7 +69,7 @@ retvals'W
 
 using TinyPPL.Graph
 
-model = @pgm Flip begin
+model = @ppl Flip begin
     let A ~ Bernoulli(0.5),
         B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
         C ~ Bernoulli(B == 1 ? 0.9 : 0.7),
@@ -80,7 +80,7 @@ model = @pgm Flip begin
 end;
 
 
-model = @pgm Flip2 begin
+model = @ppl Flip2 begin
     function plus(x, y)
         let a = 1, b = 1
             x + y + a - b
@@ -100,7 +100,7 @@ end;
 W = exp.(lps);
 retvals'W
 
-model = @pgm LinReg begin
+model = @ppl LinReg begin
     function f(slope, intercept, x)
         intercept + slope * x
     end
