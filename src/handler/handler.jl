@@ -1,4 +1,4 @@
-module Traces
+module Handlers
     import ProgressLogging: @progress
 
     include("../utils/utils.jl")

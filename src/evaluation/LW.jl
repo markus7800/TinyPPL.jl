@@ -8,7 +8,7 @@ mutable struct LW <: Sampler
     end
 end
 
-function sample(sampler::LW, addr, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::LW, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs

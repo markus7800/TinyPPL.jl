@@ -1,5 +1,5 @@
 using TinyTinyPPL.Distributions
-using TinyPPL.TraceBased
+using TinyPPL.Traces
 
 @ppl function geometric(p::Float64, observed::Bool)
     i = 0
@@ -35,7 +35,8 @@ observations = Dict(:X => 5);
 W = exp.(lps);
 P_hat = [sum(W[retvals .== i]) for i in 0:10]
 
-P_X = sum(exp(logpdf(Geometric(0.5), i) + logpdf(Normal(i, 1.0), observations[:X])) for i in 0:100);
+exp(logpdf(Geometric(0.5), 250))
+P_X = sum(exp(logpdf(Geometric(0.5), i) + logpdf(Normal(i, 1.0), observations[:X])) for i in 0:250);
 P_true = [exp(logpdf(Geometric(0.5), i) + logpdf(Normal(i, 1.0), observations[:X])) / P_X for i in 0:10]
 
 maximum(abs.(P_hat .- P_true))
@@ -145,3 +146,40 @@ sampler = Forward();
 W = exp.(lps);
 P_hat = [sum(W[retvals .== i]) for i in 0:10]
 
+
+
+using TinyPPL.Distributions
+using TinyPPL.Handlers
+
+function geometric(p::Float64, observed::Union{Nothing,Real}=nothing)
+    i = 0
+    while true
+        b = sample((:b,i), Bernoulli(p))
+        b && break
+        i += 1
+    end
+    if !isnothing(observed)
+        sample(:X, Normal(i, 1.0), obs=observed)
+    end
+    return i
+end
+
+Handlers.HANDLER_STACK
+empty!(Handlers.HANDLER_STACK)
+
+args = (0.3,)
+trace_handler = trace(geometric);
+
+import Random
+Random.seed!(0)
+model_trace = get_trace(trace_handler, args...)
+
+replay_handler = trace(replay(geometric, model_trace));
+replay_trace = get_trace(replay_handler, args...)
+
+
+replay_handler = trace(block(replay(geometric, model_trace), msg -> msg["type"] == "observation"));
+replay_trace = get_trace(replay_handler, args...)
+logpdfsum(replay_trace)
+
+@time traces, retvals, lps = likelihood_weighting(geometric, (0.5, 5.), 1_000_000);
