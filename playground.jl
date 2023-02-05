@@ -121,6 +121,10 @@ end
 W = exp.(lps);
 retvals'W
 
+
+X = Vector{Float64}(undef, model.n_variables);
+model.log_pdf(X)
+
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 

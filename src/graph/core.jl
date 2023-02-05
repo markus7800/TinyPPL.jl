@@ -379,6 +379,7 @@ struct PGM
     distributions::Vector{Function} # distributions not pdfs
     observed_values::Vector{Union{Nothing,Function}} # observations
     return_expr::Function
+    log_pdf::Function
     symbolic_pgm::SymbolicPGM
     symbolic_return_expr::Union{Expr, Symbol}
     topological_order::Vector{Int}
@@ -460,10 +461,17 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
     
+    lp = gensym(:lp)
+    lp_block_args = []
+    push!(lp_block_args, :($lp = 0.0))
+
+    ordered = get_topolocial_order(n_variables, edges)
+    @assert length(ordered) == n_variables
+
     X = gensym(:X)
     distributions = []
     observed_values = []
-    for i in 1:n_variables
+    for i in ordered
         sym = ix_to_sym[i]
         d = spgm.P[sym]
         for j in 1:n_variables
@@ -491,10 +499,31 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
             ))
             # display(f)
             push!(observed_values, eval(f))
+            
+            d_sym = gensym("dist_$i")
+            push!(lp_block_args, :($d_sym = $d))
+            push!(lp_block_args, :($X[$i] = $y))
+            push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
         else
             push!(observed_values, nothing)
+
+            d_sym = gensym("dist_$i")
+            push!(lp_block_args, :($d_sym = $d))
+            push!(lp_block_args, :($X[$i] = rand($d_sym)))
+            push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
         end
     end
+
+    push!(lp_block_args, :($lp))
+
+    f_name = Symbol("$(name)_logpdf")
+    f = rmlines(:(
+        function $f_name($X::Vector{Float64})
+            $(Expr(:block, lp_block_args...))
+        end
+    ))
+    display(f)
+    logpdf = eval(f)
 
     spgm, symbolic_E = to_human_readable(spgm, E, ix_to_sym, sym_to_ix)
 
@@ -510,14 +539,14 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     # display(f)
     return_expr = eval(f)
 
-    order = get_topolocial_order(n_variables, edges)
     return PGM(
         name,
         n_variables, edges,
         distributions, observed_values,
         return_expr,
+        logpdf,
         spgm, symbolic_E,
-        order)
+        ordered)
 end
 
 
