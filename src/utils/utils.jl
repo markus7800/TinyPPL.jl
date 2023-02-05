@@ -8,3 +8,6 @@ function normalise(logprobs::Vector{Float64})
     l = m + log(sum(exp, logprobs .- m))
     return logprobs .- l
 end
+
+mean(X) = sum(X) / length(X)
+export mean

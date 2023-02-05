@@ -469,8 +469,8 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     @assert length(ordered) == n_variables
 
     X = gensym(:X)
-    distributions = []
-    observed_values = []
+    distributions = Vector{Function}(undef, n_variables)
+    observed_values = Vector{Union{Nothing,Function}}(undef, n_variables)
     for i in ordered
         sym = ix_to_sym[i]
         d = spgm.P[sym]
@@ -479,50 +479,45 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         end
         f_name = Symbol("$(name)_dist_$i")
         f = rmlines(:(
-            function $f_name($X::Vector{Float64})
+            function $f_name($X::AbstractVector{Float64})
                 $d
             end
         ))
         # display(f)
-        push!(distributions, eval(f))
+        distributions[i] = eval(f)
 
         if haskey(spgm.Y, sym)
             y = spgm.Y[sym]
+            # support dynamic obserations in general
             for j in 1:n_variables
                 y = substitute(ix_to_sym[j], :($X[$j]), y)
             end
             f_name = Symbol("$(name)_obs_$i")
             f = rmlines(:(
-                function $f_name($X::Vector{Float64})
+                function $f_name($X::AbstractVector{Float64})
                     $y
                 end
             ))
             # display(f)
-            push!(observed_values, eval(f))
-            
-            d_sym = gensym("dist_$i")
-            push!(lp_block_args, :($d_sym = $d))
-            push!(lp_block_args, :($X[$i] = $y))
-            push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
+            observed_values[i] = eval(f)
         else
-            push!(observed_values, nothing)
-
-            d_sym = gensym("dist_$i")
-            push!(lp_block_args, :($d_sym = $d))
-            push!(lp_block_args, :($X[$i] = rand($d_sym)))
-            push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
+            observed_values[i] = nothing
         end
+
+        d_sym = gensym("dist_$i")
+        push!(lp_block_args, :($d_sym = $d))
+        push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
     end
 
     push!(lp_block_args, :($lp))
 
     f_name = Symbol("$(name)_logpdf")
     f = rmlines(:(
-        function $f_name($X::Vector{Float64})
+        function $f_name($X::AbstractVector{Float64})
             $(Expr(:block, lp_block_args...))
         end
     ))
-    display(f)
+    # display(f)
     logpdf = eval(f)
 
     spgm, symbolic_E = to_human_readable(spgm, E, ix_to_sym, sym_to_ix)
@@ -532,11 +527,11 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         E = substitute(ix_to_sym[j], :($X[$j]), E)
     end
     f = rmlines(:(
-        function $f_name($X::Vector{Float64})
+        function $f_name($X::AbstractVector{Float64})
             $E
         end
     ))
-    # display(f)
+    display(f)
     return_expr = eval(f)
 
     return PGM(

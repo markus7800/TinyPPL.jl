@@ -117,13 +117,42 @@ model = @ppl LinReg begin
 end
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
-
 W = exp.(lps);
 retvals'W
 
+@time traces, retvals, lps = hmc(model, 10_000, 0.05, 10, [1. 0.; 0. 1.]);
+mean(retvals)
+
+
+model = @ppl NormalChain begin
+    let x ~ Normal(0., 1.),
+        y ~ Normal(x, 1.),
+        z = (Normal(y, 1.) ↦ 0)
+        x
+    end
+end
 
 X = Vector{Float64}(undef, model.n_variables);
 model.log_pdf(X)
+
+import Tracker
+X = Tracker.param(rand(3))
+lp = model.log_pdf(X)
+Tracker.back!(lp);
+Tracker.grad(X)
+X_data = Tracker.data(X)
+
+using TinyPPL.Distributions
+function compare_lp(y, x, z)
+    return logpdf(Normal(0., 1.), x) + logpdf(Normal(x, 1.), y) + logpdf(Normal(y, 1.), z)
+end
+
+X_tracked = Tracker.param.(X_data)
+lp_2 = compare_lp(X_tracked...)
+Tracker.back!(lp_2)
+Tracker.grad.(X_tracked)
+
+@time hmc(model, 1_000, 0.05, 10, [1. 0.; 0. 1.]);
 
 using TinyPPL.Distributions
 using TinyPPL.Evaluation

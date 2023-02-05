@@ -8,6 +8,7 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 ProgressLogging = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 
 [compat]
 julia = "1"
