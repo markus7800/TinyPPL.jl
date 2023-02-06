@@ -29,8 +29,8 @@ end
 end
 =#
 
-p = 0.5;
-observations = Dict(:X => 5);
+const p = 0.5;
+const observations = Dict(:X => 5);
 posterior_true = get_true_posterior(p, 10, observations[:X])
 
 @info "likelihood_weighting"
@@ -42,5 +42,5 @@ W = exp.(lps);
 posterior_est = [sum(W[retvals .== i]) for i in 0:10]
 posterior_diff = maximum(abs.(posterior_true .- posterior_est))
 
-println("convergence")
+println("convergence:")
 println("  difference to true prosterior: ", posterior_diff)

@@ -16,8 +16,8 @@ function geometric(p::Float64, observed::Float64)
     return i
 end
 
-p = 0.5;
-X = 5.
+const p = 0.5;
+const X = 5.
 posterior_true = get_true_posterior(p, 10, X)
 
 @info "likelihood_weighting"

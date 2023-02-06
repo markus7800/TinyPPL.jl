@@ -17,8 +17,8 @@ Random.seed!(7800)
     return i
 end
 
-p = 0.5;
-observations = Dict(:X => 5);
+const p = 0.5;
+const observations = Dict(:X => 5);
 posterior_true = get_true_posterior(p, 10, observations[:X])
 
 @info "likelihood_weighting"
