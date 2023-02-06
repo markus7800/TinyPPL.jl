@@ -2,7 +2,7 @@ import Distributions: logpdf
 
 function likelihood_weighting(pgm::PGM, n_samples::Int)
 
-    retvals = Vector{Float64}(undef, n_samples)
+    retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
     

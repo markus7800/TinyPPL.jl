@@ -111,14 +111,17 @@ model = @ppl LinReg begin
         intercept ~ Normal(0.0, 10.)
 
         [(Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i]) for i in 1:5]
-        slope
-        # [ys[i] for i in 1:5]
+        
+        (slope, intercept)
     end
 end
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
-retvals'W
+slope = [r[1] for r in retvals]; slope'W
+intercept = [r[2] for r in retvals]; intercept'W
+
+
 
 @time traces, retvals, lps = hmc(model, 10_000, 0.05, 10, [1. 0.; 0. 1.]);
 mean(retvals)

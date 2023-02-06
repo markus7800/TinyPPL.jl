@@ -1,3 +1,4 @@
+# https://pyro.ai/examples/minipyro.html
 
 import ..TinyPPL.Distributions: Distribution, logpdf
 
