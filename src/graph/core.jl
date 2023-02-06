@@ -256,6 +256,16 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         end
         return G, Expr(:vect, E...)
 
+    elseif expr.head == :tuple
+        G = EmptyPGM()
+        E = []
+        for v in expr.args
+            Gv, Ev = transpile(t, phi, v)
+            G = graph_disjoint_union(G, Gv)
+            push!(E, Ev)
+        end
+        return G, Expr(:tuple, E...)
+
     elseif expr.head == :ref
         @assert length(expr.args) == 2
 
@@ -388,8 +398,8 @@ end
 function Base.show(io::IO, pgm::PGM)
     println(io, pgm.name)
     println(io, pgm.symbolic_pgm)
-    println(io, "Return expression")
-    println(pgm.symbolic_return_expr)
+    println(io, "Return expression:")
+    println(io, pgm.symbolic_return_expr)
     println(io, "Topological Order:")
     println(io, pgm.topological_order)
 end
@@ -531,7 +541,7 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
             $E
         end
     ))
-    display(f)
+    # display(f)
     return_expr = eval(f)
 
     return PGM(
