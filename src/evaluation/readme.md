@@ -1,4 +1,4 @@
-# Evaluation-Based Evaluation
+# Evaluation-Based
 
 Similar to the trace-based approach, we also transform a function with the `@ppl` macro.
 Instead of a predefined tracing behavior, we allow the implementation of samplers, which decide what happens at sample statements at evaluation time.
@@ -39,6 +39,8 @@ function simple(mean::Float64, sampler::Sampler, constraints::Dict)
 end
 ```
 This can be checked with the `@macroexpand` function.
+
+Interaction with the model is possible by implementing custom samplers.
 
 The most basic sampler, simple returns the observations or samples if necessary.
 ```julia

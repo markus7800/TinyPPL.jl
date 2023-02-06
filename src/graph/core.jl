@@ -16,7 +16,7 @@ function unwrap_let(expr)
             end
             if bindings.head == :block
                 @assert all(arg.head == :(=) for arg in bindings.args) bindings.args
-                @assert length(bindings.args) > 1
+                # @assert length(bindings.args) > 1 bindings.args, single assignments can alos be in block
 
                 # println("body: ", body)
                 current_let = Expr(:let, unwrap_let(bindings.args[end]), body)

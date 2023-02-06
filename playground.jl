@@ -68,7 +68,6 @@ W = exp.(lps);
 retvals'W
 
 
-
 using TinyPPL.Graph
 
 model = @ppl Flip begin
@@ -124,6 +123,12 @@ retvals'W
 @time traces, retvals, lps = hmc(model, 10_000, 0.05, 10, [1. 0.; 0. 1.]);
 mean(retvals)
 
+model = @ppl simple begin
+    let X ~ Normal(0., 1.)
+        Normal(X, 1.) ↦ 1.
+        X
+    end
+end
 
 model = @ppl NormalChain begin
     let x ~ Normal(0., 1.),

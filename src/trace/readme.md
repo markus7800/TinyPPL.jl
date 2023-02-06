@@ -1,4 +1,4 @@
-# Trace-Based Evaluation
+# Trace-Based
 
 The `@ppl` macro transform a function to a traced function, where all random draws are recorded.
 We use `Gen.jl` sample syntax `X = {addr} ~ Distribution(args...)`.
@@ -41,6 +41,7 @@ end
 ```
 This can be checked with the `@macroexpand` function.
 
+Interaction with the model is possible by inputing specific constraints.
 
 We can now call the model with observations `simple(0., Dict(:Y=>1))`, which returns value and trace, and perform inference
 ```julia
