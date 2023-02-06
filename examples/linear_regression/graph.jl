@@ -83,9 +83,9 @@ lw = compile_likelihood_weighting(model)
 
 # for compilation
 X = Vector{Float64}(undef, model.n_variables); lw(X)
-traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100);
+traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100; static_observes=true);
 
-@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000);
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
 println("for 1_000_000 samples.")
 
 W = exp.(lps);

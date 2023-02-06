@@ -35,7 +35,7 @@ end
 export likelihood_weighting
 
 
-function compile_likelihood_weighting(pgm::PGM)
+function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
     ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
 
     lp = gensym(:lp)
@@ -58,8 +58,12 @@ function compile_likelihood_weighting(pgm::PGM)
             for j in 1:pgm.n_variables
                 y = substitute(ix_to_sym[j], :($X[$j]), y)
             end
-            push!(block_args, :($X[$i] = $y))
-            push!(block_args, :($lp += logpdf($d_sym, $X[$i])))
+            if static_observes
+                push!(block_args, :($lp += logpdf($d_sym, $y)))
+            else
+                push!(block_args, :($X[$i] = $y))
+                push!(block_args, :($lp += logpdf($d_sym, $X[$i])))
+            end
         else
             push!(block_args, :($X[$i] = rand($d)))
         end
@@ -85,20 +89,27 @@ function compile_likelihood_weighting(pgm::PGM)
     return lw
 end
 
-function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int)
-
+function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; static_observes::Bool=false)
+    X = Vector{Float64}(undef, pgm.n_variables)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
-    trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
-    
-    X = Vector{Float64}(undef, pgm.n_variables)
-    @progress for i in 1:n_samples
-        r, W = lw(X)
-        @inbounds logprobs[i] = W
-        @inbounds retvals[i] = r
-        @inbounds trace[:,i] .= X
+    if static_observes
+        mask = isnothing.(pgm.observed_values)
+        trace = Array{Float64,2}(undef, sum(mask), n_samples)
+        @progress for i in 1:n_samples
+            @inbounds retvals[i], logprobs[i] = lw(X)
+            @inbounds trace[:,i] = X[mask]
+        end
+    else
+        trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
+        @progress for i in 1:n_samples
+            @inbounds retvals[i], logprobs[i] = lw(X)
+            @inbounds trace[:,i] = X
+        end
     end
     return trace, retvals, normalise(logprobs)
 end
 
 export compile_likelihood_weighting, compiled_likelihood_weighting
+
+# 1.63
