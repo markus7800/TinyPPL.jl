@@ -395,17 +395,20 @@ struct PGM
     distributions::Vector{Function} # distributions not pdfs
     observed_values::Vector{Union{Nothing,Function}} # observations
     return_expr::Function
-    log_pdf::Function
+    sample::Function
+    logpdf::Function
+    sym_to_ix::Dict{Symbol, Int}
     symbolic_pgm::SymbolicPGM
     symbolic_return_expr::Union{Expr, Symbol}
     topological_order::Vector{Int}
 end
 
 function Base.show(io::IO, pgm::PGM)
+    spgm, E = to_human_readable(pgm.symbolic_pgm, pgm.symbolic_return_expr, pgm.sym_to_ix)
     println(io, pgm.name)
-    println(io, pgm.symbolic_pgm)
+    println(io, spgm)
     println(io, "Return expression:")
-    println(io, pgm.symbolic_return_expr)
+    println(io, E)
     println(io, "Topological Order:")
     println(io, pgm.topological_order)
 end
@@ -429,7 +432,9 @@ function human_readable_symbol(spgm, sym, j)
     return haskey(spgm.Y, sym) ? Symbol("y$j") : Symbol("x$j")
 end
 
-function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, ix_to_sym, sym_to_ix)
+function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, sym_to_ix)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
+
     new_spgm = EmptyPGM()
     for sym in spgm.V
         ix = sym_to_ix[sym]
@@ -463,12 +468,13 @@ function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, ix_to_sym,
         end
     end
 
+    new_E = deepcopy(E)
     for j in 1:n_variables
         sub_sym = human_readable_symbol(spgm, ix_to_sym[j], j)
-        E = substitute(ix_to_sym[j], sub_sym, E)
+        new_E = substitute(ix_to_sym[j], sub_sym, new_E)
     end
 
-    new_spgm, E
+    new_spgm, new_E
 end
 
 function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol})
@@ -480,6 +486,8 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     lp = gensym(:lp)
     lp_block_args = []
     push!(lp_block_args, :($lp = 0.0))
+
+    sample_block_args = []
 
     ordered = get_topolocial_order(n_variables, edges)
     @assert length(ordered) == n_variables
@@ -502,6 +510,8 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         # display(f)
         distributions[i] = eval(f)
 
+        d_sym = gensym("dist_$i")
+
         if haskey(spgm.Y, sym)
             y = spgm.Y[sym]
             # support dynamic obserations in general
@@ -516,14 +526,27 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
             ))
             # display(f)
             observed_values[i] = eval(f)
+            push!(sample_block_args, :($X[$i] = $y))
         else
             observed_values[i] = nothing
+            push!(sample_block_args, :($d_sym = $d))
+            push!(sample_block_args, :($X[$i] = rand($d)))
         end
 
-        d_sym = gensym("dist_$i")
         push!(lp_block_args, :($d_sym = $d))
         push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
     end
+
+    push!(sample_block_args, :($nothing))
+    f_name = Symbol("$(name)_sample")
+    f = rmlines(:(
+        function $f_name($X::AbstractVector{Float64})
+            $(Expr(:block, sample_block_args...))
+        end
+    ))
+    # display(f)
+    sample = eval(f)
+
 
     push!(lp_block_args, :($lp))
 
@@ -536,15 +559,14 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     # display(f)
     logpdf = eval(f)
 
-    spgm, symbolic_E = to_human_readable(spgm, E, ix_to_sym, sym_to_ix)
-
     f_name = Symbol("$(name)_return")
+    new_E = deepcopy(E)
     for j in 1:n_variables
-        E = substitute(ix_to_sym[j], :($X[$j]), E)
+        new_E = substitute(ix_to_sym[j], :($X[$j]), new_E)
     end
     f = rmlines(:(
         function $f_name($X::AbstractVector{Float64})
-            $E
+            $new_E
         end
     ))
     # display(f)
@@ -555,8 +577,10 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         n_variables, edges,
         distributions, observed_values,
         return_expr,
+        sample,
         logpdf,
-        spgm, symbolic_E,
+        sym_to_ix,
+        spgm, E,
         ordered)
 end
 

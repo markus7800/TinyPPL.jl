@@ -17,7 +17,7 @@ function hmc(pgm::PGM, n_samples::Int, ϵ::Float64, L::Int, M::AbstractMatrix)
     function ∇U(X::Vector{Float64})::Vector{Float64} # input only sample sites
         Z[sample_mask] = X
         _Z = Tracker.param(Z) # we also get gradients at observed sites, but they are not used
-        lp = -pgm.log_pdf(_Z) # we need to input sampled and observed sites to log_pdf
+        lp = -pgm.logpdf(_Z) # we need to input sampled and observed sites to logpdf
         Tracker.back!(lp)
         return Tracker.grad(_Z)[sample_mask]
     end
@@ -29,7 +29,7 @@ function hmc(pgm::PGM, n_samples::Int, ϵ::Float64, L::Int, M::AbstractMatrix)
     
     n_accepted = 0
     X_current = copy(Z[sample_mask]) # only select sample sites
-    U_current = -pgm.log_pdf(Z)
+    U_current = -pgm.logpdf(Z)
     retval_current = pgm.return_expr(Z)
     @progress for i in 1:n_samples
         R = randn(n_sample_sites)
@@ -40,7 +40,7 @@ function hmc(pgm::PGM, n_samples::Int, ϵ::Float64, L::Int, M::AbstractMatrix)
         # X_current ≈ X2, R ≈ R2
 
         Z[sample_mask] = X_proposed
-        U_proposed = -pgm.log_pdf(Z)
+        U_proposed = -pgm.logpdf(Z)
         K_proposed = sum(R_proposed.^2) / 2
 
         if log(rand()) < U_current - U_proposed + K_current - K_proposed
