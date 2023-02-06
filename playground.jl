@@ -1,4 +1,4 @@
-using TinyTinyPPL.Distributions
+using TinyPPL.Distributions
 using TinyPPL.Traces
 
 @ppl function geometric(p::Float64, observed::Bool)
@@ -31,6 +31,7 @@ observations = Dict(:X => 5);
 
 @time traces, retvals, lps = likelihood_weighting(geometric_recursion, (0.5, true, 0), observations, 1_000_000);
 
+stats = @timed likelihood_weighting(geometric, (0.5, true), observations, 1_000_000);
 
 W = exp.(lps);
 P_hat = [sum(W[retvals .== i]) for i in 0:10]
@@ -216,3 +217,10 @@ replay_trace = get_trace(replay_handler, args...)
 logpdfsum(replay_trace)
 
 @time traces, retvals, lps = likelihood_weighting(geometric, (0.5, 5.), 1_000_000);
+
+
+@macroexpand @ppl function simple(mean::Float64)
+    X = {:X} ~ Normal(mean, 1.)
+    {:Y} ~ Normal(X, 1.)
+    return X
+end

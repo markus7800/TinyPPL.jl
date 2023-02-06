@@ -42,7 +42,7 @@ macro ppl(func)
     constraints = gensym(:constraints)
     new_body = MacroTools.postwalk(ex -> walk(ex, trace, constraints), body)
     return rmlines(quote
-        global function $(esc(f))($(func_args...), $constraints=Dict(), $trace=Trace())
+        function $(esc(f))($(func_args...), $constraints=Dict(), $trace=Trace())
             function inner()
                 $new_body
             end
