@@ -22,7 +22,7 @@ end
 
 function likelihood_weighting(model::Function, args::Tuple, observations::Dict, n_samples::Int)
     traces = Vector{Dict{Any, Float64}}(undef, n_samples)
-    retvals = Vector{Float64}(undef, n_samples)
+    retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     sampler = LW()
     @progress for i in 1:n_samples

@@ -163,6 +163,10 @@ function transpile(t::PGMTranspiler, phi, expr::Real)
     return EmptyPGM(), expr
 end
 
+function transpile(t::PGMTranspiler, phi, expr::String)
+    return EmptyPGM(), expr
+end
+
 function transpile(t::PGMTranspiler, phi, expr::Expr)
     if expr.head == :block
         # @assert length(expr.args) == 1 expr.args
@@ -287,7 +291,9 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         @assert loop.head == :(=)
         
         loop_var = loop.args[1]
-        range = loop.args[2]        
+        range = loop.args[2]
+        G_range, range = transpile(t, phi, range)  
+        @assert isempty(G_range.V)
 
         G = EmptyPGM()
         E = []

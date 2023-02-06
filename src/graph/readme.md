@@ -38,6 +38,10 @@ and observe statements (which return `value` when evaluated)
 ```
 distribution(args...) ↦ value
 ```
+Data has to be inlined.
+All functions have to be defined in the model block.
+Only base JULIA functions and distributions are available.
+
 
 For example,
 
@@ -117,3 +121,9 @@ In the graph-based approach have great control over the model and can sample at 
 
 Note that the function `model.distributions[node]` returns a distribution which depends only on the parents of `node`.
 We can sample from the complete model by calling `rand(model.distributions[node](X))` in topological order.
+
+## Inference
+
+```julia
+traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+```

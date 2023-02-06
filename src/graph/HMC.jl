@@ -23,7 +23,7 @@ function hmc(pgm::PGM, n_samples::Int, ϵ::Float64, L::Int, M::AbstractMatrix)
     end
 
     n_sample_sites = sum(sample_mask)
-    retvals = Vector{Float64}(undef, n_samples)
+    retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     trace = Array{Float64,2}(undef, n_sample_sites, n_samples)
     
