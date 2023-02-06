@@ -6,7 +6,7 @@ macro subppl(expr) return expr end # just a place holder
 function walk(expr, sampler, constraints)
     if MacroTools.@capture(expr, {symbol_} ~ dist_(args__))
         return quote
-            let distribution = $(esc(dist))($(args...)),
+            let distribution = $(dist)($(args...)),
                 obs = haskey($constraints, $symbol) ? $constraints[$symbol] : nothing,
                 value = sample($sampler, $symbol, distribution, obs)
                 value
@@ -28,9 +28,9 @@ macro ppl(func)
     @assert MacroTools.@capture(func, (function f_(func_args__) body_ end))
     sampler = gensym(:sampler)
     constraints = gensym(:constraints)
-    new_body = MacroTools.postwalk(ex -> walk(ex, sampler, constraints), body)
+    new_body = MacroTools.postwalk(ex -> walk(ex, sampler, constraints), esc(body))
     return rmlines(quote
-        function $(esc(f))($(func_args...), $sampler::Sampler, $constraints=Dict())
+        function $(esc(f))($(esc.(func_args)...), $(esc(sampler))::Sampler, $(esc(constraints))=Dict())
             function inner()
                 $new_body
             end

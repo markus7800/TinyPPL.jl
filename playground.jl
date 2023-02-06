@@ -1,8 +1,12 @@
 using TinyPPL.Distributions
 using TinyPPL.Traces
 
+function f()
+    return 0
+end
+
 @ppl function geometric(p::Float64, observed::Bool)
-    i = 0
+    i = f()
     while true
         b = {(:b,i)} ~ Bernoulli(p)
         b && break
@@ -14,6 +18,7 @@ using TinyPPL.Traces
     return i
 end
 
+@macroexpand
 @ppl function geometric_recursion(p::Float64, observed::Bool, i::Int)
     b = {(:b,i)} ~ Bernoulli(p)
     if b
@@ -69,7 +74,6 @@ retvals'W
 
 
 using TinyPPL.Graph
-
 model = @ppl Flip begin
     let A ~ Bernoulli(0.5),
         B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
@@ -98,6 +102,8 @@ end;
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 
+model.log_pdf([1., 0., 1., 1.])
+
 W = exp.(lps);
 retvals'W
 
@@ -111,6 +117,30 @@ model = @ppl LinReg begin
         intercept ~ Normal(0.0, 10.)
 
         [(Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i]) for i in 1:5]
+        
+        (slope, intercept)
+    end
+end
+
+model = @ppl LinReg begin
+    function get_xs()
+        readdlm("examples/linear_regression/data/xs.txt")
+    end
+    function get_ys()
+        readdlm("examples/linear_regression/data/ys.txt")
+    end
+    function get_N()
+        readdlm("examples/linear_regression/data/N.txt", Int)[1]
+    end
+    function f(slope, intercept, x)
+        intercept + slope * x
+    end
+    let xs = get_xs(),
+        ys = get_ys(),
+        slope ~ Normal(0.0, 10.),
+        intercept ~ Normal(0.0, 10.)
+
+        [(Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i]) for i in 1:get_N()]
         
         (slope, intercept)
     end
@@ -166,8 +196,12 @@ Tracker.grad.(X_tracked)
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 
+function f()
+    return 0
+end
+
 @ppl function geometric(p::Float64, observed::Bool)
-    i = 0
+    i = f()
     while true
         b = {(:b,i)} ~ Bernoulli(p)
         b && break
@@ -231,4 +265,17 @@ logpdfsum(replay_trace)
     X = {:X} ~ Normal(mean, 1.)
     {:Y} ~ Normal(X, 1.)
     return X
+end
+
+@time begin
+    X = Vector{Any}(undef, 10^6)
+    for i in 1:10^6
+        X[i] = (i^2, 1.)
+    end
+end
+@time begin
+    X = []
+    for i in 1:10^6
+        push!(X, (i^2, 1.))
+    end
 end
