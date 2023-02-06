@@ -267,21 +267,18 @@ logpdfsum(replay_trace)
 @time traces, retvals, lps = likelihood_weighting(geometric, (0.5, 5.), 1_000_000);
 
 
-@macroexpand @ppl function simple(mean::Float64)
-    X = {:X} ~ Normal(mean, 1.)
-    {:Y} ~ Normal(X, 1.)
+function simple(mean, y)
+    X = sample(:X, Normal(mean, 1.))
+    sample(:Y, Normal(X, 1.), obs=y)
     return X
 end
 
-@time begin
-    X = Vector{Any}(undef, 10^6)
-    for i in 1:10^6
-        X[i] = (i^2, 1.)
-    end
-end
-@time begin
-    X = []
-    for i in 1:10^6
-        push!(X, (i^2, 1.))
-    end
-end
+
+trace_handler = trace(simple);
+
+trace_handler(0., 1.)
+model_trace = trace_handler.trace
+
+replay_handler = trace(block(replay(simple, model_trace), msg -> msg["type"] == "observation"));
+replay_handler(0., 1.)
+replay_handler.trace
