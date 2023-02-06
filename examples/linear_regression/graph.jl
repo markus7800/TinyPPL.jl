@@ -78,6 +78,27 @@ println("  slope: ", slope_true, " vs. ", slope_est, " (estimated)")
 println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated)")
 
 
+@info "compiled_likelihood_weighting"
+lw = compile_likelihood_weighting(model)
+
+# for compilation
+X = Vector{Float64}(undef, model.n_variables); lw(X)
+traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100);
+
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000);
+println("for 1_000_000 samples.")
+
+W = exp.(lps);
+
+slope_est = [r[1] for r in retvals]'W
+intercept_est = [r[2] for r in retvals]'W
+
+println("convergence:")
+println("  slope: ", slope_true, " vs. ", slope_est, " (estimated)")
+println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated)")
+
+
+
 @info "HMC"
 @time traces, retvals, lps = hmc(model, 1_000, 0.001, 10, [1. 0.; 0. 1.]);
 println("for 10_000 samples.")
