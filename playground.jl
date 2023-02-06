@@ -250,6 +250,12 @@ import Random
 Random.seed!(0)
 model_trace = get_trace(trace_handler, args...)
 
+
+Random.seed!(0)
+trace_handler(args...)
+trace_handler.trace
+
+
 replay_handler = trace(replay(geometric, model_trace));
 replay_trace = get_trace(replay_handler, args...)
 

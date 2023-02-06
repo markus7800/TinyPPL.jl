@@ -22,8 +22,13 @@ Currently implemented:
   - Likelihood weighting
 
 ## Installation
-```julia
+```console
 (@v1.8) pkg> add https://github.com/markus7800/TinyPPL.jl
+```
+
+```julia
+import Pkg
+Pkg.add("https://github.com/markus7800/TinyPPL.jl")
 ```
 
 ## Usage

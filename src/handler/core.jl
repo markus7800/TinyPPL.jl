@@ -15,6 +15,10 @@ const HANDLER_STACK = Handler[];
 function enter(handler::Handler)
 end
 
+function call(handler::Handler, args...)
+    handler.fn(args...)
+end
+
 function exit(handler::Handler)
 end
 
@@ -27,10 +31,9 @@ end
 function (handler::Handler)(args...)
     push!(HANDLER_STACK, handler)
     enter(handler)
-    retval = handler.fn(args...)
+    call(handler, args...)
     exit(handler)
     @assert pop!(HANDLER_STACK) == handler
-    return retval
 end
 
 const Trace = Dict{Any, Message}
@@ -53,14 +56,18 @@ function enter(handler::TraceHandler)
     handler.trace = Trace()
 end
 
+function call(handler::TraceHandler, args...)
+    retval = handler.fn(args...)
+    handler.trace[:RETURN] = Message("type"=>"return", "value"=>retval)
+end
+
 function postprocess_message(handler::TraceHandler, msg::Message)
     @assert msg["type"] != "sample" || !haskey(handler.trace, msg["name"])
     handler.trace[msg["name"]] = copy(msg)
 end
 
 function get_trace(handler::TraceHandler, args...)
-    retval = handler(args...)
-    handler.trace[:RETURN] = Message("type"=>"return", "value"=>retval)
+    handler(args...)
     return handler.trace
 end
 
