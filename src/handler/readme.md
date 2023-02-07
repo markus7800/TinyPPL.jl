@@ -21,12 +21,12 @@ We can wrap the function with handlers, for instance
 ```julia
 trace_handler = trace(simple)
 ```
-when we call a handler, it is registered on the `HANDLER_STACK` and its parent handler is called recursively. In the above case the parent handler is the model itself, which sends a message to all the handlers in the stack, when it encounters a `sample` statement.
+When we call a handler, it is registered on the `HANDLER_STACK` and its parent handlers are called recursively. In the above case, the parent handler is the model itself, which sends a message to all the handlers in the stack, when it encounters a `sample` statement.
 The `trace_handler` will record the values of the random choices.
 
 ```julia
 trace_handler(0., 1.) # arguments are forwarded to model
-model_trace= trace_handler.trace
+model_trace = trace_handler.trace
 ```
 
 We can chain handlers:
@@ -39,7 +39,7 @@ replay_handler = trace(
 )
 ```
 
-When we call `replay_handler(0., 1.)`, first the `simple` sends a message to the `replay` handler, which adds the corresponding value from `mode_trace` to the message and passes the message to the `block` handler.
+When we call `replay_handler(0., 1.)`, first `simple` sends a message for each sample statement to the `replay` handler, which adds the corresponding value from `mode_trace` to the message and passes the message to the `block` handler.
 This handler stops messages that do not fulfill the filtering criterion, i.e. it only forwards messages that correspond to sample statements with observed values.
 Lastly, the `trace` handler will record all remaining messages.
 Then the handlers get a chance to post-process the message in reversed order.
