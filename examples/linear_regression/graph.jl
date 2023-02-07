@@ -79,11 +79,10 @@ println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated)")
 
 
 @info "compiled_likelihood_weighting"
-lw = compile_likelihood_weighting(model)
+const lw = compile_likelihood_weighting(model)
 
-# for compilation
-X = Vector{Float64}(undef, model.n_variables); lw(X)
-traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100; static_observes=true);
+
+traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100; static_observes=true); # for compilation
 
 @time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
 println("for 1_000_000 samples.")
@@ -100,6 +99,7 @@ println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated)")
 
 
 @info "HMC"
+traces, retvals, lps = hmc(model, 10, 0.001, 10, [1. 0.; 0. 1.]); # for compilation
 @time traces, retvals, lps = hmc(model, 1_000, 0.001, 10, [1. 0.; 0. 1.]);
 println("for 10_000 samples.")
 

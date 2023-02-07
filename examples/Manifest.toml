@@ -412,7 +412,7 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[deps.TinyPPL]]
 deps = ["Distributions", "MacroTools", "ProgressLogging", "SpecialFunctions", "Tracker"]
-git-tree-sha1 = "af67aa6e14d14e5c0ac32a04ca57e266f3619302"
+git-tree-sha1 = "26bc32aed93f93e4748583f5376c096a0cb45081"
 repo-rev = "main"
 repo-url = "https://github.com/markus7800/TinyPPL.jl"
 uuid = "7d3b7143-6434-42f5-a03e-fdc02c8b5cd0"
