@@ -59,6 +59,7 @@ function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
                 y = substitute(ix_to_sym[j], :($X[$j]), y)
             end
             if static_observes
+                y = eval(y)
                 push!(block_args, :($lp += logpdf($d_sym, $y)))
             else
                 push!(block_args, :($X[$i] = $y))
@@ -111,5 +112,3 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
 end
 
 export compile_likelihood_weighting, compiled_likelihood_weighting
-
-# 1.63
