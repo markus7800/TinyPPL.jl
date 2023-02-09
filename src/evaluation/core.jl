@@ -14,7 +14,7 @@ function walk(expr, sampler, constraints)
         end
     elseif MacroTools.@capture(expr, @subppl func_(args__))
         return quote
-            let value = $(esc(func))(($(args...)), $sampler, $constraints)
+            let value = $(func)(($(args...)), $sampler, $constraints)
                 value
             end
         end
