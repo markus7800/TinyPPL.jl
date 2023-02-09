@@ -2,7 +2,7 @@ module Distributions
     import Distributions: Distribution, logpdf, params
 
     import Distributions: Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
-    import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, Pareto, TDist, Uniform
+    import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
 
     import SpecialFunctions: digamma
 
@@ -123,16 +123,6 @@ module Distributions
         return (∇μ, ∇σ)
     end
 
-    function logpdf_params_grad(d::Pareto, x::Float64)
-        if x ≥ θ
-            ∇α = 1/d.α + log(d.θ) - log(x)
-            ∇θ = d.α / d.θ
-            return (∇α, ∇θ)
-        else
-            return (0., 0.)
-        end
-    end
-
     function logpdf_params_grad(d::TDist, x::Float64)
         x_sq = x^2
         a = x_sq / d.ν + 1
@@ -157,7 +147,7 @@ module Distributions
     export Distribution, logpdf, params
 
     export Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
-    export Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, Pareto, TDist, Uniform
+    export Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
 
     export logpdf_params_grad
 end

@@ -234,14 +234,10 @@ Tracker.grad.(X_tracked)
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 
-function f()
-    return 0
-end
-
 @ppl function geometric(p::Float64, observed::Bool)
-    i = f()
+    i = 0
     while true
-        b = {(:b,i)} ~ Bernoulli(p)
+        b = {:b => i} ~ Bernoulli(p)
         b && break
         i += 1
     end
@@ -260,6 +256,11 @@ sampler = Forward();
 W = exp.(lps);
 P_hat = [sum(W[retvals .== i]) for i in 0:10]
 
+
+@time traces, retvals, lps = lmh(geometric, (0.5, true), observations, 1_000_000, Proposal());
+@time traces, retvals, lps = lmh(geometric, (0.5, true), observations, 1_000_000, Proposal(:b=>Bernoulli(0.3)));
+
+P_hat = [mean(retvals .== i) for i in 0:10]
 
 
 using TinyPPL.Distributions

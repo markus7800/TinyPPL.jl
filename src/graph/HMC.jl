@@ -57,7 +57,7 @@ function hmc(pgm::PGM, n_samples::Int, ϵ::Float64, L::Int, M::AbstractMatrix)
 
     @info "HMC" n_accepted/n_samples
 
-    return trace, retvals, normalise(logprobs)
+    return trace, retvals, logprobs
 end
 
 export hmc

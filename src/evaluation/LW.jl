@@ -2,7 +2,7 @@
 
 mutable struct LW <: Sampler
     W::Float64
-    trace::Dict{Any, Float64}
+    trace::Dict{Any, Real}
     function LW()
         return new(0., Dict())
     end
@@ -21,13 +21,13 @@ function sample(sampler::LW, addr::Any, dist::Distribution, obs::Union{Nothing, 
 end
 
 function likelihood_weighting(model::Function, args::Tuple, observations::Dict, n_samples::Int)
-    traces = Vector{Dict{Any, Float64}}(undef, n_samples)
+    traces = Vector{Dict{Any, Real}}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     sampler = LW()
     @progress for i in 1:n_samples
         sampler.W = 0.
-        sampler.trace = Dict{Any, Float64}()
+        sampler.trace = Dict{Any, Real}()
         @inbounds retvals[i] = model(args..., sampler, observations)
         @inbounds logprobs[i] = sampler.W
         @inbounds traces[i] = sampler.trace
@@ -35,4 +35,4 @@ function likelihood_weighting(model::Function, args::Tuple, observations::Dict, 
     return traces, retvals, normalise(logprobs)
 end
 
-export LW, likelihood_weighting
+export likelihood_weighting
