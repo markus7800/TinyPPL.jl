@@ -5,6 +5,8 @@ function likelihood_weighting(pgm::PGM, n_samples::Int)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
+
+    observed = .!isnothing.(pgm.observed_values)
     
     X = Vector{Float64}(undef, pgm.n_variables)
     @progress for i in 1:n_samples
@@ -12,21 +14,19 @@ function likelihood_weighting(pgm::PGM, n_samples::Int)
         for node in pgm.topological_order
             d = pgm.distributions[node](X)
 
-            if !isnothing(pgm.observed_values[node])
+            if observed[node]
                 value = pgm.observed_values[node](X)
-                X[node] = value
                 W += logpdf(d, value)
             else
                 value = rand(d)
-                X[node] = value
             end
+            X[node] = value
         end
         r = pgm.return_expr(X)
 
         @inbounds logprobs[i] = W
         @inbounds retvals[i] = r
         @inbounds trace[:,i] .= X
-        
     end
 
     return trace, retvals, normalise(logprobs)
