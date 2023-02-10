@@ -1,5 +1,5 @@
 
-import ..TinyPPL.Distributions: Proposal
+import ..TinyPPL.Distributions: Proposal, logpdf
 
 mutable struct LMH <: Sampler
     W::Float64

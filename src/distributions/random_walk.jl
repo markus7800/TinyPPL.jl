@@ -3,8 +3,8 @@ import Distributions: DiscreteUnivariateDistribution
 function continuous_interval(lower::Real, upper::Real, x::Real, var::Real)
     width = upper - lower
     # rescale
-    μ = (x - lower) / width # ∈ [0, 1]
-    σ2 = var * 1. / width^2
+    μ = clamp((x - lower) / width, 1e-3, 1-1e-3) # ∈ [0, 1]
+    σ2 = clamp(var * 1. / width^2, 1e-3, μ * (1-μ) - 1e-3)
 
     # @assert σ^2 < μ * (1-μ) (var < width/2 necessary)
 
@@ -16,8 +16,8 @@ end
 
 function continuous_greater_than(lower::Real, x::Real, var::Real)
     μ = x - lower # ∈ [0, ∞)
-    α = μ^2 / var
-    θ = μ / α
+    α = max(μ^2 / var, 1e-3)
+    θ = max(μ / α, 1e-3)
     return Gamma(α, θ) + lower
 end
 
@@ -66,6 +66,31 @@ function discrete_greater_than(lower::Real, x::Real, var::Real)
 end
 
 export continuous_interval, continuous_greater_than, discrete_interval, discrete_greater_than
+
+import Distributions: Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
+import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
+
+random_walk_proposal_dist(d::Bernoulli, value::Real, var::Real) = value > 0 ? Bernoulli(0.) : Bernoulli(1.)
+random_walk_proposal_dist(d::Binomial, value::Real, var::Real) = discrete_interval(0, d.n, value, var)
+random_walk_proposal_dist(d::Categorical, value::Real, var::Real) = discrete_interval(1, Distributions.ncategories(d), value, var)
+random_walk_proposal_dist(d::DiscreteUniform, value::Real, var::Real) = discrete_interval(d.a, d.b, value, var)
+random_walk_proposal_dist(d::Geometric, value::Real, var::Real) = discrete_greater_than(0, value, var)
+random_walk_proposal_dist(d::Poisson, value::Real, var::Real) = discrete_greater_than(0, value, var)
+
+random_walk_proposal_dist(d::Beta, value::Real, var::Real) = continuous_interval(0., 1., value, var)
+random_walk_proposal_dist(d::Cauchy, value::Real, var::Real) = Normal(value, sqrt(var))
+random_walk_proposal_dist(d::Exponential, value::Real, var::Real) = continuous_greater_than(0, value, var)
+random_walk_proposal_dist(d::Gamma, value::Real, var::Real) = continuous_greater_than(0, value, var)
+random_walk_proposal_dist(d::InverseGamma, value::Real, var::Real) = continuous_greater_than(0, value, var)
+random_walk_proposal_dist(d::Laplace, value::Real, var::Real) = Normal(value, sqrt(var))
+random_walk_proposal_dist(d::LogNormal, value::Real, var::Real) = continuous_greater_than(0, value, var)
+random_walk_proposal_dist(d::Normal, value::Real, var::Real) = Normal(value, sqrt(var))
+random_walk_proposal_dist(d::TDist, value::Real, var::Real) = Normal(value, sqrt(var))
+random_walk_proposal_dist(d::Uniform, value::Real, var::Real) = continuous_interval(d.a, d.b, value, var)
+
+const rw_proposal_dist = random_walk_proposal_dist
+
+export random_walk_proposal_dist, rw_proposal_dist
 
 # using Plots
 # d = continuous_interval(-1, 3, 1.5, 0.5)
