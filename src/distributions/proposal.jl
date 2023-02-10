@@ -1,5 +1,4 @@
 
-import ..TinyPPL.Distributions: Distribution
 
 function reverse_pair(pair::Pair)
     new_pair = pair[1]
