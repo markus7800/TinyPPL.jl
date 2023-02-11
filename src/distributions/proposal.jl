@@ -9,4 +9,9 @@ function Proposal(d::Dict{Any,T}) where T <: Distribution
     return MostSpecificDict{Distribution}(d)
 end
 
-export Proposal
+const Addr2Var = MostSpecificDict{Float64}
+function Addr2Var(args...)
+    return MostSpecificDict(Dict{Any, Float64}(args...))
+end
+
+export Proposal, Addr2Var

@@ -4,12 +4,13 @@ import ..TinyPPL.Distributions: Proposal, logpdf
 mutable struct LMH <: Sampler
     W::Float64
     Q::Float64
+    Q_correction::Float64
     proposal::Proposal
     resample_addr::Any
     trace_current::Dict{Any, Real}
     trace::Dict{Any, Real}
     function LMH(proposal)
-        return new(0., 0., proposal, nothing, Dict(), Dict())
+        return new(0., 0., 0., proposal, nothing, Dict(), Dict())
     end
 end
 
@@ -31,11 +32,10 @@ function sample(sampler::LMH, addr::Any, dist::Distribution, obs::Union{Nothing,
     return value
 end
 
-function lmh(model::Function, args::Tuple, observations::Dict, n_samples::Int, proposal::Proposal=Proposal())
+function single_site_sampler(model::Function, args::Tuple, observations::Dict, n_samples::Int, sampler::Sampler)
     traces = Vector{Dict{Any, Real}}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
-    sampler = LMH(proposal)
 
     n_accepted = 0
     retval_current = model(args..., sampler, observations)
@@ -45,6 +45,7 @@ function lmh(model::Function, args::Tuple, observations::Dict, n_samples::Int, p
     @progress for i in 1:n_samples
         sampler.W = 0.
         sampler.Q = 0.
+        sampler.Q_correction = 0.
         sampler.trace_current = trace_current
         sampler.trace = Dict{Any, Real}()
         sampler.resample_addr = rand(keys(sampler.trace_current))
@@ -54,7 +55,9 @@ function lmh(model::Function, args::Tuple, observations::Dict, n_samples::Int, p
         Q_proposed = sampler.Q
         W_proposed = sampler.W
 
-        log_α = W_proposed - Q_proposed - W_current + Q_current + log(length(trace_current)) - log(length(trace_proposed))
+        sampler.Q_correction += log(length(trace_current)) - log(length(trace_proposed))
+
+        log_α = W_proposed - Q_proposed - W_current + Q_current + sampler.Q_correction
 
         if log(rand()) < log_α
             retval_current, trace_current = retval_proposed, trace_proposed
@@ -66,9 +69,15 @@ function lmh(model::Function, args::Tuple, observations::Dict, n_samples::Int, p
         @inbounds logprobs[i] = W_current
         @inbounds traces[i] = trace_current
     end
-    @info "LMH" n_accepted/n_samples
+    @info "SingleSite $(typeof(sampler))" n_accepted/n_samples
 
     return traces, retvals, logprobs
 end
 
-export lmh
+function lmh(model::Function, args::Tuple, observations::Dict, n_samples::Int; proposal::Proposal=Proposal())
+    sampler = LMH(proposal)
+    return single_site_sampler(model, args, observations, n_samples, sampler)
+end
+
+
+export single_site_sampler, lmh

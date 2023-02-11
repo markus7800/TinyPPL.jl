@@ -75,15 +75,18 @@ retvals'W
 
 using TinyPPL.Graph
 
-model = @ppl Flip begin
+b = true
+q = quote
     let A ~ Bernoulli(0.5),
         B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
         C ~ Bernoulli(B == 1 ? 0.9 : 0.7),
-        D = (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ true
+        D = (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ $b
         
         A + C
     end
 end;
+
+model = @ppl(:Flip, $q)
 
 
 model = @ppl Flip2 begin
@@ -259,9 +262,38 @@ P_hat = [sum(W[retvals .== i]) for i in 0:10]
 
 @time traces, retvals, lps = lmh(geometric, (0.5, true), observations, 1_000_000, Proposal());
 @time traces, retvals, lps = lmh(geometric, (0.5, true), observations, 1_000_000, Proposal(:b=>Bernoulli(0.3)));
+@time traces, retvals, lps = rwmh(geometric, (0.5, true), observations, 1_000_000);
 
 P_hat = [mean(retvals .== i) for i in 0:10]
 
+@ppl function LinReg(xs)
+    function f(slope, intercept, x)
+        intercept + slope * x
+    end
+
+    slope = {:slope} ~ Normal(0.0, 10.)
+    intercept = {:intercept} ~ Normal(0.0, 10.)
+
+    for i in 1:length(xs)
+        {(:y, i)} ~ Normal(f(slope, intercept, xs[i]), 1.)
+    end
+
+    return (slope, intercept)
+end
+
+xs = [1., 2., 3., 4., 5.]
+ys = [2.1, 3.9, 5.3, 7.7, 10.2]
+
+observations = Dict((:y,i) => ys[i] for i in 1:length(ys));
+@time traces, retvals, lps = likelihood_weighting(LinReg, (xs,), observations, 1_000_000);
+W = exp.(lps);
+[r[1] for r in retvals]'W
+[r[2] for r in retvals]'W
+
+@time traces, retvals, lps = lmh(LinReg, (xs,), observations, 1_000_000);
+@time traces, retvals, lps = rwmh(LinReg, (xs,), observations, 1_000_000, default_var=0.01);
+mean(r[1] for r in retvals)
+mean(r[2] for r in retvals)
 
 using TinyPPL.Distributions
 using TinyPPL.Handlers
