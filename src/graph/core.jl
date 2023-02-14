@@ -479,7 +479,9 @@ end
 
 function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol})
     n_variables = length(spgm.V)
-    sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(spgm.V))
+    sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
+        sort(collect(spgm.V), lt=(x,y) -> haskey(spgm.Y,x) < haskey(spgm.Y,y)))  # observed nodes last
+    )
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
     

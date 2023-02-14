@@ -28,9 +28,9 @@ function likelihood_weighting(model::Function, args::Tuple, observations::Dict, 
     @progress for i in 1:n_samples
         sampler.W = 0.
         sampler.trace = Dict{Any, Real}()
-        @inbounds retvals[i] = model(args..., sampler, observations)
-        @inbounds logprobs[i] = sampler.W
-        @inbounds traces[i] = sampler.trace
+        retvals[i] = model(args..., sampler, observations)
+        logprobs[i] = sampler.W
+        traces[i] = sampler.trace
     end
     return traces, retvals, normalise(logprobs)
 end

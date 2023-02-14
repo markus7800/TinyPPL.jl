@@ -4,9 +4,9 @@ function likelihood_weighting(model::Function, args::Tuple, n_samples::Int)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     @progress for i in 1:n_samples
-        @inbounds traces[i] = get_trace(trace(model), args...)
-        @inbounds retvals[i] = traces[i][:RETURN]["value"]
-        @inbounds logprobs[i] = logpdfsum(traces[i], msg -> msg["type"] == "observation")
+        traces[i] = get_trace(trace(model), args...)
+        retvals[i] = traces[i][:RETURN]["value"]
+        logprobs[i] = logpdfsum(traces[i], msg -> msg["type"] == "observation")
     end
     return traces, retvals, normalise(logprobs)
 end

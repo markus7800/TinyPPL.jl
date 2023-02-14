@@ -1,4 +1,4 @@
-import Distributions: logpdf
+import ..TinyPPL.Distributions: logpdf
 
 function likelihood_weighting(pgm::PGM, n_samples::Int)
 
@@ -24,9 +24,9 @@ function likelihood_weighting(pgm::PGM, n_samples::Int)
         end
         r = pgm.return_expr(X)
 
-        @inbounds logprobs[i] = W
-        @inbounds retvals[i] = r
-        @inbounds trace[:,i] .= X
+        logprobs[i] = W
+        retvals[i] = r
+        trace[:,i] = X
     end
 
     return trace, retvals, normalise(logprobs)
@@ -98,14 +98,14 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
         mask = isnothing.(pgm.observed_values)
         trace = Array{Float64,2}(undef, sum(mask), n_samples)
         @progress for i in 1:n_samples
-            @inbounds retvals[i], logprobs[i] = lw(X)
-            @inbounds trace[:,i] = X[mask]
+            retvals[i], logprobs[i] = lw(X)
+            trace[:,i] = X[mask]
         end
     else
         trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
         @progress for i in 1:n_samples
-            @inbounds retvals[i], logprobs[i] = lw(X)
-            @inbounds trace[:,i] = X
+            retvals[i], logprobs[i] = lw(X)
+            trace[:,i] = X
         end
     end
     return trace, retvals, normalise(logprobs)

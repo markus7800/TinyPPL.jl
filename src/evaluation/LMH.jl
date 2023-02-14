@@ -65,9 +65,9 @@ function single_site_sampler(model::Function, args::Tuple, observations::Dict, n
             n_accepted += 1
         end
 
-        @inbounds retvals[i] = retval_current
-        @inbounds logprobs[i] = W_current
-        @inbounds traces[i] = trace_current
+        retvals[i] = retval_current
+        logprobs[i] = W_current
+        traces[i] = trace_current
     end
     @info "SingleSite $(typeof(sampler))" n_accepted/n_samples
 
