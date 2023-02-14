@@ -356,6 +356,14 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         G.Y[v] = E2
     
         return G, E2
+    elseif expr.head == :$
+        @assert length(expr.args) == 1
+        v = eval(expr.args[1])
+        if typeof(v) <: AbstractVector
+            return EmptyPGM(), Expr(:vect, v...)
+        else
+            return EmptyPGM(), v # v has to be literal (bool, float, etc.)
+        end
     else
         println(expr.args)
         error("Unsupported expression $(expr.head).")
