@@ -34,6 +34,42 @@ end
 
 export likelihood_weighting
 
+function get_symbolic_distributions(pgm::PGM, X::Symbol)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
+
+    symbolic_dists = []
+    for node in 1:pgm.n_variables
+        sym = ix_to_sym[node]
+        d = pgm.symbolic_pgm.P[sym]
+        for j in 1:pgm.n_variables
+            d = substitute(ix_to_sym[j], :($X[$j]), d)
+        end
+        push!(symbolic_dists, d)
+    end
+    return symbolic_dists
+end
+
+function get_symbolic_observed_values(pgm::PGM, X::Symbol, static_observes::Bool)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
+
+    symbolic_observes = []
+    for node in 1:pgm.n_variables
+        sym = ix_to_sym[node]
+        if isnothing(pgm.observed_values[node])
+            push!(symbolic_observes, nothing)
+        else
+            y = pgm.symbolic_pgm.Y[sym]
+            for j in 1:pgm.n_variables
+                y = substitute(ix_to_sym[j], :($X[$j]), y)
+            end
+            if static_observes
+                y = eval(y)
+            end
+            push!(symbolic_observes, y)
+        end
+    end
+    return symbolic_observes
+end
 
 function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
     ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
@@ -43,23 +79,19 @@ function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
     push!(block_args, :($lp = 0.0))
 
     X = gensym(:X)
+
+    symbolic_dists = get_symbolic_distributions(pgm, X)
+    symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
+    
     for i in pgm.topological_order
         sym = ix_to_sym[i]
-        d = pgm.symbolic_pgm.P[sym]
-        for j in 1:pgm.n_variables
-            d = substitute(ix_to_sym[j], :($X[$j]), d)
-        end
 
         d_sym = gensym("dist_$i")
-        push!(block_args, :($d_sym = $d))
+        push!(block_args, :($d_sym = $(symbolic_dists[i])))
 
         if haskey(pgm.symbolic_pgm.Y, sym)
-            y = pgm.symbolic_pgm.Y[sym]
-            for j in 1:pgm.n_variables
-                y = substitute(ix_to_sym[j], :($X[$j]), y)
-            end
+            y = symbolic_observes[i]
             if static_observes
-                y = eval(y)
                 push!(block_args, :($lp += logpdf($d_sym, $y)))
             else
                 push!(block_args, :($X[$i] = $y))
@@ -85,9 +117,9 @@ function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
             $(Expr(:block, block_args...))
         end
     ))
-    display(f)
+    # display(f)
     lw = eval(f)
-    X = Vector{Float64}(undef, model.n_variables); lw(X); # compilation
+    X = Vector{Float64}(undef, pgm.n_variables); Base.invokelatest(lw, X); # compilation
     return lw
 end
 
@@ -95,20 +127,18 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
     X = Vector{Float64}(undef, pgm.n_variables)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
-    if static_observes
-        mask = isnothing.(pgm.observed_values)
-        trace = Array{Float64,2}(undef, sum(mask), n_samples)
-        @progress for i in 1:n_samples
-            retvals[i], logprobs[i] = lw(X)
+    mask = isnothing.(pgm.observed_values)
+    trace = Array{Float64,2}(undef, static_observes ? sum(mask) : pgm.n_variables, n_samples)
+
+    @progress for i in 1:n_samples
+        retvals[i], logprobs[i] = lw(X)
+        if static_observes
             trace[:,i] = X[mask]
-        end
-    else
-        trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
-        @progress for i in 1:n_samples
-            retvals[i], logprobs[i] = lw(X)
+        else
             trace[:,i] = X
         end
     end
+    
     return trace, retvals, normalise(logprobs)
 end
 

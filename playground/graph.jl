@@ -8,6 +8,9 @@ haskey(p, :x=>:y), p[:x=>:y]
 haskey(p, :x=>:y=>:z), p[:x=>:y=>:z]
 get(p, :x=>:y=>:z, Bernoulli(0.5))
 
+d = random_walk_proposal_dist(Categorical([0.1, 0.2, 0.7]), 1, 0.5)
+rand(d)
+
 b = [true]
 model = @ppl Flip begin
     let A = {:A} ~ Bernoulli(0.5),
@@ -57,8 +60,14 @@ model = @ppl LinReg begin
         (slope, intercept)
     end
 end
+@time traces, retvals = lmh(model, 1_000_000);
 
-compile_lmh(model, static_observes=true, proposal=Proposal(:intercept=>Normal(0.,1.)));
+kernels = compile_lmh(model, static_observes=true);
+kernels = compile_lmh(model, static_observes=true, proposal=Proposal(:intercept=>Normal(0.,1.)));
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
+
+mean([r[1] for r in retvals])
+mean([r[2] for r in retvals])
 
 xs = [
     1., 2., 3, 4., 5., 6., 7., 8., 9., 10.,
@@ -111,22 +120,26 @@ model = @ppl LinReg begin
     end
 end;
 
-@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000); # 60s
 W = exp.(lps);
 slope = [r[1] for r in retvals]; slope'W
 intercept = [r[2] for r in retvals]; intercept'W
 
 lw = compile_likelihood_weighting(model, static_observes=true)
 
-X = Vector{Float64}(undef, model.n_variables);
-@time lw(X);
-@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000, static_observes=true);
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000, static_observes=true); # 1.2s
 
-@time traces, retvals = lmh(model, 100_000);
-@time traces, retvals = lmh(model, 100_000, proposal=Proposal(:slope=>Normal(2.,1.), :intercept=>Normal(-1.,1.)));
+proposal = Proposal(:slope=>Normal(2.,1.), :intercept=>Normal(-1.,1.));
+
+@time traces, retvals = lmh(model, 1_000_000);
+@time traces, retvals = lmh(model, 1_000_000, proposal=proposal); # 60s
+
+kernels = compile_lmh(model, static_observes=true);
+kernels = compile_lmh(model, static_observes=true, proposal=proposal);
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true); # 2s
+
 mean([r[1] for r in retvals])
 mean([r[2] for r in retvals])
-
 
 @time traces, retvals, lps = hmc(model, 10_000, 0.05, 10, [1. 0.; 0. 1.]);
 mean(retvals)
