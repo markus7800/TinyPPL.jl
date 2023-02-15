@@ -160,7 +160,7 @@ Tracker.grad.(X_tracked)
 
 include("../examples/univariate_gmm/common.jl")
 
-@ppl gmm begin
+model = @ppl gmm begin
     function dirichlet(δ, k)
         let w = [{(:w, i)} ~ Gamma(δ, 1) for i in 1:k]
             w / sum(w)
@@ -168,16 +168,32 @@ include("../examples/univariate_gmm/common.jl")
     end
     let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         k = 4,
-        y = $(Main.gt_ys[1:5]),
+        y = $(Main.gt_ys),
         n = length(y),
         w = dirichlet(δ, k),
         means = [{(:μ, j)} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
         vars = [{(:σ², j)} ~ InverseGamma(α, β) for j in 1:k],
         z = [{(:z, i)} ~ Categorical(w) for i in 1:n]
 
-        [Normal(means[z[i]], sqrt(vars[z[i]])) ↦ y[i] for i in 1:n]
+        [Normal(means[Int(z[i])], sqrt(vars[Int(z[i])])) ↦ y[i] for i in 1:n]
+        
+        means
     end
-end
+end;
+
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+
+
+lw = compile_likelihood_weighting(model)
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
+W = exp.(lps);
+
+lps[argmax(lps)]
+retvals[argmax(lps)]
+
+
+@time traces, retvals = lmh(model, 1_000_000);
 
 @ppl obs begin
     let z ~ Bernoulli(0.5),

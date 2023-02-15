@@ -451,15 +451,20 @@ function Base.show(io::IO, pgm::PGM)
 end
 
 function get_topolocial_order(n_variables::Int, edges::Set{Pair{Int,Int}})
+    edges = deepcopy(edges)
     roots = [i for i in 1:n_variables if !any(i == y for (x,y) in edges)]
     ordered_nodes = Int[] # topological order
-    nodes = roots
-    while length(nodes) > 0
-        node = popfirst!(nodes)
+    nodes = Set(roots)
+    while !isempty(nodes)
+        node = pop!(nodes)
+        push!(ordered_nodes, node)
         children = [y for (x,y) in edges if x == node]
-        push!(nodes, children...)
-        if !(node in ordered_nodes)
-            push!(ordered_nodes, node)
+        for child in children
+            delete!(edges, node=>child)
+            parents = [x for (x,y) in edges if y == child]
+            if isempty(parents)
+                push!(nodes, child)
+            end
         end
     end
     return ordered_nodes
