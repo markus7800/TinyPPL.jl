@@ -40,6 +40,13 @@ struct DiscreteRWProposer <: DiscreteUnivariateDistribution
 end
 
 function Base.rand(d::DiscreteRWProposer)::Int
+    if d.b == 0
+        return d.μ - rand(d.G) % d.a - 1
+    end
+    if d.a == 0
+        return rand(d.G) % d.b + d.μ + 1
+    end
+
     if rand() > 0.5
         return rand(d.G) % d.b + d.μ + 1
     else
