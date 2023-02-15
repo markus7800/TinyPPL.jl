@@ -2,6 +2,7 @@ import MacroTools
 
 rmlines(expr) = MacroTools.postwalk(sub_ex -> MacroTools.rmlines(sub_ex), expr)
 
+isbraced(expr) = expr isa Expr && expr.head == :braces
 
 function normalise(logprobs::Vector{Float64})
     m = maximum(logprobs)

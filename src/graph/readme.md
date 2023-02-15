@@ -127,3 +127,5 @@ We can sample from the complete model by calling `rand(model.distributions[node]
 ```julia
 traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 ```
+
+TODO: x[1] = 1 not allowed, immutable, but y = x[1] is allowed

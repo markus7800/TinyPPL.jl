@@ -40,7 +40,9 @@ macro ppl(func)
     @assert MacroTools.@capture(func, (function f_(func_args__) body_ end))
     trace = gensym(:trace)
     constraints = gensym(:constraints)
-    new_body = MacroTools.postwalk(ex -> walk(ex, trace, constraints), esc(body))
+    # implicit addressing, escaping body is needed as it could be referencing symbols not defined in body
+    new_body = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) && !isbraced(var) ? :($var = {$(QuoteNode(var))} ~ $dist) : expr, esc(body));
+    new_body = MacroTools.postwalk(ex -> walk(ex, trace, constraints), new_body)
     return rmlines(quote
         function $(esc(f))($(esc.(func_args)...), $(esc(constraints))=Dict(), $(esc(trace))=Trace())
             function inner()
