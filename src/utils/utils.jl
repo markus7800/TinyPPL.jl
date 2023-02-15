@@ -25,8 +25,8 @@ function get_most_specific_match(d::Dict{Any, T}, k::Pair, default::T) where T
     # z => i => j, try z=>i=>j, then z=>i, then z
     reversed_pair = reverse_pair(k)
     while reversed_pair isa Pair
-        if haskey(d, reversed_pair[1])
-            return d[reversed_pair[1]]
+        if haskey(d, reversed_pair)
+            return d[reversed_pair]
         else
             reversed_pair = reversed_pair[1]
         end
@@ -34,6 +34,29 @@ function get_most_specific_match(d::Dict{Any, T}, k::Pair, default::T) where T
     return get(d, reversed_pair, default)
 end
 
+function has_match(d::Dict{Any, T}, k::Pair) where T
+    reversed_pair = reverse_pair(k)
+    while reversed_pair isa Pair
+        if haskey(d, reversed_pair)
+            return true
+        else
+            reversed_pair = reversed_pair[1]
+        end
+    end
+    return haskey(d, reversed_pair)
+end
+
+function get_most_specific_match(d::Dict{Any, T}, k::Pair) where T
+    reversed_pair = reverse_pair(k)
+    while reversed_pair isa Pair
+        if haskey(d, reversed_pair)
+            return d[reversed_pair]
+        else
+            reversed_pair = reversed_pair[1]
+        end
+    end
+    return d[reversed_pair]
+end
 
 struct MostSpecificDict{T}
     Q::Dict{Any, T}
@@ -56,9 +79,31 @@ function Base.get(d::MostSpecificDict{T}, k::Any, default::T) where T
     return get(d.Q, k, default)
 end
 
+function Base.getindex(d::MostSpecificDict{T}, k::Any) where T
+    return d.Q[k]
+end
+
 function Base.get(d::MostSpecificDict{T}, k::Pair, default::T) where T
     if haskey(d.Q, k)
         return d.Q[k]
     end
     return get_most_specific_match(d.Q, k, default)
+end
+
+function Base.getindex(d::MostSpecificDict{T}, k::Pair) where T
+    if haskey(d.Q, k)
+        return d.Q[k]
+    end
+    return get_most_specific_match(d.Q, k)
+end
+
+function Base.haskey(d::MostSpecificDict{T}, k::Any) where T
+    return haskey(d.Q, k)
+end
+
+function Base.haskey(d::MostSpecificDict{T}, k::Pair) where T
+    if haskey(d.Q, k)
+        return true
+    end
+    return has_match(d.Q, k)
 end
