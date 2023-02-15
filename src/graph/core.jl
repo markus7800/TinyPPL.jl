@@ -97,6 +97,24 @@ function substitute(var::Symbol, with, in_expr)
     end
 end
 
+function simplify_if(expr)
+    if expr isa Expr
+        if expr.head == :if
+            if expr.args[1] == true
+                return expr.args[2]
+            end
+        end
+        if expr.head == :&&
+            if expr.args[1] == true
+                return expr.args[2]
+            end
+        end
+        return Expr(expr.head, simplify_if.(expr.args)...)
+    else
+        return expr
+    end
+end
+
 
 # Computes the Probabilistic Graphical Model of a FOTinyPPL program.
 
@@ -343,7 +361,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         push!(t.all_let_variables, v)
 
         F = :($phi ? $E1 : true) # TODO: relpace with "flat" distribution
-        G.P[v] = F  # distribution not score
+        G.P[v] = simplify_if(F)  # distribution not score
     
         free_vars = get_free_variables(F) ∩ t.all_let_variables # remove primitives from Julia
         for z in free_vars
@@ -388,7 +406,7 @@ function transpile_program(expr::Expr)
     main = expr.args[end]
     if length(expr.args) > 1
         for f in expr.args[1:end-1]
-            @assert f.head == :function
+            @assert f.head == :function f.head
             f_def = f.args[1]
             f_name = f_def.args[1]
             t.procs[f_name] = f

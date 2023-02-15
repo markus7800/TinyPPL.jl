@@ -157,3 +157,39 @@ Tracker.back!(lp_2)
 Tracker.grad.(X_tracked)
 
 @time hmc(model, 1_000, 0.05, 10, [1. 0.; 0. 1.]);
+
+include("../examples/univariate_gmm/common.jl")
+
+@ppl gmm begin
+    function dirichlet(δ, k)
+        let w = [{(:w, i)} ~ Gamma(δ, 1) for i in 1:k]
+            w / sum(w)
+        end
+    end
+    let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
+        k = 4,
+        y = $(Main.gt_ys[1:5]),
+        n = length(y),
+        w = dirichlet(δ, k),
+        means = [{(:μ, j)} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
+        vars = [{(:σ², j)} ~ InverseGamma(α, β) for j in 1:k],
+        z = [{(:z, i)} ~ Categorical(w) for i in 1:n]
+
+        [Normal(means[z[i]], sqrt(vars[z[i]])) ↦ y[i] for i in 1:n]
+    end
+end
+
+@ppl obs begin
+    let z ~ Bernoulli(0.5),
+        μ0 ~ Normal(-1.0, 1.0),
+        μ1 ~ Normal(1.0, 1.0),
+        y = 0.5
+
+        if z
+            Normal(μ0, 1) ↦ y
+        else
+            Normal(μ1, 1) ↦ y
+        end
+
+    end
+end
