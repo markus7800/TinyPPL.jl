@@ -66,7 +66,7 @@ function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
                 push!(block_args, :($lp += logpdf($d_sym, $X[$i])))
             end
         else
-            push!(block_args, :($X[$i] = rand($d)))
+            push!(block_args, :($X[$i] = rand($d_sym)))
         end
     end
 
@@ -85,8 +85,9 @@ function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
             $(Expr(:block, block_args...))
         end
     ))
-    # display(f)
+    display(f)
     lw = eval(f)
+    X = Vector{Float64}(undef, model.n_variables); lw(X); # compilation
     return lw
 end
 

@@ -1,4 +1,4 @@
-import Distributions: DiscreteUnivariateDistribution
+import Distributions: DiscreteUnivariateDistribution, ncategories
 
 function continuous_interval(lower::Real, upper::Real, x::Real, var::Real)
     width = upper - lower
@@ -72,7 +72,7 @@ import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, L
 
 random_walk_proposal_dist(d::Bernoulli, value::Real, var::Real) = value > 0 ? Bernoulli(0.) : Bernoulli(1.)
 random_walk_proposal_dist(d::Binomial, value::Real, var::Real) = discrete_interval(0, d.n, value, var)
-random_walk_proposal_dist(d::Categorical, value::Real, var::Real) = discrete_interval(1, Distributions.ncategories(d), value, var)
+random_walk_proposal_dist(d::Categorical, value::Real, var::Real) = discrete_interval(1, ncategories(d), value, var)
 random_walk_proposal_dist(d::DiscreteUniform, value::Real, var::Real) = discrete_interval(d.a, d.b, value, var)
 random_walk_proposal_dist(d::Geometric, value::Real, var::Real) = discrete_greater_than(0, value, var)
 random_walk_proposal_dist(d::Poisson, value::Real, var::Real) = discrete_greater_than(0, value, var)

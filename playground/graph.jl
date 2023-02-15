@@ -2,6 +2,12 @@
 using TinyPPL.Distributions
 using TinyPPL.Graph
 
+p = Proposal(:x=>Bernoulli(0.), (:x=>:y=>:z)=>Bernoulli(1.));
+haskey(p, :x), p[:x]
+haskey(p, :x=>:y), p[:x=>:y]
+haskey(p, :x=>:y=>:z), p[:x=>:y=>:z]
+get(p, :x=>:y=>:z, Bernoulli(0.5))
+
 b = [true]
 model = @ppl Flip begin
     let A = {:A} ~ Bernoulli(0.5),
@@ -51,6 +57,9 @@ model = @ppl LinReg begin
         (slope, intercept)
     end
 end
+
+compile_lmh(model, static_observes=true, proposal=Proposal(:intercept=>Normal(0.,1.)));
+
 xs = [
     1., 2., 3, 4., 5., 6., 7., 8., 9., 10.,
     11., 12., 13., 14., 15., 16., 17., 18., 19., 20.,
@@ -62,7 +71,7 @@ xs = [
     71., 72., 73., 74., 75., 76., 77., 78., 79., 80.,
     81., 82., 83., 84., 85., 86., 87., 88., 89., 90.,
     91., 92., 93., 94., 95., 96., 97., 98., 99., 100.
-]
+];
 ys = [
     0.77, 3.94, 5.6, 9.0, 8.95,
     12.17, 11.3, 12.88, 17.56, 18.14,
@@ -84,7 +93,7 @@ ys = [
     170.91, 172.45, 174.53, 177.52, 178.31,
     181.65, 182.27, 184.36, 187.1, 190.0,
     191.64, 193.24, 195.1, 196.71, 199.2
-]
+];
 
 model = @ppl LinReg begin
     function f(slope, intercept, x)
@@ -107,13 +116,14 @@ W = exp.(lps);
 slope = [r[1] for r in retvals]; slope'W
 intercept = [r[2] for r in retvals]; intercept'W
 
-lw = compile_likelihood_weighting(model)
+lw = compile_likelihood_weighting(model, static_observes=true)
 
 X = Vector{Float64}(undef, model.n_variables);
 @time lw(X);
-@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000);
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000, static_observes=true);
 
 @time traces, retvals = lmh(model, 100_000);
+@time traces, retvals = lmh(model, 100_000, proposal=Proposal(:slope=>Normal(2.,1.), :intercept=>Normal(-1.,1.)));
 mean([r[1] for r in retvals])
 mean([r[2] for r in retvals])
 
