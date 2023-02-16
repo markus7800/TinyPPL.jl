@@ -1,27 +1,72 @@
-import Distributions: DiscreteUnivariateDistribution, ncategories
+import Distributions: Distribution, ContinuousUnivariateDistribution, DiscreteUnivariateDistribution, ncategories, truncated
+
+# function continuous_interval(lower::Real, upper::Real, x::Real, var::Real)
+#     width = upper - lower
+#     # rescale
+#     μ = clamp((x - lower) / width, 1e-3, 1-1e-3) # ∈ [0, 1]
+#     σ2 = clamp(var * 1. / width^2, 1e-3, μ * (1-μ) - 1e-3)
+
+#     # @assert σ^2 < μ * (1-μ) (var < width/2 necessary)
+
+#     α = ((1.0 - μ) / σ2 - 1/μ) * μ^2
+#     β = α * (1/μ - 1.)
+
+#     return width * Beta(α, β) + lower
+# end
+
+# function continuous_greater_than(lower::Real, x::Real, var::Real)
+#     μ = x - lower # ∈ [0, ∞)
+#     α = max(μ^2 / var, 1e-3)
+#     θ = max(μ / α, 1e-3)
+#     return Gamma(α, θ) + lower
+# end
+
+# supports lower = -Inf or upper = Inf
+struct ContinuousRWProposer <: ContinuousUnivariateDistribution
+    a::Real
+    l::Distribution
+    b::Real
+    u::Distribution
+    μ::Float64
+    bp::Float64
+    function ContinuousRWProposer(lower::Int, upper::Real, x::Float64, var::Real)
+        var = var / 2
+        l = truncated(Normal(x, sqrt(var)), lower, max(x, lower+1e-3))
+        u = truncated(Normal(x, sqrt(var)), min(x, upper-1e-3), upper)
+
+        mass_left = l.tp
+        mass_right = u.tp
+        bp = mass_right / (mass_left + mass_right)
+        return new(lower, l, upper, u, x, bp)
+    end
+end
+
+function Base.rand(d::ContinuousRWProposer)::Float64
+    if rand() < d.bp
+        return rand(d.u)
+    else
+        return rand(d.l)
+    end
+end
+
+function logpdf(d::ContinuousRWProposer, x::Float64)::Float64
+    if d.a <= x <= d.μ
+        return logpdf(d.l, x) + log(1-d.bp)
+    elseif d.μ <= x <= d.b
+        return logpdf(d.u, x) + log(d.bp)
+    end
+    return -Inf
+end
 
 function continuous_interval(lower::Real, upper::Real, x::Real, var::Real)
-    width = upper - lower
-    # rescale
-    μ = clamp((x - lower) / width, 1e-3, 1-1e-3) # ∈ [0, 1]
-    σ2 = clamp(var * 1. / width^2, 1e-3, μ * (1-μ) - 1e-3)
-
-    # @assert σ^2 < μ * (1-μ) (var < width/2 necessary)
-
-    α = ((1.0 - μ) / σ2 - 1/μ) * μ^2
-    β = α * (1/μ - 1.)
-
-    return width * Beta(α, β) + lower
+    return ContinuousRWProposer(lower, upper, x, var)
 end
 
 function continuous_greater_than(lower::Real, x::Real, var::Real)
-    μ = x - lower # ∈ [0, ∞)
-    α = max(μ^2 / var, 1e-3)
-    θ = max(μ / α, 1e-3)
-    return Gamma(α, θ) + lower
+    return ContinuousRWProposer(lower, Inf, x, var)
 end
 
-# supports b = Inf
+# supports upper = Inf
 struct DiscreteRWProposer <: DiscreteUnivariateDistribution
     a::Int
     la::Float64
@@ -29,13 +74,25 @@ struct DiscreteRWProposer <: DiscreteUnivariateDistribution
     lb::Float64
     μ::Int
     G::Distribution
+    bp::Float64
     function DiscreteRWProposer(lower::Int, upper::Real, x::Int, var::Real)
         a = x - lower
         b = upper - x
+        var = var / 2
         p = (sqrt(1 + 4*var) - 1) / (2*var)
-        la = log(2*(1-(1-p)^a))
-        lb = log(2*(1-(1-p)^b))
-        return new(a, la, b, lb, x, Geometric(p))
+        G = Geometric(p)
+        if a != 0 && b != 0
+            mass_left = 1-(1-p)^a
+            mass_right = 1-(1-p)^b
+            bp = mass_right / (mass_left + mass_right)
+            la = log((1-bp) / mass_left)
+            lb = log(bp / mass_right)
+        else
+            bp = NaN
+            la = -log(1-(1-p)^a)
+            lb = -log(1-(1-p)^b)
+        end
+        return new(a, la, b, lb, x, G, bp)
     end
 end
 
@@ -47,7 +104,7 @@ function Base.rand(d::DiscreteRWProposer)::Int
         return rand(d.G) % d.b + d.μ + 1
     end
 
-    if rand() > 0.5
+    if rand() < d.bp
         return rand(d.G) % d.b + d.μ + 1
     else
         return d.μ - rand(d.G) % d.a - 1
@@ -57,9 +114,9 @@ end
 function logpdf(d::DiscreteRWProposer, x::Int)::Float64
     y = x - d.μ
     if 0 < y <= d.b
-        return logpdf(d.G, y-1) - d.lb
+        return logpdf(d.G, y-1) + d.lb
     elseif -d.a <= y < 0
-        return logpdf(d.G, -y-1) - d.la
+        return logpdf(d.G, -y-1) + d.la
     end
     return -Inf
 end
@@ -105,10 +162,11 @@ export random_walk_proposal_dist, rw_proposal_dist
 # Distributions.var(d)
 # plot(x -> exp(Distributions.logpdf(d, x)), xlims=(-1,3))
 
+# import Distributions: mean, var
 
 # d = continuous_greater_than(-1, 1.5, 0.5)
-# Distributions.mean(d)
-# Distributions.var(d)
+# mean(d)
+# var(d)
 # plot(x -> exp(Distributions.logpdf(d, x)), xlims=(-1,3))
 
 
@@ -127,3 +185,9 @@ export random_walk_proposal_dist, rw_proposal_dist
 # ps = exp.(Distributions.logpdf.(d, -3:15))
 # bar(-3:15, ps)
 # sum(ps)
+
+# using TinyPPL.Distributions
+# d = random_walk_proposal_dist(Categorical([0.25, 0.25, 0.25, 0.25]), 2, 1.)
+# ps = exp.(logpdf.(d, 0:5))
+# X = [rand(d) for _ in 1:10^7]
+# ps_hat = [mean(X .== i) for i in 1:5]
