@@ -623,6 +623,18 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     # display(f)
     return_expr = eval(f)
 
+    # force compilation
+    X = Vector{Float64}(undef, n_variables)
+    Base.invokelatest(return_expr, X)
+    Base.invokelatest(sample, X)
+    Base.invokelatest(logpdf, X)
+    for i in 1:n_variables
+        Base.invokelatest(distributions[i], X)
+        if !isnothing(observed_values[i])
+            Base.invokelatest(observed_values[i], X)
+        end
+    end
+
     return PGM(
         name,
         n_variables, edges,
