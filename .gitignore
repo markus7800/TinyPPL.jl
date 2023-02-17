@@ -1,3 +1,4 @@
 .vscode
-.pdf
-.png
+*.pdf
+*.png
+*.txt

@@ -1,6 +1,7 @@
 
 using TinyPPL.Distributions
 using TinyPPL.Graph
+import Random
 
 p = Proposal(:x=>Bernoulli(0.), (:x=>:y=>:z)=>Bernoulli(1.));
 haskey(p, :x), p[:x]
@@ -192,7 +193,7 @@ model = @ppl gmm begin
     end
     let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         k = 4,
-        y = $(Main.gt_ys[1:2]),
+        y = $(Main.gt_ys),
         n = length(y),
         w = dirichlet(δ, k),
         means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
@@ -203,13 +204,13 @@ model = @ppl gmm begin
         
         means
     end
-end
+end;
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
 
 
-lw = compile_likelihood_weighting(model)
+@time lw = compile_likelihood_weighting(model)
 @time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true); # 42s
 W = exp.(lps);
 
@@ -219,10 +220,23 @@ retvals[argmax(lps)]
 @time traces, retvals = lmh(model, 1_000_000); # 18s, 90s with full lp computation
 
 @time kernels = compile_lmh(model, static_observes=true);
-@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true); # 9s
+Random.seed!(0);
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
+
+@time lw, masks = compile_lmh_2(model, static_observes=true);
+Random.seed!(0);
+@time traces, retvals = compiled_lmh_2(model, lw, masks, 1_000_000, static_observes=true);
 
 
-@time traces, retvals = lmh(model, 1_000_000);
+@time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true);
+Random.seed!(0);
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
+
+
+spgm, E = Graph.to_human_readable(model.symbolic_pgm, model.symbolic_return_expr, model.sym_to_ix);
+
+
+node_to_plate, plate_to_nodes, plated_edges = plate_transformation(model, );
 
 @ppl obs begin
     let z ~ Bernoulli(0.5),
