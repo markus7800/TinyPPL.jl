@@ -1,3 +1,5 @@
 [deps]
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 TinyPPL = "7d3b7143-6434-42f5-a03e-fdc02c8b5cd0"

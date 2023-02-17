@@ -13,10 +13,11 @@ rand(d)
 
 b = [true]
 model = @ppl Flip begin
-    let A = {:A} ~ Bernoulli(0.5),
+    let A = {:a} ~ Bernoulli(0.5),
         B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
-        C = {:C} ~ Bernoulli(B == 1 ? 0.9 : 0.7),
-        D = (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ $(Main.b[1])
+        C = {:C} ~ Bernoulli(B == 1 ? 0.9 : 0.7)
+        
+        (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ $(Main.b[1])
         
         A + C
     end
@@ -185,35 +186,40 @@ include("../examples/univariate_gmm/common.jl")
 
 model = @ppl gmm begin
     function dirichlet(δ, k)
-        let w = [{(:w, i)} ~ Gamma(δ, 1) for i in 1:k]
+        let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
             w / sum(w)
         end
     end
     let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         k = 4,
-        y = $(Main.gt_ys),
+        y = $(Main.gt_ys[1:2]),
         n = length(y),
         w = dirichlet(δ, k),
-        means = [{(:μ, j)} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
-        vars = [{(:σ², j)} ~ InverseGamma(α, β) for j in 1:k],
-        z = [{(:z, i)} ~ Categorical(w) for i in 1:n]
+        means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
+        vars = [{:σ²=>j} ~ InverseGamma(α, β) for j in 1:k],
+        z = [{:z=>i} ~ Categorical(w) for i in 1:n]
 
-        [Normal(means[Int(z[i])], sqrt(vars[Int(z[i])])) ↦ y[i] for i in 1:n]
+        [{:y=>i} ~ Normal(means[Int(z[i])], sqrt(vars[Int(z[i])])) ↦ y[i] for i in 1:n]
         
         means
     end
-end;
+end
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
 
 
 lw = compile_likelihood_weighting(model)
-@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true); # 42s
 W = exp.(lps);
 
 lps[argmax(lps)]
 retvals[argmax(lps)]
+
+@time traces, retvals = lmh(model, 1_000_000); # 18s, 90s with full lp computation
+
+@time kernels = compile_lmh(model, static_observes=true);
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true); # 9s
 
 
 @time traces, retvals = lmh(model, 1_000_000);
@@ -232,3 +238,15 @@ retvals[argmax(lps)]
 
     end
 end
+
+
+function test()
+    x = 0
+    for i in [1,2,3,3,2,1,1,2]
+        x += i
+    end
+    x
+end
+@code_llvm test()
+
+@time test()

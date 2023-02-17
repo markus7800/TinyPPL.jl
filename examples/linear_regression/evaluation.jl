@@ -22,10 +22,6 @@ end
     return (slope, intercept)
 end
 
-const slope_true = 2.
-const intercept_true = -1.
-const xs = vec(DelimitedFiles.readdlm("data/xs.txt"))
-const ys = vec(DelimitedFiles.readdlm("data/ys.txt"))
 const observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
 @info "likelihood_weighting"
@@ -39,5 +35,20 @@ slope_est = [r[1] for r in retvals]'W
 intercept_est = [r[2] for r in retvals]'W
 
 println("convergence:")
-println("  slope: ", slope_true, " vs. ", slope_est, " (estimated)")
-println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated)")
+println("  slope: ", slope_true, " vs. ", slope_est, " (estimated) vs. ", map[2], " (map)")
+println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated) vs. ", map[1], " (map)")
+
+
+@info "LMH"
+traces, retvals, lps = lmh(LinReg, (xs,), observations, 100); # for compilation
+@time traces, retvals, lps = lmh(LinReg, (xs,), observations, 1_000_000);
+println("for 1_000_000 samples.")
+
+W = exp.(lps);
+
+slope_est = mean([r[1] for r in retvals])
+intercept_est = mean([r[2] for r in retvals])
+
+println("convergence:")
+println("  slope: ", slope_true, " vs. ", slope_est, " (estimated) vs. ", map[2], " (map)")
+println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated) vs. ", map[1], " (map)")
