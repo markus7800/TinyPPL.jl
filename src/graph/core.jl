@@ -349,8 +349,10 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         return G, v
 
     elseif expr.head == :observe
-        dist = expr.args[1]
-        observation = expr.args[2]
+        addr = eval(expr.args[1])
+        dist = expr.args[2]
+        observation = expr.args[3]
+
         G1, E1 = transpile(t, phi, dist)
         G2, E2 = transpile(t, phi, observation)
         G = graph_disjoint_union(G1, G2)
@@ -359,6 +361,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         v = gensym(:observe)
         push!(t.variables, v)
         push!(t.all_let_variables, v)
+        t.variable_to_address[v] = addr
 
         F = :($phi ? $E1 : true) # TODO: relpace with "flat" distribution
         G.P[v] = simplify_if(F)  # distribution not score
@@ -442,7 +445,9 @@ function Base.show(io::IO, pgm::PGM)
     println(io, E)
     println(io, "Addresses:")
     for (i, addr) in enumerate(pgm.addresses)
-        if !isnothing(addr)
+        if !isnothing(pgm.observed_values[i])
+            println(io, "y$i -> ", addr)
+        else
             println(io, "x$i -> ", addr)
         end
     end
@@ -522,7 +527,7 @@ end
 function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol}, variable_to_address::Dict{Symbol, Any})
     n_variables = length(spgm.V)
     sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
-        sort(collect(spgm.V), lt=(x,y) -> haskey(spgm.Y,x) < haskey(spgm.Y,y)))  # observed nodes last
+        sort(collect(spgm.V), lt=(x,y) -> haskey(spgm.Y,x) < haskey(spgm.Y,y), alg=InsertionSort))  # observed nodes last
     )
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
@@ -542,6 +547,7 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     addresses = Vector{Any}(undef, n_variables)
     for i in ordered
         sym = ix_to_sym[i]
+        addresses[i] = variable_to_address[sym]
         d = spgm.P[sym]
         for j in 1:n_variables
             d = substitute(ix_to_sym[j], :($X[$j]), d)
@@ -571,11 +577,9 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
             ))
             # display(f)
             observed_values[i] = eval(f)
-            addresses[i] = nothing
             push!(sample_block_args, :($X[$i] = $y))
         else
             observed_values[i] = nothing
-            addresses[i] = variable_to_address[sym]
             push!(sample_block_args, :($d_sym = $d))
             push!(sample_block_args, :($X[$i] = rand($d)))
         end
@@ -635,9 +639,11 @@ end
 
 macro ppl(name, foppl)
     foppl = rmlines(foppl);
+    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
+    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
+    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ y_) ? Expr(:observe, QuoteNode(:OBSERVED), dist, y) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_) ? Expr(:sample, symbol, dist) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
-    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ s_) ? Expr(:observe, dist, s) : expr,  foppl);
     foppl = unwrap_let(foppl)
     
     G, E, variable_to_address = transpile_program(foppl);

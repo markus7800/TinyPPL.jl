@@ -119,12 +119,14 @@ function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
             end
         ))
         # display(f)
-        push!(lmh_functions, eval(f))
+        f = eval(f)
+        push!(lmh_functions, f)
     end
 
     X = Vector{Float64}(undef, pgm.n_variables);
     pgm.sample(X) # initialise
-    for f in lmh_functions
+    @progress for f in lmh_functions
+        println(f)
         Base.invokelatest(f, X)
     end
     return lmh_functions
