@@ -190,6 +190,10 @@ function plate_transformation(pgm::Graph.PGM, plates::Vector{Symbol})
                 end
                 push!(plated_edges, node=>plate)
             end
+        end
+    end
+    for node in (1:pgm.n_variables) ∪ plates
+        for plate in plates
             if all((plate_node=>node) in plated_edges for plate_node in plate_to_nodes[plate])
                 # node depends on plate
                 for plate_node in plate_to_nodes[plate]
@@ -250,7 +254,12 @@ function compile_lmh(pgm::PGM, plates::Vector{Symbol}; static_observes::Bool=fal
         d_sym = gensym("dist_$node")
         push!(block_args, :($d_sym = $(symbolic_dists[node])))
 
-        children = [child for (x,child) in plated_edges if x == node]
+        if haskey(node_to_plate, node)
+            plate = node_to_plate[node]
+            children = [child for (x,child) in plated_edges if x == node || x == plate]
+        else
+            children = [child for (x,child) in plated_edges if x == node]
+        end
  
         log_α = gensym(:log_α) # W_proposed - W_current + logpdf(q, value_current) - logpdf(q, value_proposed)
         push!(block_args, :($log_α = 0.0))

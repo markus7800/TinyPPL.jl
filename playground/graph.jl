@@ -236,7 +236,7 @@ Random.seed!(0);
 spgm, E = Graph.to_human_readable(model.symbolic_pgm, model.symbolic_return_expr, model.sym_to_ix);
 
 
-node_to_plate, plate_to_nodes, plated_edges = plate_transformation(model, );
+node_to_plate, plate_to_nodes, plated_edges = Graph.plate_transformation(model, [:w, :μ, :σ², :z, :y]);
 
 @ppl obs begin
     let z ~ Bernoulli(0.5),
