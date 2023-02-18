@@ -191,11 +191,14 @@ model = @ppl gmm begin
             w / sum(w)
         end
     end
-    let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
+    let λ = 3, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
+        δ ~ Uniform(5.0-0.5, 5.0+0.5),
         k = 4,
         y = $(Main.gt_ys),
         n = length(y),
         w = dirichlet(δ, k),
+        X ~ Categorical(w),
+        Y ~ Normal(X, 1.),
         means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
         vars = [{:σ²=>j} ~ InverseGamma(α, β) for j in 1:k],
         z = [{:z=>i} ~ Categorical(w) for i in 1:n]

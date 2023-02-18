@@ -163,6 +163,29 @@ function compiled_single_site(pgm::PGM, kernels::Vector{Function}, n_samples::In
     return trace, retvals
 end
 
+abstract type PlatedEdge end
+struct PlateToPlateEdge <: PlatedEdge
+    from::Symbol
+    to::Symbol
+end
+struct NodeToPlateEdge <: PlatedEdge
+    from::Int
+    to::Symbol
+end
+struct PlateToNodeEdge <: PlatedEdge
+    from::Symbol
+    to::Int
+end
+struct InterPlateEdge <: PlatedEdge
+    from::Symbol
+    to::Symbol
+    bijection::Set{Pair{Int,Int}}
+end
+struct NoteToNodeEdge <: PlatedEdge
+    from::Int
+    to::Int
+end
+
 function plate_transformation(pgm::Graph.PGM, plates::Vector{Symbol})
     node_to_plate =  Dict{Int, Symbol}()
     plate_to_nodes = Dict{Symbol, Vector{Int}}()
@@ -177,32 +200,74 @@ function plate_transformation(pgm::Graph.PGM, plates::Vector{Symbol})
         sort!(nodes, lt=(x,y)->pgm.addresses[x][2]<pgm.addresses[y][2])
         plate_to_nodes[plate] = nodes
     end
-    plated_edges = Set{Any}()
-    for e in pgm.edges
-        push!(plated_edges, e)
-    end
+    plated_edges = Set{PlatedEdge}()
+    edges = deepcopy(pgm.edges)
+
     for node in 1:pgm.n_variables
         for plate in plates
-            if all((node=>plate_node) in plated_edges for plate_node in plate_to_nodes[plate])
+            if all((node=>plate_node) in edges for plate_node in plate_to_nodes[plate])
                 # plate depends on node
                 for plate_node in plate_to_nodes[plate]
-                    delete!(plated_edges, node=>plate_node)
+                    delete!(edges, node=>plate_node)
                 end
-                push!(plated_edges, node=>plate)
+                push!(plated_edges, NodeToPlateEdge(node, plate))
             end
-        end
-    end
-    for node in (1:pgm.n_variables) ∪ plates
-        for plate in plates
-            if all((plate_node=>node) in plated_edges for plate_node in plate_to_nodes[plate])
+            if all((plate_node=>node) in edges for plate_node in plate_to_nodes[plate])
                 # node depends on plate
                 for plate_node in plate_to_nodes[plate]
-                    delete!(plated_edges, plate_node=>node)
+                    delete!(edges, plate_node=>node)
                 end
-                push!(plated_edges, plate=>node)
+                # println(plate, "->", node)
+                push!(plated_edges, PlateToNodeEdge(plate, node))
             end
         end
     end
+    for plate in plates, other_plate in plates
+        if all(NodeToPlateEdge(plate_node, other_plate) in plated_edges for plate_node in plate_to_nodes[plate]) ||
+            all(PlateToNodeEdge(other_plate, plate_node) in plated_edges for plate_node in plate_to_nodes[plate])
+            # node depends on plate
+            for plate_node in plate_to_nodes[plate]
+                delete!(plated_edges, NodeToPlateEdge(plate_node, other_plate))
+                delete!(plated_edges, PlateToNodeEdge(other_plate, plate_node))
+            end
+            push!(plated_edges, PlateToPlateEdge(plate, other_plate))
+        end
+    end
+
+    for plate in plates, other_plate in plates
+        # find bijections
+        plate_nodes = plate_to_nodes[plate]
+        other_plate_nodes = plate_to_nodes[other_plate]
+        if length(plate_nodes) != length(other_plate_nodes)
+            continue
+        end
+        bijection = Set{Pair{Int, Int}}()
+        is_bijection = true
+        for plate_node in plate_nodes
+            found = false
+            for e in edges
+                if e[1] == plate_node && e[2] in other_plate_nodes
+                    if found # assert only one edge for each plate node
+                        is_bijection = false
+                    end
+                    push!(bijection, e)
+                    found = true
+                end
+            end
+        end
+        is_bijection &= length(bijection) == length(plate_nodes) # assert all plate nodes have edge
+        if is_bijection
+            for e in bijection
+                delete!(edges, e)
+            end
+            push!(plated_edges, InterPlateEdge(plate, other_plate, bijection))
+        end            
+    end
+    
+    for e in edges
+        push!(plated_edges, NoteToNodeEdge(e[1], e[2]))
+    end
+
     node_to_plate, plate_to_nodes, plated_edges
 end
 
