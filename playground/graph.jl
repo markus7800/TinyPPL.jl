@@ -230,7 +230,7 @@ Random.seed!(0);
 @time traces, retvals = compiled_lmh_2(model, lw, masks, 1_000_000, static_observes=true);
 
 
-@time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true);
+@time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true, loop_interplate=true);
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
 

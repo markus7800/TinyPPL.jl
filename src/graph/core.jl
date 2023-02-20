@@ -97,6 +97,16 @@ function substitute(var::Symbol, with, in_expr)
     end
 end
 
+function substitute_expr(expr, with, in_expr)
+    if expr == in_expr
+        return with
+    elseif in_expr isa Expr
+        return Expr(in_expr.head, [substitute_expr(expr, with, arg) for arg in in_expr.args]...)
+    else
+        return in_expr
+    end
+end
+
 function simplify_if(expr)
     if expr isa Expr
         if expr.head == :if

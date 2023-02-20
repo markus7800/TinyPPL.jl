@@ -206,6 +206,7 @@ struct InterPlateEdge <: PlatedEdge
     from::Plate
     to::Plate
     bijection::Set{Pair{Int,Int}}
+    is_identity::Bool
 end
 function get_children(edge::InterPlateEdge, node::Int)
     if node in edge.from.nodes
@@ -305,7 +306,8 @@ function plate_transformation(pgm::PGM, plate_symbols::Vector{Symbol})
             for e in bijection
                 delete!(edges, e)
             end
-            push!(plated_edges, InterPlateEdge(plate, other_plate, bijection))
+            is_identity = Set(x=>y for (x,y) in  zip(plate.nodes, other_plate_nodes)) == bijection
+            push!(plated_edges, InterPlateEdge(plate, other_plate, bijection, is_identity))
         end            
     end
     
@@ -330,7 +332,10 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
         lp = gensym(:lp)
         push!(block_args, :($lp = 0.0))
 
-        is_iid = length(plate.nodes) > 1 && (length(unique([symbolic_dists[child] for child in plate.nodes])) == 1)
+        is_iid = length(plate.nodes) > 1 && allequal([symbolic_dists[child] for child in plate.nodes])
+        interplate_edges = [edge for edge in plated_edges if edge isa InterPlateEdge && edge.to == plate]
+        all_identity_edges = length(interplate_edges) > 0 && all(edge.is_identity for edge in interplate_edges)
+
         if is_iid
             iid_d_sym = gensym("iid_dist")
             push!(block_args, :($iid_d_sym = $(symbolic_dists[first(plate.nodes)])))
@@ -344,6 +349,31 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
             push!(block_args, :(
                 for $loop_var in $(plate.nodes)
                     $lp += logpdf($iid_d_sym, $X[$loop_var])
+                end
+            ))
+        elseif all_identity_edges
+            loop_var = gensym("i")
+            plate_symbolic_dists = [deepcopy(symbolic_dists[child]) for child in plate.nodes]
+            for edge in interplate_edges
+                from_low = first(edge.from.nodes)-1
+                to_low = first(edge.to.nodes)-1
+                for (i, d) in enumerate(plate_symbolic_dists)
+                    for node in edge.from.nodes
+                        d = substitute_expr(:($X[$node]), :($X[$(from_low) + $loop_var]), d)
+                    end
+                    for node in edge.to.nodes
+                        d = substitute_expr(:($X[$node]), :($X[$(to_low) + $loop_var]), d)
+                    end
+                    plate_symbolic_dists[i] = d
+                end
+            end
+            @assert allequal(plate_symbolic_dists)
+            loop_d_sym = gensym("loop_dist")
+            low = first(plate.nodes)-1
+            push!(block_args, :(
+                for $loop_var in 1:$(length(plate.nodes))
+                    $loop_d_sym = $(plate_symbolic_dists[1])
+                    $lp += logpdf($loop_d_sym, $X[$low + $loop_var])
                 end
             ))
         else
@@ -366,7 +396,7 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
                 $(Expr(:block, block_args...))
             end
         ))
-        display(f)
+        # display(f)
         f = eval(f)
         push!(plate_functions, f)
     end
@@ -455,12 +485,12 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
 
     X = Vector{Float64}(undef, pgm.n_variables);
     pgm.sample(X) # initialise
-    @progress for f in plate_functions
-        println(f)
+    for f in plate_functions
+        # println(f)
         Base.invokelatest(f, X)
     end
-    @progress for f in lmh_functions
-        println(f)
+    for f in lmh_functions
+        # println(f)
         Base.invokelatest(f, X)
     end
     return lmh_functions
