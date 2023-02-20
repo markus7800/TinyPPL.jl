@@ -168,22 +168,65 @@ struct PlateToPlateEdge <: PlatedEdge
     from::Symbol
     to::Symbol
 end
+function get_children(edge::PlateToPlateEdge, node::Int, node_to_plate::Dict{Int, Symbol}, plate_to_nodes::Dict{Symbol, Vector{Int}})
+    if haskey(node_to_plate, node)
+        plate = node_to_plate[node]
+        if plate == edge.from
+            return [edge.to]
+        end
+    end
+    return Int[]
+end
+
 struct NodeToPlateEdge <: PlatedEdge
     from::Int
     to::Symbol
 end
+function get_children(edge::NodeToPlateEdge, node::Int, node_to_plate::Dict{Int, Symbol}, plate_to_nodes::Dict{Symbol, Vector{Int}})
+    if edge.from == node
+        return [edge.to]
+    end
+    return Int[]
+end
+
 struct PlateToNodeEdge <: PlatedEdge
     from::Symbol
     to::Int
 end
+function get_children(edge::PlateToNodeEdge, node::Int, node_to_plate::Dict{Int, Symbol}, plate_to_nodes::Dict{Symbol, Vector{Int}})
+    if haskey(node_to_plate, node)
+        plate = node_to_plate[node]
+        if plate == edge.from
+            return Int[edge.to]
+        end
+    end
+    return Int[]
+end
+
 struct InterPlateEdge <: PlatedEdge
     from::Symbol
     to::Symbol
     bijection::Set{Pair{Int,Int}}
 end
-struct NoteToNodeEdge <: PlatedEdge
+function get_children(edge::InterPlateEdge, node::Int, node_to_plate::Dict{Int, Symbol}, plate_to_nodes::Dict{Symbol, Vector{Int}})
+    if haskey(node_to_plate, node)
+        plate = node_to_plate[node]
+        if plate == edge.from
+            return [e[2] for e in edge.bijection if e[1]==node] # should be exactly one edge
+        end
+    end
+    return Int[]
+end
+
+struct NodeToNodeEdge <: PlatedEdge
     from::Int
     to::Int
+end
+function get_children(edge::NodeToNodeEdge, node::Int, node_to_plate::Dict{Int, Symbol}, plate_to_nodes::Dict{Symbol, Vector{Int}})
+    if edge.from == node
+        return [edge.to]
+    end
+    return Int[]
 end
 
 function plate_transformation(pgm::Graph.PGM, plates::Vector{Symbol})
@@ -265,7 +308,7 @@ function plate_transformation(pgm::Graph.PGM, plates::Vector{Symbol})
     end
     
     for e in edges
-        push!(plated_edges, NoteToNodeEdge(e[1], e[2]))
+        push!(plated_edges, NodeToNodeEdge(e[1], e[2]))
     end
 
     node_to_plate, plate_to_nodes, plated_edges
@@ -276,6 +319,7 @@ function compile_lmh(pgm::PGM, plates::Vector{Symbol}; static_observes::Bool=fal
     symbolic_dists = get_symbolic_distributions(pgm, X)
     symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
 
+    # setup functions to compute lp for plates
     plate_functions = Function[]
     plate_function_names = Dict{Symbol, Symbol}()
     node_to_plate, plate_to_nodes, plated_edges = plate_transformation(pgm, plates);
@@ -319,12 +363,7 @@ function compile_lmh(pgm::PGM, plates::Vector{Symbol}; static_observes::Bool=fal
         d_sym = gensym("dist_$node")
         push!(block_args, :($d_sym = $(symbolic_dists[node])))
 
-        if haskey(node_to_plate, node)
-            plate = node_to_plate[node]
-            children = [child for (x,child) in plated_edges if x == node || x == plate]
-        else
-            children = [child for (x,child) in plated_edges if x == node]
-        end
+        children = reduce(∪, [get_children(edge, node, node_to_plate, plate_to_nodes) for edge in plated_edges], init=[])
  
         log_α = gensym(:log_α) # W_proposed - W_current + logpdf(q, value_current) - logpdf(q, value_proposed)
         push!(block_args, :($log_α = 0.0))
