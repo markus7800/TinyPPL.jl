@@ -1,4 +1,3 @@
-
 using TinyPPL.Distributions
 using TinyPPL.Graph
 import Random
@@ -194,7 +193,7 @@ model = @ppl gmm begin
     let λ = 3, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         δ ~ Uniform(5.0-0.5, 5.0+0.5),
         k = 4,
-        y = $(Main.gt_ys),
+        y = $(Main.gt_ys[1:3]),
         n = length(y),
         w = dirichlet(δ, k),
         X ~ Categorical(w),
@@ -239,7 +238,7 @@ Random.seed!(0);
 spgm, E = Graph.to_human_readable(model.symbolic_pgm, model.symbolic_return_expr, model.sym_to_ix);
 
 
-node_to_plate, plate_to_nodes, plated_edges = Graph.plate_transformation(model, [:w, :μ, :σ², :z, :y]);
+pgm, plates, plated_edges = Graph.plate_transformation(model, [:w, :μ, :σ², :z, :y]);
 
 @ppl obs begin
     let z ~ Bernoulli(0.5),

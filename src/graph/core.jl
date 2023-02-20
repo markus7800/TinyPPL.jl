@@ -476,7 +476,8 @@ function get_topolocial_order(n_variables::Int, edges::Set{Pair{Int,Int}})
 end
 
 function human_readable_symbol(spgm, sym, j)
-    return haskey(spgm.Y, sym) ? Symbol("y$j") : Symbol("x$j")
+    n = ndigits(length(spgm.V))
+    return haskey(spgm.Y, sym) ? Symbol("y"*lpad(j,n,"0")) : Symbol("x"*lpad(j,n,"0"))
 end
 
 function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, sym_to_ix)
