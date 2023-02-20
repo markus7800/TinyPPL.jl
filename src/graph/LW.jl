@@ -34,6 +34,48 @@ end
 
 export likelihood_weighting
 
+function reduce_array_accesses(expr, X::Symbol)
+    if expr isa Expr
+        if expr.head == :vect
+            ixs = []
+            for el in expr.args
+                if el isa Expr && el.head == :ref && el.args[1] == X && el.args[2] isa Int
+                    push!(ixs, el.args[2])
+                end
+            end
+            min_ix = minimum(ixs)
+            max_ix = maximum(ixs)
+            if collect(min_ix:max_ix) == ixs
+                return Expr(:ref, X, :($min_ix:$max_ix))
+            end
+        end
+        return Expr(expr.head, [reduce_array_accesses(arg, X) for arg in expr.args]...)
+    else
+        return expr
+    end
+end
+
+function unnest_array_accesses(expr, X::Symbol)
+    if expr isa Expr
+        if expr.head == :ref
+            arr = expr.args[1]
+            if arr isa Expr && arr.head == :ref && arr.args[1] == X
+                # println(expr)
+                # println(arr.args)
+                range = arr.args[2]
+                if range isa Expr && range.head == :call && range.args[1] == :(:)
+                    low = range.args[2]
+                    return Expr(:ref, X, :($low + $(expr.args[2])))
+                end
+            end
+        end
+        return Expr(expr.head, [unnest_array_accesses(arg, X) for arg in expr.args]...)
+    else
+        return expr
+
+    end
+end
+
 function get_symbolic_distributions(pgm::PGM, X::Symbol)
     ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
 
@@ -44,6 +86,8 @@ function get_symbolic_distributions(pgm::PGM, X::Symbol)
         for j in 1:pgm.n_variables
             d = substitute(ix_to_sym[j], :($X[$j]), d)
         end
+        d = reduce_array_accesses(d, X)
+        d = unnest_array_accesses(d, X)
         push!(symbolic_dists, d)
     end
     return symbolic_dists
