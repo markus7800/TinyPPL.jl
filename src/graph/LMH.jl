@@ -330,14 +330,32 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
         lp = gensym(:lp)
         push!(block_args, :($lp = 0.0))
 
-        for child in plate.nodes
-            child_d_sym = gensym("child_dist_$child")
-            push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
-            if !isnothing(pgm.observed_values[child]) && !static_observes
-                # recompute observe, could have changed
-                push!(block_args, :($X[$child] = $(symbolic_observes[child])))
+        is_iid = length(plate.nodes) > 1 && (length(unique([symbolic_dists[child] for child in plate.nodes])) == 1)
+        if is_iid
+            iid_d_sym = gensym("iid_dist")
+            push!(block_args, :($iid_d_sym = $(symbolic_dists[first(plate.nodes)])))
+            for child in plate.nodes
+                if !isnothing(pgm.observed_values[child]) && !static_observes
+                    # recompute observe, could have changed
+                    push!(block_args, :($X[$child] = $(symbolic_observes[child])))
+                end
             end
-            push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))   
+            loop_var = gensym("i")
+            push!(block_args, :(
+                for $loop_var in $(plate.nodes)
+                    $lp += logpdf($iid_d_sym, $X[$loop_var])
+                end
+            ))
+        else
+            for child in plate.nodes
+                child_d_sym = gensym("child_dist_$child")
+                push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
+                if !isnothing(pgm.observed_values[child]) && !static_observes
+                    # recompute observe, could have changed
+                    push!(block_args, :($X[$child] = $(symbolic_observes[child])))
+                end
+                push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))   
+            end
         end
         push!(block_args, :($lp))
 
@@ -348,7 +366,7 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
                 $(Expr(:block, block_args...))
             end
         ))
-        # display(f)
+        display(f)
         f = eval(f)
         push!(plate_functions, f)
     end
