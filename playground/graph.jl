@@ -193,7 +193,7 @@ model = @ppl gmm begin
     let λ = 3, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         δ ~ Uniform(5.0-0.5, 5.0+0.5),
         k = 4,
-        y = $(Main.gt_ys[1:3]),
+        y = $(Main.gt_ys),
         n = length(y),
         w = dirichlet(δ, k),
         X ~ Categorical(w),

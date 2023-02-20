@@ -225,43 +225,8 @@ function get_children(edge::NodeToNodeEdge, node::Int)
     return Int[]
 end
 
-function plate_transformation(pgm::Graph.PGM, plate_symbols::Vector{Symbol})
-    # sort by plate
-    function lt(i, j)
-        x = pgm.addresses[i]
-        y = pgm.addresses[j]
-        if x isa Pair && y isa Pair
-            if x[1] == y[1]
-                return x[2] < y[2]
-            else
-                return x[1] < y[1]
-            end
-        elseif !(x isa Pair) && !(y isa Pair)
-            return x < y
-        else
-            return x isa Pair
-        end
-    end
-    sorted_nodes = sort(collect(1:pgm.n_variables), lt=lt) # new to old
-    old_to_new = Dict(node=>ix for (ix, node) in enumerate(sorted_nodes))
-    new_edges = Set{Pair{Int,Int}}([old_to_new[x]=>old_to_new[y] for (x, y) in pgm.edges])
-    new_sym_to_ix = Dict{Symbol,Int}(sym=>old_to_new[node] for (sym, node) in pgm.sym_to_ix)
-    new_addresses = Any[pgm.addresses[node] for node in sorted_nodes]
-    new_topological_order = Int[old_to_new[node] for node in pgm.topological_order]
-    new_observed_values = pgm.observed_values[sorted_nodes]
- 
-    pgm = PGM(pgm.name,
-        pgm.n_variables,
-        new_edges,
-        new_addresses,
-        [], new_observed_values,
-        ()->(), ()->(), ()->(),
-        new_sym_to_ix,
-        pgm.symbolic_pgm,
-        pgm.symbolic_return_expr,
-        new_topological_order)
-    # display(pgm)
-
+function plate_transformation(pgm::PGM, plate_symbols::Vector{Symbol})
+    # addresses of pgm are sort by plate
     plates = Plate[]
     for plate_symbol in plate_symbols
         i = pgm.n_variables
@@ -383,7 +348,7 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
                 $(Expr(:block, block_args...))
             end
         ))
-        display(f)
+        # display(f)
         f = eval(f)
         push!(plate_functions, f)
     end
@@ -465,7 +430,7 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
                 $(Expr(:block, block_args...))
             end
         ))
-        display(f)
+        # display(f)
         f = eval(f)
         push!(lmh_functions, f)
     end

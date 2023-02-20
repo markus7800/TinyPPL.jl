@@ -525,10 +525,29 @@ function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, sym_to_ix)
     new_spgm, new_E
 end
 
+# no nested plates, i.e (:x=>:y=>i) and (:x=>:y=>j) belong both to plate :x
+function plates_lt(variable_to_address)
+    return function lt(sym_x, sym_y)
+        x = variable_to_address[sym_x]
+        y = variable_to_address[sym_y]
+        if x isa Pair && y isa Pair
+            if x[1] == y[1]
+                return x[2] < y[2]
+            else
+                return x[1] < y[1]
+            end
+        elseif !(x isa Pair) && !(y isa Pair)
+            return x < y
+        else
+            return x isa Pair
+        end
+    end
+end
+
 function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol}, variable_to_address::Dict{Symbol, Any})
     n_variables = length(spgm.V)
     sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
-        sort(collect(spgm.V), lt=(x,y) -> haskey(spgm.Y,x) < haskey(spgm.Y,y), alg=InsertionSort))  # observed nodes last
+        sort(collect(spgm.V), lt=plates_lt(variable_to_address), alg=InsertionSort))  # observed nodes last
     )
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
