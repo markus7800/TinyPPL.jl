@@ -115,7 +115,7 @@ model = @ppl LinReg begin
         slope ~ Normal(0.0, 10.),
         intercept ~ Normal(0.0, 10.)
 
-        [(Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i]) for i in 1:100]
+        [{:y=>i} ~ Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i] for i in 1:100]
         
         (slope, intercept)
     end
@@ -137,7 +137,9 @@ proposal = Proposal(:slope=>Normal(2.,1.), :intercept=>Normal(-1.,1.));
 
 kernels = compile_lmh(model, static_observes=true);
 kernels = compile_lmh(model, static_observes=true, proposal=proposal);
+kernels = compile_lmh(model, [:y], static_observes=true, proposal=proposal);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true); # 2s
+
 
 mean([r[1] for r in retvals])
 mean([r[2] for r in retvals])
@@ -184,6 +186,7 @@ Tracker.grad.(X_tracked)
 
 include("../examples/univariate_gmm/common.jl")
 
+t0 = time_ns()
 model = @ppl gmm begin
     function dirichlet(δ, k)
         let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
@@ -207,6 +210,7 @@ model = @ppl gmm begin
         means
     end
 end;
+(time_ns() - t0) / 1e9
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
@@ -225,12 +229,8 @@ retvals[argmax(lps)]
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
 
-@time lw, masks = compile_lmh_2(model, static_observes=true);
-Random.seed!(0);
-@time traces, retvals = compiled_lmh_2(model, lw, masks, 1_000_000, static_observes=true);
 
-
-@time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true, loop_interplate=true);
+@time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true);
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
 

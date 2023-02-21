@@ -20,13 +20,18 @@ function lmh(pgm::PGM, n_samples::Int; proposal=Proposal())
         q = get(proposal, pgm.addresses[node], d)
         value_current = X[node]
         # lp_current = pgm.logpdf(X)
-        W_current = sum(logpdf(pgm.distributions[child](X), X[child]) for child in children) + logpdf(d, value_current)
-
+        W_current = logpdf(d, value_current)
+        if !isempty(children)
+            W_current += sum(logpdf(pgm.distributions[child](X), X[child]) for child in children)
+        end
         value_proposed = rand(q)
         X[node] = value_proposed
 
         # lp_proposed = pgm.logpdf(X)
-        W_proposed = sum(logpdf(pgm.distributions[child](X), X[child]) for child in children) + logpdf(d, value_proposed)
+        W_proposed = logpdf(d, value_proposed)
+        if !isempty(children)
+            W_proposed += sum(logpdf(pgm.distributions[child](X), X[child]) for child in children)
+        end
         
         log_α = W_proposed - W_current + logpdf(q, value_current) - logpdf(q, value_proposed)
         # log_α = lp_proposed - lp_current + logpdf(d, value_current) - logpdf(d, value_proposed)
@@ -226,7 +231,7 @@ function get_children(edge::NodeToNodeEdge, node::Int)
     return Int[]
 end
 
-function plate_transformation(pgm::PGM, plate_symbols::Vector{Symbol})
+function get_plates(pgm::PGM, plate_symbols::Vector{Symbol})
     # addresses of pgm are sort by plate
     plates = Plate[]
     for plate_symbol in plate_symbols
@@ -315,11 +320,11 @@ function plate_transformation(pgm::PGM, plate_symbols::Vector{Symbol})
         push!(plated_edges, NodeToNodeEdge(e[1], e[2]))
     end
 
-    pgm, plates, plated_edges
+    return plates, plated_edges
 end
 
 function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::Bool=false, proposal=Proposal())
-    pgm, plates, plated_edges = plate_transformation(pgm, plate_symbols);
+    plates, plated_edges = get_plates(pgm, plate_symbols);
     X = gensym(:X)
     symbolic_dists = get_symbolic_distributions(pgm, X)
     symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
@@ -497,118 +502,3 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
 end
 
 export lmh, compile_lmh, compiled_single_site
-
-
-function compile_lmh_2(pgm::PGM; static_observes::Bool=false)
-    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
-
-    lp = gensym(:lp)
-    block_args = []
-    push!(block_args, :($lp = 0.0))
-
-    X = gensym(:X)
-    mask = gensym(:mask)
-
-    symbolic_dists = get_symbolic_distributions(pgm, X)
-    symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
-    
-    for i in pgm.topological_order
-        sym = ix_to_sym[i]
-
-        d_sym = gensym("dist_$i")
-        push!(block_args, :($d_sym = $(symbolic_dists[i])))
-
-        if haskey(pgm.symbolic_pgm.Y, sym)
-            y = symbolic_observes[i]
-            if static_observes
-                push!(block_args, :(
-                    if $mask[$i]
-                        $lp += logpdf($d_sym, $y)
-                    end))
-            else
-                push!(block_args, :($X[$i] = $y))
-                push!(block_args, :(
-                    if $mask[$i]
-                        $lp += logpdf($d_sym, $X[$i])
-                    end))
-            end
-        else
-            push!(block_args, :(
-                if $mask[$i]
-                    $lp += logpdf($d_sym, $X[$i])
-                end))
-        end
-    end
-
-    push!(block_args, :($lp))
-
-    f_name = Symbol("$(pgm.name)_maksed_lw")
-    f = rmlines(:(
-        function $f_name($X::Vector{Float64}, $mask::BitVector)
-            $(Expr(:block, block_args...))
-        end
-    ))
-    # display(f)
-    lw = eval(f)
-    X = Vector{Float64}(undef, pgm.n_variables)
-    pgm.sample(X)
-    mask = trues(pgm.n_variables)
-    Base.invokelatest(lw, X, mask); # compilation
-
-    masks = BitVector[]
-    for node in 1:pgm.n_variables
-        for child in [child for (x,child) in pgm.edges if x == node]
-            mask[child] = true
-        end
-        mask[node] = true
-        push!(masks, mask)
-    end
-    return lw, masks
-end
-
-export compile_lmh_2
-
-
-function compiled_lmh_2(pgm::PGM, masked_lw::Function, masks::Vector{BitVector}, n_samples::Int; static_observes::Bool=false, proposal=Proposal())
-    retvals = Vector{Any}(undef, n_samples)
-    trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
-
-    observed = .!isnothing.(pgm.observed_values)
-
-    nodes = [(n,mask) for (n,mask) in enumerate(masks) if !observed[n]]
-
-    X = Vector{Float64}(undef, pgm.n_variables)
-    pgm.sample(X) # initialise
-    r = pgm.return_expr(X)
-
-    n_accepted = 0 
-    @progress for i in 1:n_samples
-        node, mask = rand(nodes)
-        d = pgm.distributions[node](X)
-        q = get(proposal, pgm.addresses[node], d)
-        value_current = X[node]
-        W_current = masked_lw(X, mask)
-
-        value_proposed = rand(q)
-        X[node] = value_proposed
-
-        W_proposed = masked_lw(X, mask)
-        
-        log_α = W_proposed - W_current + logpdf(q, value_current) - logpdf(q, value_proposed)
-
-        if log(rand()) < log_α
-            n_accepted += 1
-            r = pgm.return_expr(X)
-        else
-            X[node] = value_current
-        end
-
-        retvals[i] = r
-        trace[:,i] = X
-    end
-    @info "LMH" n_accepted/n_samples
-
-    return trace, retvals
-end
-
-export compiled_lmh_2
