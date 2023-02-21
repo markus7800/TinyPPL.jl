@@ -1,5 +1,6 @@
 include("data.jl")
 
+using TinyPPL.Distributions
 
 import PyPlot
 function visualize_trace(tr; color_shift=0, raw=false, path="plot.pdf")
