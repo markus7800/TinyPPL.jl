@@ -4,6 +4,7 @@ using ..TinyPPL.Distributions
 
 include("metaprogramming_utils.jl")
 include("symbolic_pgm.jl")
+include("plates.jl")
 
 #=
     Concrete PGM for sympbolic PGM.
@@ -21,19 +22,23 @@ struct PGM
     n_variables::Int
     edges::Set{Pair{Int,Int}} # edges
     addresses::Vector{Any}
+
     distributions::Vector{Function} # distributions not pdfs
     observed_values::Vector{Union{Nothing,Function}} # observations
     return_expr::Function
+
+    plate_info::Union{Nothing, PlateInfo}
     sample::Function
     logpdf::Function
+
     sym_to_ix::Dict{Symbol, Int}
     symbolic_pgm::SymbolicPGM
     symbolic_return_expr::Union{Expr, Symbol}
+
     topological_order::Vector{Int}
 end
 
 include("pretty_print.jl")
-include("plates.jl")
 
 #=
     replaces
@@ -44,7 +49,15 @@ include("plates.jl")
     unwraps let expressions
     and transpiles to symbolic PGM, which is compiled to concrete PGM.
 =#
+macro ppl(annotation, name, foppl)
+    return ppl_macro(annotation, name, foppl)
+end
+
 macro ppl(name, foppl)
+    return ppl_macro(nothing, name, foppl)
+end
+
+function ppl_macro(annotation, name, foppl)
     foppl = rmlines(foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
@@ -55,7 +68,7 @@ macro ppl(name, foppl)
     
     G, E, variable_to_address = transpile_program(foppl);
     
-    pgm = compile_symbolic_pgm(name, G, E, variable_to_address);
+    pgm = compile_symbolic_pgm(name, G, E, variable_to_address, annotation);
 
     return pgm
 end
@@ -259,7 +272,13 @@ function get_sample(name, topolical_ordered::Vector{Int}, symbolic_dists, symbol
     return sample
 end
 
-function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol}, variable_to_address::Dict{Symbol, Any})
+function compile_symbolic_pgm(
+    name::Symbol, 
+    spgm::SymbolicPGM, E::Union{Expr, Symbol}, 
+    variable_to_address::Dict{Symbol, Any}, 
+    annotation::Union{Nothing, Symbol}
+    )
+
     n_variables = length(spgm.V)
 
     # symbol to index, sorted by address
@@ -274,7 +293,7 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
 
     X = gensym(:X)
     symbolic_dists = get_symbolic_distributions(spgm, n_variables, sym_to_ix, X)
-    static_observes = false
+    static_observes = annotation == :plated
     symbolic_observes = get_symbolic_observed_values(spgm, n_variables, sym_to_ix, X, static_observes)
 
     distributions = Vector{Function}(undef, n_variables)
@@ -319,6 +338,17 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     # display(f)
     return_expr = eval(f)
 
+    if annotation == :plated
+        plate_symbols = unique([addr[1] for addr in addresses if addr isa Pair])
+        println("plate_symbols: ", plate_symbols)
+        plates, plated_edges = get_plates(n_variables, edges, addresses, plate_symbols)
+        plate_lp_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, symbolic_observes, X, static_observes, :lp)
+        plate_sample_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, symbolic_observes, X, static_observes, :sample)
+        plate_info = PlateInfo(plate_symbols, plates, plated_edges, plate_lp_fs, plate_sample_fs)
+    else
+        plate_info = nothing
+    end
+
     sample = get_sample(name, topolical_ordered, symbolic_dists, symbolic_observes, X)
     logpdf = get_logpdf(name, topolical_ordered, symbolic_dists, X)
 
@@ -336,14 +366,22 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
 
     return PGM(
         name,
-        n_variables, edges,
+        n_variables,
+        edges,
         addresses,
-        distributions, observed_values,
+
+        distributions,
+        observed_values,
         return_expr,
+
+        plate_info,
         sample,
         logpdf,
+
         sym_to_ix,
-        spgm, E,
+        spgm,
+        E,
+
         topolical_ordered
     )
 end

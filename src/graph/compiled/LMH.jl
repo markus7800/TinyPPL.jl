@@ -120,7 +120,7 @@ function get_compute_W_block_args(pgm, plates, children, symbolic_dists, symboli
     block_args = []
     for child in children
         if child in plates
-            plate_f_name = plate_lp_function_name(pgm, child)
+            plate_f_name = plate_function_name(pgm.name, :lp, child)
             if W == :current
                 push!(block_args, :($log_α -= $plate_f_name($X)))
             else
@@ -148,8 +148,7 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
     symbolic_dists = get_symbolic_distributions(pgm, X)
     symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
 
-    plates, plated_edges = get_plates(pgm, plate_symbols)
-    plate_functions = get_lp_plate_functions(pgm, plates, plated_edges, symbolic_dists, symbolic_observes, X, static_observes)
+    plates, plated_edges = pgm.plate_info.plates, pgm.plate_info.plated_edges
 
     lmh_functions = Function[]
     for node in 1:pgm.n_variables
@@ -213,10 +212,6 @@ function compile_lmh(pgm::PGM, plate_symbols::Vector{Symbol}; static_observes::B
 
     X = Vector{Float64}(undef, pgm.n_variables);
     pgm.sample(X) # initialise
-    for f in plate_functions
-        # println(f)
-        Base.invokelatest(f, X)
-    end
     for f in lmh_functions
         # println(f)
         Base.invokelatest(f, X)

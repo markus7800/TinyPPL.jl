@@ -62,14 +62,14 @@ function get_children(edge::NodeToNodeEdge, node::Int)
     return Int[]
 end
 
-function get_plates(pgm::PGM, plate_symbols::Vector{Symbol})
+function get_plates(n_variables::Int, edges::Set{Pair{Int,Int}}, addresses::Vector{Any}, plate_symbols::Vector{Symbol})
     # addresses of pgm are sorted by plate
     plates = Plate[]
     for plate_symbol in plate_symbols
-        i = pgm.n_variables
+        i = n_variables
         j = 0
         nodes = Vector{Int}()
-        for (node, addr) in enumerate(pgm.addresses)
+        for (node, addr) in enumerate(addresses)
             if addr isa Pair && addr[1] == plate_symbol
                 push!(nodes, node)
                 i = min(i, node)
@@ -80,9 +80,9 @@ function get_plates(pgm::PGM, plate_symbols::Vector{Symbol})
         push!(plates, Plate(plate_symbol, i:j))
     end
     plated_edges = Set{PlatedEdge}()
-    edges = deepcopy(pgm.edges)
+    edges = deepcopy(edges)
 
-    for node in 1:pgm.n_variables
+    for node in 1:n_variables
         for plate in plates
             if all((node=>plate_node) in edges for plate_node in plate.nodes)
                 # plate depends on node
@@ -154,78 +154,96 @@ function get_plates(pgm::PGM, plate_symbols::Vector{Symbol})
     return plates, plated_edges
 end
 
-function plate_lp_function_name(pgm::PGM, plate::Plate)
-    Symbol("$(pgm.name)_lp_plate_$(plate.symbol)")
+function plate_function_name(name::Symbol, kind::Symbol, plate::Plate)
+    Symbol("$(name)_$(kind)_plate_$(plate.symbol)")
 end
 
-function get_lp_plate_functions(pgm, plates, plated_edges, symbolic_dists, symbolic_observes, X::Symbol, static_observes::Bool)
+function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, symbolic_observes, X::Symbol, static_observes::Bool, kind)
     plate_functions = Function[]
     for plate in plates
         block_args = []
         lp = gensym(:lp)
         push!(block_args, :($lp = 0.0))
 
-        if !static_observes
+        if !static_observes || kind == :sample
             for child in plate.nodes
-                if !isnothing(pgm.observed_values[child])
+                if !isnothing(symbolic_observes[child])
                     # recompute observe, could have changed
                     push!(block_args, :($X[$child] = $(symbolic_observes[child])))
                 end
             end
         end
+        if kind == :lp || all(isnothing(symbolic_observes[child]) for child in plate.nodes)
+            is_iid = length(plate.nodes) > 1 && allequal([symbolic_dists[child] for child in plate.nodes])
+            interplate_edges = [edge for edge in plated_edges if edge isa InterPlateEdge && edge.to == plate]
+            all_identity_edges = length(interplate_edges) > 0 && all(edge.is_identity for edge in interplate_edges)
 
-        is_iid = length(plate.nodes) > 1 && allequal([symbolic_dists[child] for child in plate.nodes])
-        interplate_edges = [edge for edge in plated_edges if edge isa InterPlateEdge && edge.to == plate]
-        all_identity_edges = length(interplate_edges) > 0 && all(edge.is_identity for edge in interplate_edges)
-
-        if is_iid
-            # we can compute distribution once and loop
-            iid_d_sym = gensym("iid_dist")
-            push!(block_args, :($iid_d_sym = $(symbolic_dists[first(plate.nodes)])))
-            
-            loop_var = gensym("i")
-            push!(block_args, :(
-                for $loop_var in $(plate.nodes)
-                    $lp += logpdf($iid_d_sym, $X[$loop_var])
+            if is_iid
+                # we can compute distribution once and loop
+                iid_d_sym = gensym("iid_dist")
+                push!(block_args, :($iid_d_sym = $(symbolic_dists[first(plate.nodes)])))
+                
+                loop_var = gensym("i")
+                loop_body = if kind == :lp
+                    :($lp += logpdf($iid_d_sym, $X[$loop_var]))
+                else
+                    :($X[$loop_var] = rand($iid_d_sym))
                 end
-            ))
-        elseif all_identity_edges
-            # we can express dependencies in loop
-            loop_var = gensym("i")
-            plate_symbolic_dists = [deepcopy(symbolic_dists[child]) for child in plate.nodes]
-            for edge in interplate_edges
-                from_low = first(edge.from.nodes)-1
-                to_low = first(edge.to.nodes)-1
-                for (i, d) in enumerate(plate_symbolic_dists)
-                    for node in edge.from.nodes
-                        d = substitute_expr(:($X[$node]), :($X[$(from_low) + $loop_var]), d)
+                
+                push!(block_args, :(
+                    for $loop_var in $(plate.nodes)
+                        $loop_body
                     end
-                    for node in edge.to.nodes
-                        d = substitute_expr(:($X[$node]), :($X[$(to_low) + $loop_var]), d)
+                ))
+            elseif all_identity_edges
+                # we can express dependencies in loop
+                loop_var = gensym("i")
+                plate_symbolic_dists = [deepcopy(symbolic_dists[child]) for child in plate.nodes]
+                for edge in interplate_edges
+                    from_low = first(edge.from.nodes)-1
+                    to_low = first(edge.to.nodes)-1
+                    for (i, d) in enumerate(plate_symbolic_dists)
+                        for node in edge.from.nodes
+                            d = substitute_expr(:($X[$node]), :($X[$(from_low) + $loop_var]), d)
+                        end
+                        for node in edge.to.nodes
+                            d = substitute_expr(:($X[$node]), :($X[$(to_low) + $loop_var]), d)
+                        end
+                        plate_symbolic_dists[i] = d
                     end
-                    plate_symbolic_dists[i] = d
                 end
-            end
-            @assert allequal(plate_symbolic_dists) unique(plate_symbolic_dists)
-            loop_d_sym = gensym("loop_dist")
-            low = first(plate.nodes)-1
-            push!(block_args, :(
-                for $loop_var in 1:$(length(plate.nodes))
-                    $loop_d_sym = $(plate_symbolic_dists[1])
-                    $lp += logpdf($loop_d_sym, $X[$low + $loop_var])
+                @assert allequal(plate_symbolic_dists) unique(plate_symbolic_dists)
+                loop_d_sym = gensym("loop_dist")
+                low = first(plate.nodes)-1
+                loop_body = if kind == :lp
+                    :($lp += logpdf($loop_d_sym, $X[$low + $loop_var]))
+                else
+                    :($X[$low + $loop_var] = rand($loop_d_sym))
                 end
-            ))
-        else
-            # cannot do any optimization => fall back to spaghetti code
-            for child in plate.nodes
-                child_d_sym = gensym("child_dist_$child")
-                push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
-                push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))   
+                push!(block_args, :(
+                    for $loop_var in 1:$(length(plate.nodes))
+                        $loop_d_sym = $(plate_symbolic_dists[1])
+                        $loop_body
+                    end
+                ))
+            else
+                # cannot do any optimization => fall back to spaghetti code
+                for child in plate.nodes
+                    child_d_sym = gensym("child_dist_$child")
+                    push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
+                    if kind == :lp
+                        push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))   
+                    else
+                        push!(block_args, :($X[$child] = rand($child_d_sym)))   
+                    end
+                end
             end
         end
-        push!(block_args, :($lp))
-
-        f_name = plate_lp_function_name(pgm, plate)
+        if kind == :lp
+            push!(block_args, :($lp))
+        end
+    
+        f_name = plate_function_name(pgm_name, kind, plate)
         f = rmlines(:(
             function $f_name($X::Vector{Float64})
                 $(Expr(:block, block_args...))
@@ -236,4 +254,12 @@ function get_lp_plate_functions(pgm, plates, plated_edges, symbolic_dists, symbo
         push!(plate_functions, f)
     end
     return plate_functions
+end
+
+struct PlateInfo
+    plate_symbols::Vector{Symbol}
+    plates::Vector{Plate}
+    plated_edges::Set{PlatedEdge}
+    plate_lp_fs::Vector{Function}
+    plate_sample_fs::Vector{Function}
 end

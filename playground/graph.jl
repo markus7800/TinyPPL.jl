@@ -184,10 +184,10 @@ Tracker.grad.(X_tracked)
 
 @time hmc(model, 1_000, 0.05, 10, [1. 0.; 0. 1.]);
 
-include("../examples/univariate_gmm/common.jl")
+include("../examples/univariate_gmm/data.jl");
 
 t0 = time_ns()
-model = @ppl gmm begin
+model = @ppl plated GMM begin
     function dirichlet(δ, k)
         let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
             w / sum(w)
