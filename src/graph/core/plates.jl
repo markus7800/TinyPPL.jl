@@ -4,6 +4,13 @@ struct Plate
     nodes::UnitRange
 end
 
+function Base.isequal(l::Plate, r::Plate)
+    return l.symbol == r.symbol
+end
+function Base.hash(plate::Plate)
+    return hash(plate.symbol)
+end
+
 abstract type PlatedEdge end
 struct PlateToPlateEdge <: PlatedEdge
     from::Plate
@@ -254,6 +261,27 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
         push!(plate_functions, f)
     end
     return plate_functions
+end
+
+function get_topolocial_order(edges::Set{PlatedEdge})
+    edges = deepcopy(edges)
+    roots = [i for i in unique(edge.from for edge in edges) if !any(edge.to == i for edge in edges)]
+    ordered_nodes = Union{Int,Plate}[] # topological order
+    nodes = Set{Union{Int,Plate}}(roots)
+    while !isempty(nodes)
+        node = pop!(nodes)
+        push!(ordered_nodes, node)
+        children_edges = [edge for edge in edges if edge.from == node]
+        for edge in children_edges
+            child = edge.to
+            delete!(edges, edge)
+            parents = [edge.from for edge in edges if edge.to == child]
+            if isempty(parents)
+                push!(nodes, child)
+            end
+        end
+    end
+    return ordered_nodes
 end
 
 struct PlateInfo
