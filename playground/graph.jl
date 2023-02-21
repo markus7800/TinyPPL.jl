@@ -187,7 +187,7 @@ Tracker.grad.(X_tracked)
 include("../examples/univariate_gmm/data.jl");
 
 t0 = time_ns()
-model = @ppl plated GMM begin
+model = @ppl GMM begin
     function dirichlet(δ, k)
         let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
             w / sum(w)
@@ -236,12 +236,7 @@ retvals[argmax(lps)]
 @time kernels = compile_lmh(model, static_observes=true);
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
-
-# 0.30078
-@time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true);
-Random.seed!(0);
-@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
-
+# 0.300861
 
 spgm, E = Graph.to_human_readable(model.symbolic_pgm, model.symbolic_return_expr, model.sym_to_ix);
 

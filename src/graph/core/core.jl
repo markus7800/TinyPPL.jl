@@ -76,9 +76,9 @@ end
 export @ppl
 
 
-function get_topolocial_order(edges::Set{Pair{Int,Int}})
+function get_topolocial_order(n_variables::Int, edges::Set{Pair{Int,Int}})
     edges = deepcopy(edges)
-    roots = [i for i in unique([x for (x,y) in edges]) if !any(i == y for (x,y) in edges)]
+    roots = [i for i in 1:n_variables if !any(i == y for (x,y) in edges)]
     ordered_nodes = Int[] # topological order
     nodes = Set(roots)
     while !isempty(nodes)
@@ -93,6 +93,7 @@ function get_topolocial_order(edges::Set{Pair{Int,Int}})
             end
         end
     end
+    @assert length(ordered_nodes) == n_variables
     return ordered_nodes
 end
 
@@ -220,13 +221,19 @@ function plates_lt(variable_to_address)
     end
 end
 
-function get_logpdf(name, edges, symbolic_dists, X)
+function get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, X)
     lp = gensym(:lp)
     lp_block_args = []
-    push!(lp_block_args, :($lp = 0.0))
 
+    ordered_nodes = if isnothing(plate_info)
+        get_topolocial_order(n_variables, edges)
+    else
+        get_topolocial_order(n_variables, plate_info)
+    end
+
+    push!(lp_block_args, :($lp = 0.0))
     d_sym = gensym("dist")
-    for node in get_topolocial_order(edges)
+    for node in ordered_nodes
         if node isa Plate
             plate_f_name = plate_function_name(name, :lp, node)
             push!(lp_block_args, :($lp += $plate_f_name($X)))
@@ -250,11 +257,17 @@ function get_logpdf(name, edges, symbolic_dists, X)
     return logpdf
 end
 
-function get_sample(name, edges, symbolic_dists, symbolic_observes, X)
+function get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X)
     sample_block_args = []
 
+    ordered_nodes = if isnothing(plate_info)
+        get_topolocial_order(n_variables, edges)
+    else
+        get_topolocial_order(n_variables, plate_info)
+    end
+
     d_sym = gensym("dist")
-    for node in get_topolocial_order(edges)
+    for node in ordered_nodes
         
         if node isa Plate
             plate_f_name = plate_function_name(name, :sample, node)
@@ -299,8 +312,7 @@ function compile_symbolic_pgm(
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
 
-    topolical_ordered = get_topolocial_order(edges)
-    @assert length(topolical_ordered) == n_variables
+    topolical_ordered = get_topolocial_order(n_variables, edges)
 
     X = gensym(:X)
     symbolic_dists = get_symbolic_distributions(spgm, n_variables, sym_to_ix, X)
@@ -360,8 +372,8 @@ function compile_symbolic_pgm(
         plate_info = nothing
     end
 
-    sample = get_sample(name, isnothing(plate_info) ? edges : plate_info.plated_edges, symbolic_dists, symbolic_observes, X)
-    logpdf = get_logpdf(name, isnothing(plate_info) ? edges : plate_info.plated_edges, symbolic_dists, X)
+    sample = get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X)
+    logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, X)
 
     # force compilation
     X = Vector{Float64}(undef, n_variables)

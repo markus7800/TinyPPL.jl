@@ -263,9 +263,27 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
     return plate_functions
 end
 
-function get_topolocial_order(edges::Set{PlatedEdge})
-    edges = deepcopy(edges)
-    roots = [i for i in unique(edge.from for edge in edges) if !any(edge.to == i for edge in edges)]
+struct PlateInfo
+    plate_symbols::Vector{Symbol}
+    plates::Vector{Plate}
+    plated_edges::Set{PlatedEdge}
+    plate_lp_fs::Vector{Function}
+    plate_sample_fs::Vector{Function}
+end
+
+function get_topolocial_order(n_variables::Int, plate_info::PlateInfo)
+    edges = deepcopy(plate_info.plated_edges)
+    unique_nodes = Any[]
+    unplated_nodes = Set(collect(1:n_variables))
+    for plate in plate_info.plates
+        for node in plate.nodes
+            delete!(unplated_nodes, node)
+        end
+        push!(unique_nodes, plate) # may be plate with no edge
+    end
+    append!(unique_nodes, unplated_nodes)
+
+    roots = [i for i in unique_nodes if !any(edge.to == i for edge in edges)]
     ordered_nodes = Union{Int,Plate}[] # topological order
     nodes = Set{Union{Int,Plate}}(roots)
     while !isempty(nodes)
@@ -281,13 +299,6 @@ function get_topolocial_order(edges::Set{PlatedEdge})
             end
         end
     end
+    @assert length(ordered_nodes) == length(plate_info.plates) + length(unplated_nodes)
     return ordered_nodes
-end
-
-struct PlateInfo
-    plate_symbols::Vector{Symbol}
-    plates::Vector{Plate}
-    plated_edges::Set{PlatedEdge}
-    plate_lp_fs::Vector{Function}
-    plate_sample_fs::Vector{Function}
 end
