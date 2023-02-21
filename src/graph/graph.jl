@@ -6,4 +6,5 @@ module Graph
     include("LW.jl")
     include("LMH.jl")
     include("HMC.jl")
+    include("compiled/LMH.jl")
 end

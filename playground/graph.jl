@@ -217,6 +217,9 @@ X = Vector{Float64}(undef, model.n_variables);
 model.sample(X)
 model.return_expr(X)
 model.logpdf(X) # -3034.9080970776577
+for x in X
+    println(x)
+end
 
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
@@ -234,7 +237,7 @@ retvals[argmax(lps)]
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
 
-
+# 0.30078
 @time kernels = compile_lmh(model, [:w, :μ, :σ², :z, :y], static_observes=true);
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);

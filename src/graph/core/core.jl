@@ -33,6 +33,7 @@ struct PGM
 end
 
 include("pretty_print.jl")
+include("plates.jl")
 
 #=
     replaces
@@ -280,6 +281,7 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     observed_values = Vector{Union{Nothing,Function}}(undef, n_variables)
     addresses = Vector{Any}(undef, n_variables)
 
+    # just wrap symbolic distributions / observed values in functions
     for i in 1:n_variables
         sym = ix_to_sym[i]
         addresses[i] = variable_to_address[sym]
@@ -306,6 +308,7 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         end
     end
 
+    # wrap return expression in function
     f_name = Symbol("$(name)_return")
     new_E =  subtitute_for_syms(n_variables, ix_to_sym, deepcopy(E), X)
     f = rmlines(:(
@@ -341,5 +344,6 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         logpdf,
         sym_to_ix,
         spgm, E,
-        topolical_ordered)
+        topolical_ordered
+    )
 end
