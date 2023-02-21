@@ -212,9 +212,14 @@ model = @ppl gmm begin
 end;
 (time_ns() - t0) / 1e9
 
+Random.seed!(0)
+X = Vector{Float64}(undef, model.n_variables);
+model.sample(X)
+model.return_expr(X)
+model.logpdf(X) # -3034.9080970776577
+
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
-
 
 @time lw = compile_likelihood_weighting(model)
 @time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true); # 42s

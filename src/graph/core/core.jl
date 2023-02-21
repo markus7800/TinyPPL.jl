@@ -140,30 +140,39 @@ function unnest_array_accesses(expr, X::Symbol)
     end
 end
 
-function get_symbolic_distributions(pgm::PGM, X::Symbol)
-    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
-
+#=
+    replaces symbols with corresponding vector entry X[j] for each distribution expression in symbolic_pgm.
+=#
+function get_symbolic_distributions(symbolic_pgm::SymbolicPGM, n_variables::Int, sym_to_ix::Dict{Symbol,Int}, X::Symbol)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     symbolic_dists = []
-    for node in 1:pgm.n_variables
+    for node in 1:n_variables
         sym = ix_to_sym[node]
-        d = pgm.symbolic_pgm.P[sym]
-        d = subtitute_for_syms(pgm.n_variables, ix_to_sym, d, X)
+        d = symbolic_pgm.P[sym]
+        d = subtitute_for_syms(n_variables, ix_to_sym, d, X)
         push!(symbolic_dists, d)
     end
     return symbolic_dists
 end
 
-function get_symbolic_observed_values(pgm::PGM, X::Symbol, static_observes::Bool)
-    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
+function get_symbolic_distributions(pgm::PGM, X::Symbol)
+    return get_symbolic_distributions(pgm.symbolic_pgm, pgm.n_variables, pgm.sym_to_ix, X)
+end
+
+#=
+    replaces symbols with corresponding vector entry X[j] for each observed value expression in symbolic_pgm.
+=#
+function get_symbolic_observed_values(symbolic_pgm::SymbolicPGM, n_variables::Int, sym_to_ix::Dict{Symbol,Int}, X::Symbol, static_observes::Bool)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
 
     symbolic_observes = []
-    for node in 1:pgm.n_variables
+    for node in 1:n_variables
         sym = ix_to_sym[node]
-        if isnothing(pgm.observed_values[node])
+        if !haskey(symbolic_pgm.Y, sym)
             push!(symbolic_observes, nothing)
         else
-            y = pgm.symbolic_pgm.Y[sym]
-            y = subtitute_for_syms(pgm.n_variables, ix_to_sym, y, X)
+            y = symbolic_pgm.Y[sym]
+            y = subtitute_for_syms(n_variables, ix_to_sym, y, X)
             if static_observes
                 y = eval(y)
             end
@@ -173,7 +182,11 @@ function get_symbolic_observed_values(pgm::PGM, X::Symbol, static_observes::Bool
     return symbolic_observes
 end
 
+function get_symbolic_observed_values(pgm::PGM, X::Symbol, static_observes::Bool)
+    return get_symbolic_observed_values(pgm.symbolic_pgm, pgm.n_variables, pgm.sym_to_ix, X, static_observes)
+end
 
+# sort by address
 # no nested plates, i.e (:x=>:y=>i) and (:x=>:y=>j) belong both to plate :x
 function plates_lt(variable_to_address)
     return function lt(sym_x, sym_y)
@@ -193,77 +206,17 @@ function plates_lt(variable_to_address)
     end
 end
 
-function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol}, variable_to_address::Dict{Symbol, Any})
-    n_variables = length(spgm.V)
-    sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
-        sort(collect(spgm.V), lt=plates_lt(variable_to_address), alg=InsertionSort))
-    )
-    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
-    edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
-    
+function get_logpdf(name, topolical_ordered::Vector{Int}, symbolic_dists, X::Symbol)
     lp = gensym(:lp)
     lp_block_args = []
     push!(lp_block_args, :($lp = 0.0))
 
-    sample_block_args = []
-
-    ordered = get_topolocial_order(n_variables, edges)
-    @assert length(ordered) == n_variables
-
-    X = gensym(:X)
-    distributions = Vector{Function}(undef, n_variables)
-    observed_values = Vector{Union{Nothing,Function}}(undef, n_variables)
-    addresses = Vector{Any}(undef, n_variables)
-    for i in ordered
-        sym = ix_to_sym[i]
-        addresses[i] = variable_to_address[sym]
-        d = spgm.P[sym]
-        d = subtitute_for_syms(n_variables, ix_to_sym, d, X)
-
-        f_name = Symbol("$(name)_dist_$i")
-        f = rmlines(:(
-            function $f_name($X::AbstractVector{Float64})
-                $d
-            end
-        ))
-        # display(f)
-        distributions[i] = eval(f)
-
-        d_sym = gensym("dist_$i")
-
-        if haskey(spgm.Y, sym)
-            y = spgm.Y[sym]
-            # support dynamic observations in general  
-            y = subtitute_for_syms(n_variables, ix_to_sym, y, X)
-            f_name = Symbol("$(name)_obs_$i")
-            f = rmlines(:(
-                function $f_name($X::AbstractVector{Float64})
-                    $y
-                end
-            ))
-            # display(f)
-            observed_values[i] = eval(f)
-            push!(sample_block_args, :($X[$i] = $y))
-        else
-            observed_values[i] = nothing
-            push!(sample_block_args, :($d_sym = $d))
-            push!(sample_block_args, :($X[$i] = rand($d)))
-        end
-
+    d_sym = gensym("dist")
+    for i in topolical_ordered
+        d = symbolic_dists[i]
         push!(lp_block_args, :($d_sym = $d))
         push!(lp_block_args, :($lp += logpdf($d_sym, $X[$i])))
     end
-
-    push!(sample_block_args, :($nothing))
-    f_name = Symbol("$(name)_sample")
-    f = rmlines(:(
-        function $f_name($X::AbstractVector{Float64})
-            $(Expr(:block, sample_block_args...))
-        end
-    ))
-    # display(f)
-    sample = eval(f)
-
 
     push!(lp_block_args, :($lp))
 
@@ -275,12 +228,86 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     ))
     # display(f)
     logpdf = eval(f)
+    return logpdf
+end
+
+function get_sample(name, topolical_ordered::Vector{Int}, symbolic_dists, symbolic_observes, X::Symbol)
+    sample_block_args = []
+
+    d_sym = gensym("dist")
+    for i in topolical_ordered
+        if !isnothing(symbolic_observes[i])
+            y = symbolic_observes[i]
+            push!(sample_block_args, :($X[$i] = $y))
+        else
+            d = symbolic_dists[i]
+            push!(sample_block_args, :($d_sym = $d))
+            push!(sample_block_args, :($X[$i] = rand($d)))
+        end
+    end
+
+    push!(sample_block_args, :($nothing))
+    f_name = Symbol("$(name)_sample")
+    f = rmlines(:(
+        function $f_name($X::AbstractVector{Float64})
+            $(Expr(:block, sample_block_args...))
+        end
+    ))
+    # display(f)
+    sample = eval(f)
+    return sample
+end
+
+function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Symbol}, variable_to_address::Dict{Symbol, Any})
+    n_variables = length(spgm.V)
+
+    # symbol to index, sorted by address
+    sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
+        sort(collect(spgm.V), lt=plates_lt(variable_to_address), alg=InsertionSort))
+    )
+    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
+    edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
+
+    topolical_ordered = get_topolocial_order(n_variables, edges)
+    @assert length(topolical_ordered) == n_variables
+
+    X = gensym(:X)
+    symbolic_dists = get_symbolic_distributions(spgm, n_variables, sym_to_ix, X)
+    static_observes = false
+    symbolic_observes = get_symbolic_observed_values(spgm, n_variables, sym_to_ix, X, static_observes)
+
+    distributions = Vector{Function}(undef, n_variables)
+    observed_values = Vector{Union{Nothing,Function}}(undef, n_variables)
+    addresses = Vector{Any}(undef, n_variables)
+
+    for i in 1:n_variables
+        sym = ix_to_sym[i]
+        addresses[i] = variable_to_address[sym]
+
+        f_name = Symbol("$(name)_dist_$i")
+        f = rmlines(:(
+            function $f_name($X::AbstractVector{Float64})
+                $(symbolic_dists[i])
+            end
+        ))
+        # display(f)
+        distributions[i] = eval(f)
+        if isnothing(symbolic_observes[i])
+            observed_values[i] = nothing
+        else
+            f_name = Symbol("$(name)_obs_$i")
+            f = rmlines(:(
+                function $f_name($X::AbstractVector{Float64})
+                    $(symbolic_observes[i])
+                end
+            ))
+            # display(f)
+            observed_values[i] = eval(f)
+        end
+    end
 
     f_name = Symbol("$(name)_return")
-    new_E = deepcopy(E)
-    for j in 1:n_variables
-        new_E = substitute(ix_to_sym[j], :($X[$j]), new_E)
-    end
+    new_E =  subtitute_for_syms(n_variables, ix_to_sym, deepcopy(E), X)
     f = rmlines(:(
         function $f_name($X::AbstractVector{Float64})
             $new_E
@@ -289,10 +316,13 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
     # display(f)
     return_expr = eval(f)
 
+    sample = get_sample(name, topolical_ordered, symbolic_dists, symbolic_observes, X)
+    logpdf = get_logpdf(name, topolical_ordered, symbolic_dists, X)
+
     # force compilation
     X = Vector{Float64}(undef, n_variables)
-    Base.invokelatest(return_expr, X)
     Base.invokelatest(sample, X)
+    Base.invokelatest(return_expr, X)
     Base.invokelatest(logpdf, X)
     for i in 1:n_variables
         Base.invokelatest(distributions[i], X)
@@ -311,5 +341,5 @@ function compile_symbolic_pgm(name::Symbol, spgm::SymbolicPGM, E::Union{Expr, Sy
         logpdf,
         sym_to_ix,
         spgm, E,
-        ordered)
+        topolical_ordered)
 end
