@@ -111,7 +111,8 @@ function Base.rand(d::DiscreteRWProposer)::Int
     end
 end
 
-function logpdf(d::DiscreteRWProposer, x::Int)::Float64
+function logpdf(d::DiscreteRWProposer, x::Real)::Float64
+    x = Int(x)
     y = x - d.μ
     if 0 < y <= d.b
         return logpdf(d.G, y-1) + d.lb
@@ -121,12 +122,12 @@ function logpdf(d::DiscreteRWProposer, x::Int)::Float64
     return -Inf
 end
 
-function discrete_interval(lower::Int, upper::Int, x::Int, var::Real)
-    return DiscreteRWProposer(lower, upper, x, var)
+function discrete_interval(lower::Int, upper::Int, x::Real, var::Real)
+    return DiscreteRWProposer(lower, upper, Int(x), var)
 end
 
 function discrete_greater_than(lower::Real, x::Real, var::Real)
-    return DiscreteRWProposer(lower, Inf, x, var)
+    return DiscreteRWProposer(lower, Inf, Int(x), var)
 end
 
 export continuous_interval, continuous_greater_than, discrete_interval, discrete_greater_than
