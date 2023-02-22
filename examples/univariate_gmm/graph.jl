@@ -1,6 +1,6 @@
 using TinyPPL.Graph
 import Random
-
+include("data.jl")
 include("common.jl")
 mkpath("plots/")
 
@@ -30,6 +30,17 @@ model = @ppl plated GMM begin
 end
 println("Compilation Time: ", (time_ns() - t0) / 1e9)
 
+@info "LW"
+traces, retvals, lps = likelihood_weighting(model, 100);
+@time traces, retvals, lps = likelihood_weighting(model, 100_000);
+
+println("Compile LW")
+@time lw = compile_likelihood_weighting(model)
+traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100; static_observes=true);
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
+
+
+@info "LMH"
 traces, retvals = lmh(model, 100);
 @time traces, retvals = lmh(model, 1_000_000);
 

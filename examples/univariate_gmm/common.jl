@@ -1,4 +1,3 @@
-include("data.jl")
 
 using TinyPPL.Distributions
 
