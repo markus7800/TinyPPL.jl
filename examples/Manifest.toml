@@ -447,9 +447,9 @@ version = "0.33.21"
 
 [[deps.StatsFuns]]
 deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "ab6083f09b3e617e34a956b43e9d51b824206932"
+git-tree-sha1 = "53cd758b96903d556e96f11b8cd2169c7e9f08af"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "1.1.1"
+version = "1.2.0"
 
 [[deps.SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -471,7 +471,7 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[deps.TinyPPL]]
 deps = ["Distributions", "MacroTools", "ProgressLogging", "SpecialFunctions", "Tracker"]
-git-tree-sha1 = "0aeff4a62d48a8f7cbaa4ae9832845234838eda1"
+git-tree-sha1 = "230ad432c93b64543bb245f153e5c5401318ef2f"
 repo-rev = "dev"
 repo-url = "https://github.com/markus7800/TinyPPL.jl"
 uuid = "7d3b7143-6434-42f5-a03e-fdc02c8b5cd0"

@@ -64,12 +64,24 @@ println("Get lps")
     lps
 end
 
+@info "RWMH"
+const addr2var = Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.)
+traces, retvals = rwmh(model, 100, addr2var=addr2var);
+# acceptance rate for z is much worse because we force a move / don't stay at current value
+@time traces, retvals = rwmh(model, 1_000_000, addr2var=addr2var);
+
+println("Get lps")
+@time lps = [model.logpdf(traces[:,i]) for i in 1:size(traces,2)]
 
 function to_trace(model, X)
-    X_aug = Vector{Float64}(undef, model.n_variables)
-    mask = isnothing.(model.observed_values)
-    model.sample(X_aug) # initialises static observed values TODO
-    X_aug[mask] = X
+    if length(X) < model.n_variables
+        X_aug = Vector{Float64}(undef, model.n_variables)
+        mask = isnothing.(model.observed_values)
+        model.sample(X_aug) # initialises static observed values TODO
+        X_aug[mask] = X
+    else
+        X_aug = X
+    end
 
     tr = Dict()
     for i in 1:model.n_variables
