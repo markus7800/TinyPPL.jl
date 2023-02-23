@@ -187,7 +187,7 @@ Tracker.grad.(X_tracked)
 include("../examples/univariate_gmm/data.jl");
 
 t0 = time_ns()
-model = @ppl GMM begin
+model = @ppl plated GMM begin
     function dirichlet(δ, k)
         let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
             w / sum(w)
@@ -196,7 +196,7 @@ model = @ppl GMM begin
     let λ = 3, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         δ ~ Uniform(5.0-0.5, 5.0+0.5),
         k = 4,
-        y = $(Main.gt_ys),
+        y = $(Main.gt_ys[1:3]),
         n = length(y),
         w = dirichlet(δ, k),
         X ~ Categorical(w),
@@ -231,8 +231,12 @@ W = exp.(lps);
 lps[argmax(lps)]
 retvals[argmax(lps)]
 
-@time traces, retvals = lmh(model, 1_000_000); # 18s, 90s with full lp computation
+addr2var = Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.)
 
+@time traces, retvals = lmh(model, 1_000_000); # 18s, 90s with full lp computation
+@time traces, retvals = rwmh(model, 1_000_000, addr2var=addr2var);
+
+@time kernels = compile_rwmh(model, static_observes=true, addr2var=addr2var);
 @time kernels = compile_lmh(model, static_observes=true);
 Random.seed!(0);
 @time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);

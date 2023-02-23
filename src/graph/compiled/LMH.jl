@@ -58,6 +58,83 @@ function get_compute_W_block_args(pgm, plates, children, symbolic_dists, symboli
 end
 
 function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
+    function lmh_kernel(block_args, symbolic_dists, node, X, log_α)
+        d_sym = gensym("dist_$node")
+        push!(block_args, :($d_sym = $(symbolic_dists[node])))
+
+        if haskey(proposal, pgm.addresses[node])
+            q_sym = gensym("proposal_$node")
+            q = proposal[pgm.addresses[node]]
+            push!(block_args, :($q_sym = $(Expr(:call, typeof(q).name.name, params(q)...))))
+
+            push!(block_args, :($log_α += logpdf($q_sym, $X[$node]) - logpdf($d_sym, $X[$node])))
+            push!(block_args, :($X[$node] = rand($q_sym)))
+            push!(block_args, :($log_α += logpdf($d_sym, $X[$node]) - logpdf($q_sym, $X[$node])))
+        else
+            # logpdf(d, value_proposed) - logpdf(d, value_current) +  logpdf(q, value_current) - logpdf(q, value_proposed) cancels
+            push!(block_args, :($X[$node] = rand($d_sym)))
+        end
+    end
+    return compile_single_site(pgm, static_observes, lmh_kernel)
+end
+
+function get_rw_dist_expr(d_sym, symbol_dist, value, var)
+    if symbol_dist.head == :call
+        dist_name = symbol_dist.args[1]
+        # println(dist_name)
+        if dist_name == :Bernoulli
+            return :(Bernoulli(1 - $value))
+        elseif dist_name in [:Geometric, :Poisson]
+            return :(DiscreteRWProposer(0, Inf, Int($value), $var))
+        elseif dist_name == :Binomial
+            n = symbol_dist.args[2]
+            return :(DiscreteRWProposer(0, $n, Int($value), $var))
+        elseif dist_name == :Categorical
+            return :(DiscreteRWProposer(1, ncategories($d_sym), Int($value), $var))
+        elseif dist_name == :DiscreteUniform
+            a, b = symbol_dist.args[2:3]
+            return :(DiscreteRWProposer(Int($a), Int($b), Int($value), $var))
+        elseif dist_name in [:Exponential, :Gamma, :InverseGamma, :LogNormal]     
+            return :(ContinuousRWProposer(0, Inf, $value, $var))
+        elseif dist_name in [:Cauchy, :Laplace, :Normal, :TDist]      
+            return :(Normal($value, sqrt($var)))  
+        elseif dist_name == :Beta
+            return :(ContinuousRWProposer(0., 1., $value, $var))
+        elseif dist_name == :Uniform
+            a, b = symbol_dist.args[2:3]
+            return :(ContinuousRWProposer($a, $b, $value, $var))
+        end
+    end
+    return :(random_walk_proposal_dist($d_sym, $value, $var))
+end
+
+function compile_rwmh(pgm::PGM; static_observes::Bool=false, addr2var=Addr2Var(), default_var::Float64=1.)
+    function rwmh_kernel(block_args, symbolic_dists, node, X, log_α)
+        dist = symbolic_dists[node]
+        d_sym = gensym("dist_$node")
+        push!(block_args, :($d_sym = $dist))
+
+        var = get(addr2var, pgm.addresses[node], default_var)
+
+        forward_d_sym = gensym("forward_dist")
+        value_current = gensym("value_current")
+        backward_d_sym = gensym("backward_dist")
+        value_proposed = gensym("value_proposed")
+
+
+        push!(block_args, :($value_current = $X[$node]))
+        push!(block_args, :($forward_d_sym = $(get_rw_dist_expr(d_sym, dist, value_current, var))))
+        push!(block_args, :($value_proposed = rand($forward_d_sym)))
+        push!(block_args, :($X[$node] = $value_proposed))
+        push!(block_args, :($backward_d_sym = $(get_rw_dist_expr(d_sym, dist, value_proposed, var))))
+
+        push!(block_args, :($log_α += logpdf($backward_d_sym, $value_current) - logpdf($d_sym, $value_current)))
+        push!(block_args, :($log_α += logpdf($d_sym, $value_proposed) - logpdf($forward_d_sym, $value_proposed)))
+    end
+    return compile_single_site(pgm, static_observes, rwmh_kernel)
+end
+
+function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
     X = gensym(:X)
     symbolic_dists = get_symbolic_distributions(pgm, X)
     symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
@@ -76,9 +153,6 @@ function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
         value_current = gensym("value_current")
         push!(block_args, :($value_current = $X[$node]))
 
-        d_sym = gensym("dist_$node")
-        push!(block_args, :($d_sym = $(symbolic_dists[node])))
-
         if isnothing(plated_edges)
             children = [child for (x,child) in pgm.edges if x == node]
         else
@@ -94,18 +168,7 @@ function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
         )
 
         # sample proposed value
-        if haskey(proposal, pgm.addresses[node])
-            q_sym = gensym("proposal_$node")
-            q = proposal[pgm.addresses[node]]
-            push!(block_args, :($q_sym = $(Expr(:call, typeof(q).name.name, params(q)...))))
-
-            push!(block_args, :($log_α += logpdf($q_sym, $X[$node]) - logpdf($d_sym, $X[$node])))
-            push!(block_args, :($X[$node] = rand($q_sym)))
-            push!(block_args, :($log_α += logpdf($d_sym, $X[$node]) - logpdf($q_sym, $X[$node])))
-        else
-            # logpdf(d, value_proposed) - logpdf(d, value_current) +  logpdf(q, value_current) - logpdf(q, value_proposed) cancels
-            push!(block_args, :($X[$node] = rand($d_sym)))
-        end
+        kernel(block_args, symbolic_dists, node, X, log_α)
 
         # compute W for proposed value
         append!(block_args, 
@@ -141,4 +204,4 @@ function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
     return lmh_functions
 end
 
-export compile_lmh, compiled_single_site
+export compile_lmh, compile_rwmh, compiled_single_site

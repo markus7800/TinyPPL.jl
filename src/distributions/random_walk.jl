@@ -29,7 +29,7 @@ struct ContinuousRWProposer <: ContinuousUnivariateDistribution
     u::Distribution
     μ::Float64
     bp::Float64
-    function ContinuousRWProposer(lower::Int, upper::Real, x::Float64, var::Real)
+    function ContinuousRWProposer(lower::Real, upper::Real, x::Float64, var::Real)
         var = var / 2
         l = truncated(Normal(x, sqrt(var)), lower, max(x, lower+1e-3))
         u = truncated(Normal(x, sqrt(var)), min(x, upper-1e-3), upper)
@@ -122,12 +122,12 @@ function logpdf(d::DiscreteRWProposer, x::Real)::Float64
     return -Inf
 end
 
-function discrete_interval(lower::Int, upper::Int, x::Real, var::Real)
-    return DiscreteRWProposer(lower, upper, Int(x), var)
+function discrete_interval(lower::Real, upper::Real, x::Real, var::Real)
+    return DiscreteRWProposer(Int(lower), Int(upper), Int(x), var)
 end
 
 function discrete_greater_than(lower::Real, x::Real, var::Real)
-    return DiscreteRWProposer(lower, Inf, Int(x), var)
+    return DiscreteRWProposer(Int(lower), Inf, Int(x), var)
 end
 
 export continuous_interval, continuous_greater_than, discrete_interval, discrete_greater_than
@@ -155,7 +155,7 @@ random_walk_proposal_dist(d::Uniform, value::Real, var::Real) = continuous_inter
 
 const rw_proposal_dist = random_walk_proposal_dist
 
-export random_walk_proposal_dist, rw_proposal_dist
+export random_walk_proposal_dist, rw_proposal_dist, ContinuousRWProposer, DiscreteRWProposer, ncategories
 
 # using Plots
 # d = continuous_interval(-1, 3, 1.5, 0.5)
