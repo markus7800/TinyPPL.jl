@@ -30,49 +30,6 @@ model = @ppl plated GMM begin
 end
 println("Compilation Time: ", (time_ns() - t0) / 1e9)
 
-@info "LW"
-traces, retvals, lps = likelihood_weighting(model, 100);
-@time traces, retvals, lps = likelihood_weighting(model, 100_000);
-
-println("Compile LW")
-@time lw = compile_likelihood_weighting(model)
-traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100; static_observes=true);
-@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
-
-
-@info "LMH"
-traces, retvals = lmh(model, 100);
-@time traces, retvals = lmh(model, 1_000_000);
-
-println("Get lps")
-@time lps = [model.logpdf(traces[:,i]) for i in 1:size(traces,2)]
-
-println("Compile LMH")
-@time kernels = compile_lmh(model, static_observes=true);
-Random.seed!(0);
-@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
-println("Get lps")
-@time lps = begin
-    X = Vector{Float64}(undef, model.n_variables)
-    model.sample(X) # initialises static observed values TODO
-    lps = Vector{Float64}(undef, size(traces,2))
-    mask = isnothing.(model.observed_values)
-    for i in 1:size(traces,2)
-        X[mask] = traces[:,i]
-        lps[i] = model.logpdf(X)
-    end
-    lps
-end
-
-@info "RWMH"
-const addr2var = Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.)
-traces, retvals = rwmh(model, 100, addr2var=addr2var);
-# acceptance rate for z is much worse because we force a move / don't stay at current value
-@time traces, retvals = rwmh(model, 1_000_000, addr2var=addr2var);
-
-println("Get lps")
-@time lps = [model.logpdf(traces[:,i]) for i in 1:size(traces,2)]
-
 function to_trace(model, X)
     if length(X) < model.n_variables
         X_aug = Vector{Float64}(undef, model.n_variables)
@@ -94,6 +51,59 @@ function to_trace(model, X)
     end
     return tr
 end
+
+function get_lps_from_static_observes(traces)
+    X = Vector{Float64}(undef, model.n_variables)
+    model.sample(X) # initialises static observed values TODO
+    lps = Vector{Float64}(undef, size(traces,2))
+    mask = isnothing.(model.observed_values)
+    for i in 1:size(traces,2)
+        X[mask] = traces[:,i]
+        lps[i] = model.logpdf(X)
+    end
+    lps
+end
+
+@info "LW"
+traces, retvals, lps = likelihood_weighting(model, 100);
+@time traces, retvals, lps = likelihood_weighting(model, 100_000);
+
+println("Compile LW")
+@time lw = compile_likelihood_weighting(model)
+traces, retvals, lps = compiled_likelihood_weighting(model, lw, 100; static_observes=true);
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000; static_observes=true);
+
+
+@info "LMH"
+traces, retvals = lmh(model, 100);
+@time traces, retvals = lmh(model, 1_000_000);
+
+println("Get lps")
+@time lps = [model.logpdf(traces[:,i]) for i in 1:size(traces,2)]
+
+println("Compile LMH")
+@time kernels = compile_lmh(model, static_observes=true);
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
+println("Get lps")
+@time lps = get_lps_from_static_observes(traces)
+
 tr = to_trace(model, traces[:, argmax(lps)])
 println("max lp: ", lps[argmax(lps)])
 visualize_trace(tr, path="plots/graph_lmh_best_trace.pdf")
+
+@info "RWMH"
+const addr2var = Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.)
+traces, retvals = rwmh(model, 100, addr2var=addr2var);
+# acceptance rate for z is much worse because we force a move / don't stay at current value
+@time traces, retvals = rwmh(model, 1_000_000, addr2var=addr2var);
+println("Get lps")
+@time lps = [model.logpdf(traces[:,i]) for i in 1:size(traces,2)]
+
+println("Compile RMWH")
+@time kernels = compile_rwmh(model, static_observes=true, addr2var=addr2var);
+@time traces, retvals = compiled_single_site(model, kernels, 1_000_000, static_observes=true);
+@time lps = get_lps_from_static_observes(traces)
+
+tr = to_trace(model, traces[:, argmax(lps)])
+println("max lp: ", lps[argmax(lps)])
+visualize_trace(tr, path="plots/graph_rwmh_best_trace.pdf")

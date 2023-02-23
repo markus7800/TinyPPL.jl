@@ -2,6 +2,7 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
+include("data.jl")
 include("common.jl")
 mkpath("plots/")
 
@@ -43,6 +44,12 @@ observations[:k] = gt_k-1
 #     observations[(:z=>i)] = gt_zs[i]
 # end
 
+# sampler = Forward();
+# @info("Forward")
+# [gmm(length(gt_ys), sampler, observations) for _ in 1:100];
+# @time [gmm(length(gt_ys), sampler, observations) for _ in 1:1_000_000];
+
+@info("LMH")
 traces, retvals, lps = lmh(gmm, (length(gt_ys), ), observations, 100, proposal=Proposal());
 @time traces, retvals, lps = lmh(gmm, (length(gt_ys),), observations, 100_000, proposal=Proposal());
 tr = traces[argmax(lps)]
