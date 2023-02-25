@@ -180,7 +180,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
 
     elseif expr.head == :call
         name = expr.args[1]
-        @assert name isa Symbol (name, typeof(name))
+        @assert name isa Symbol || (name isa Expr && name.head == :.) name
         arguments = expr.args[2:end]
         res = [transpile(t, phi, arg) for arg in arguments]
         Gs = [r[1] for r in res]
@@ -191,9 +191,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
             G = graph_disjoint_union(G, Gi)
         end
 
-        Gh, Eh = transpile(t, phi, name) # is redundant as we only allow symbols as name
-        G = graph_disjoint_union(G, Gh)
-        @assert Eh isa Symbol
+        Eh = name
 
         if Eh in keys(t.procs)
             f = t.procs[Eh]

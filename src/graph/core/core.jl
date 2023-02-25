@@ -68,6 +68,7 @@ function ppl_macro(annotation, name, foppl)
     
     G, E, variable_to_address = transpile_program(foppl);
     
+    println(foppl)
     pgm = compile_symbolic_pgm(name, G, E, variable_to_address, annotation);
 
     return pgm

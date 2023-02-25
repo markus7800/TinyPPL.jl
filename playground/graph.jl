@@ -11,10 +11,11 @@ get(p, :x=>:y=>:z, Bernoulli(0.5))
 d = random_walk_proposal_dist(Categorical([0.1, 0.2, 0.7]), 1, 0.5)
 rand(d)
 
+f() = false
 b = [true]
 model = @ppl Flip begin
     let A = {:a} ~ Bernoulli(0.5),
-        B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ false),
+        B = (Bernoulli(A == 1 ? 0.2 : 0.8) ↦ Main.f()),
         C = {:C} ~ Bernoulli(B == 1 ? 0.9 : 0.7)
         
         (Bernoulli(C == 1 ? 0.5 : 0.2)) ↦ $(Main.b[1])
