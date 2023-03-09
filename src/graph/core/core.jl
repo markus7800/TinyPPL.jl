@@ -33,7 +33,7 @@ struct PGM
 
     sym_to_ix::Dict{Symbol, Int}
     symbolic_pgm::SymbolicPGM
-    symbolic_return_expr::Union{Expr, Symbol}
+    symbolic_return_expr::Union{Expr, Symbol, Real}
 
     topological_order::Vector{Int}
 end
@@ -68,7 +68,7 @@ function ppl_macro(annotation, name, foppl)
     
     G, E, variable_to_address = transpile_program(foppl);
     
-    println(foppl)
+    # println(foppl)
     pgm = compile_symbolic_pgm(name, G, E, variable_to_address, annotation);
 
     return pgm
@@ -122,10 +122,12 @@ function reduce_array_accesses(expr, X::Symbol)
                     push!(ixs, el.args[2])
                 end
             end
-            min_ix = minimum(ixs)
-            max_ix = maximum(ixs)
-            if collect(min_ix:max_ix) == ixs
-                return Expr(:ref, X, :($min_ix:$max_ix))
+            if !isempty(ixs)
+                min_ix = minimum(ixs)
+                max_ix = maximum(ixs)
+                if collect(min_ix:max_ix) == ixs
+                    return Expr(:ref, X, :($min_ix:$max_ix))
+                end
             end
         end
         return Expr(expr.head, [reduce_array_accesses(arg, X) for arg in expr.args]...)
@@ -299,7 +301,7 @@ end
 
 function compile_symbolic_pgm(
     name::Symbol, 
-    spgm::SymbolicPGM, E::Union{Expr, Symbol}, 
+    spgm::SymbolicPGM, E::Union{Expr, Symbol, Real}, 
     variable_to_address::Dict{Symbol, Any}, 
     annotation::Union{Nothing, Symbol}
     )

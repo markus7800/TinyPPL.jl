@@ -158,24 +158,21 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         G = graph_disjoint_union(G1, G2)
         return G, E2
 
-    elseif expr.head == :if
-        #=
-        if condition
-            holds
-        else
-            otherwise
-        end
-        =#
-        @assert length(expr.args) == 3 # has to be if else
+    elseif expr.head == :if ||  expr.head == :elseif
+        @assert 2 ≤ length(expr.args) ≤ 3
         condition = expr.args[1]
         holds = expr.args[2]
-        otherwise = expr.args[3]
         G1, E1 = transpile(t, phi, condition)
         G2, E2 = transpile(t, :($phi && $E1), holds)
-        G3, E3 = transpile(t, :($phi && !($E1)), otherwise)
         G = graph_disjoint_union(G1, G2)
-        G = graph_disjoint_union(G, G3)
-        E = :($E1 ? $E2 : $E3)
+        if length(expr.args) == 3
+            otherwise = expr.args[3]
+            G3, E3 = transpile(t, :($phi && !($E1)), otherwise)
+            G = graph_disjoint_union(G, G3)
+            E = Expr(expr.head, E1, E2, E3)
+        else
+            E = Expr(expr.head, E1, E2)
+        end
         return G, E
 
     elseif expr.head == :call
@@ -210,7 +207,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         E = Expr(:call, Eh, Es...)
         return G, E
 
-    elseif expr.head == :vect
+    elseif expr.head in [:vect, :tuple, :&&, :||]
         G = EmptyPGM()
         E = []
         for v in expr.args
@@ -218,23 +215,13 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
             G = graph_disjoint_union(G, Gv)
             push!(E, Ev)
         end
-        return G, Expr(:vect, E...)
-
-    elseif expr.head == :tuple
-        G = EmptyPGM()
-        E = []
-        for v in expr.args
-            Gv, Ev = transpile(t, phi, v)
-            G = graph_disjoint_union(G, Gv)
-            push!(E, Ev)
-        end
-        return G, Expr(:tuple, E...)
+        return G, Expr(expr.head, E...)
 
     elseif expr.head == :ref
         @assert length(expr.args) == 2
 
         G_arr, arr = transpile(t, phi, expr.args[1])
-        if expr.args[2] isa Int && arr.head == :vect
+        if expr.args[2] isa Int && (arr.head == :vect || arr.head == :tuple)
             return G_arr, arr.args[expr.args[2]]
         end
         G_ix, ix = transpile(t, phi, expr.args[2])
@@ -336,7 +323,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
     end
 end
 
-function logpdf(b::Bool, x::Float64)
+function logpdf(b::Bool, x::Real)
     return 0.
 end
 

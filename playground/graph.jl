@@ -274,3 +274,162 @@ end
 @code_llvm test()
 
 @time test()
+
+
+
+using TinyPPL.Graph
+import Random
+
+model = @ppl ObsProg begin
+    function or(x, y)
+        max(x, y)
+    end
+    let x ~ Bernoulli(0.6),
+        y ~ Bernoulli(0.3)
+        Dirac(or(x,y)) ↦ 1
+        x
+    end
+end
+
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+retvals'W
+p = [0.6, 0.12] / 0.72
+
+# P(X = 1 | X || Y = 1)  = P( X = 1,  X || Y = 1) / P(X || Y = 1) = P(X = 1) / (1 - P(X=0, Y=0))
+0.6 / (1 - 0.4*0.7)
+
+model = @ppl gf begin
+    function or(x, y)
+        max(x, y)
+    end
+    function f(x)
+        let flip ~ Bernoulli(0.5),
+            y = or(x, flip)
+
+            Dirac(y) ↦ 1
+            y
+        end
+    end
+    function g(x)
+        1
+    end
+    let x ~ Bernoulli(0.1),
+        obs = f(x)
+        x
+    end
+end
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+retvals'W
+
+
+model = @ppl plated Geometric begin
+    let N = 25,
+        p = 0.5,
+        v = [{:x=>i} ~ Bernoulli(p) for i in 1:N],
+        g = argmax(v) # = findfirst for floats 0. 1.
+
+        {:X} ~ Normal(g, 1.) ↦ 5.
+        g
+    end
+end
+
+
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+[sum(W[retvals .== i]) for i in 1:10]
+
+lw = compile_likelihood_weighting(model, static_observes=true)
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000, static_observes=true); # 1.2s
+
+
+model = @ppl Evidence begin
+    let evidence ~ Bernoulli(0.5)
+        if evidence == 1
+            {:coin} ~ Bernoulli(0.5) ↦ 1
+        end
+        evidence
+    end
+end
+model = @ppl Evidence2 begin
+    let evidence ~ Bernoulli(0.5)
+        if evidence == 1
+            {:coin1} ~ Bernoulli(0.5) ↦ 1
+        else
+            {:coin2} ~ Bernoulli(0.5)
+        end
+    end
+end
+model = @ppl MurderMystery begin
+    function mystery()
+        let aliceDunnit ~ Bernoulli(0.3),
+            withGun ~ (aliceDunnit == 1 ? Bernoulli(0.03) : Bernoulli(0.8))
+            (aliceDunnit, withGun)
+        end
+    end
+    function gunFoundAtScene(gunFound)
+        let t = mystery(),
+            aliceDunnit = t[1],
+            withGun = t[2]
+
+            Dirac(withGun) ↦ 1
+            aliceDunnit
+        end
+    end
+    let posterior = gunFoundAtScene(true)
+        posterior
+    end
+end
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+retvals'W
+# 1/3, 2/3, 9/569
+
+
+model = @ppl Survey begin
+    let A ~ Categorical([0.3, 0.5, 0.2]), # yound adult old
+        S ~ Categorical([0.6, 0.4]), # M, F
+        E = if (A == 1 && S == 1) # high, uni
+            Categorical([0.75, 0.25])
+        elseif (A == 2 && S == 1)
+            Categorical([0.72, 0.28])
+        elseif (A == 3 && S == 1)
+            Categorical([0.88, 0.12])
+        elseif (A == 1 && S == 2)
+            Categorical([0.64, 0.36])
+        elseif (A == 2 && S == 2)
+            Categorical([0.7, 0.3])
+        elseif (A == 3 && S == 2)
+            Categorical([0.9, 0.1])
+        end ↦ 1,
+        R ~ if (E == 1) # small, big
+            Categorical([0.25, 0.75])
+        else
+            Categorical([0.2, 0.8])
+        end,
+        O ~ if (E == 1) # emp, self
+            Categorical([0.96, 0.04])
+        else
+            Categorical([0.92, 0.08])
+        end,
+        T ~ if (O == 1 && R == 1) # car, train, other
+            Categorical([0.48, 0.42, 0.1])
+        elseif (O == 2 && R == 1)
+            Categorical([0.56, 0.36, 0.08])
+        elseif (O == 1 && R == 2)
+            Categorical([0.58, 0.24, 0.18])
+        elseif (O == 2 && R == 2)
+            Categorical([0.7, 0.21, 0.09])
+        end
+        
+        (S, T)
+    end
+end
+
+@time traces, retvals, lps = likelihood_weighting(model, 10_000_000);
+W = exp.(lps);
+
+# S = M, T = car | E = high 
+sum(W[[r == (1., 1.) for r in retvals]])
+0.3427

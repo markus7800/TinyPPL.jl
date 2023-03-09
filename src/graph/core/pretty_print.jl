@@ -23,7 +23,7 @@ function human_readable_symbol(spgm, sym, j)
     return haskey(spgm.Y, sym) ? Symbol("y"*lpad(j,n,"0")) : Symbol("x"*lpad(j,n,"0"))
 end
 
-function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol}, sym_to_ix)
+function to_human_readable(spgm::SymbolicPGM, E::Union{Expr, Symbol, Real}, sym_to_ix)
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
 
     new_spgm = EmptyPGM()

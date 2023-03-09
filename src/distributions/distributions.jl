@@ -3,7 +3,7 @@ module Distributions
 
     import Distributions: Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
     import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
-
+    import Distributions: Dirac
 
     include("../utils/utils.jl")
     include("logpdf_grad.jl")
@@ -15,4 +15,5 @@ module Distributions
 
     export Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
     export Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
+    export Dirac
 end
