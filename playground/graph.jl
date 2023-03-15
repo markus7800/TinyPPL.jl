@@ -386,6 +386,7 @@ W = exp.(lps);
 retvals'W
 # 1/3, 2/3, 9/569
 
+using TinyPPL.Graph
 
 model = @ppl Survey begin
     let A ~ Categorical([0.3, 0.5, 0.2]), # yound adult old
@@ -433,3 +434,5 @@ W = exp.(lps);
 # S = M, T = car | E = high 
 sum(W[[r == (1., 1.) for r in retvals]])
 0.3427
+
+variable_nodes, factor_nodes = get_factor_graph(model)

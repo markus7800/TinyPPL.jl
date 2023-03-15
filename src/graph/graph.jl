@@ -8,4 +8,5 @@ module Graph
     include("HMC.jl")
     include("compiled/LW.jl")
     include("compiled/LMH.jl")
+    include("exact/factor_graph.jl")
 end
