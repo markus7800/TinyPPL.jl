@@ -62,7 +62,7 @@ function get_cpd(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
         end
         d = dist(X)
         for (i, x) in enumerate(node.support)
-            cpd[assignment..., i] = pdf(d, x)
+            cpd[assignment..., i] = pdf(d, x) # TODO: replace with logpdf
         end
     end
 
@@ -90,5 +90,54 @@ function get_factor_graph(pgm::PGM)
     return variable_nodes, factor_nodes
 end
 
+function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
+    a_size = size(A.table)
+    b_size = size(B.table)
+    common_vars = A.neighbours ∩ B.neighbours
+    if isempty(common_vars)
+        table = Array{Float64}(undef, a_size..., b_size...)
+        # reshaping shares data
+        a_table = reshape(A.table, a_size..., ones(Int, length(b_size))...)
+        b_table = reshape(B.table, ones(Int, length(a_size))..., b_size...)
+        broadcast!(*, table, a_table, b_table)
+        vars = vcat(A.neighbours, B.neighbours)
+        return FactorNode(vars, table)
+    else
+        a_common_mask = [v in common_vars for v in A.neighbours]
+        b_common_mask = [v in common_vars for v in B.neighbours]
+        a_common_ixs = collect(1:length(A.neighbours))[a_common_mask]
+        b_common_ixs = collect(1:length(B.neighbours))[b_common_mask]
+        common_vars = A.neighbours[a_common_mask] # sorted
+        b_ordering = [findfirst(av -> av==bv, common_vars) for bv in B.neighbours[b_common_mask]]
+        @assert length(b_ordering) == length(common_vars)
+        @assert common_vars[b_ordering] == B.neighbours[b_common_mask]
+        @assert a_size[a_common_ixs] == b_size[b_common_ixs]
 
-export get_factor_graph
+        # println("common_vars: ", common_vars)
+        # println("b_common_vars: ", B.neighbours[b_common_mask])
+
+        a_size_uncommon = a_size[.!a_common_mask]
+        b_size_uncommon = b_size[.!b_common_mask]
+        
+        table = Array{Float64}(undef,  a_size[a_common_ixs]..., a_size_uncommon..., b_size_uncommon...)
+
+        a_selection = Any[Colon() for _ in 1: length(a_size)]
+        b_selection = Any[Colon() for _ in 1: length(b_size)]
+        table_colon = fill(Colon(), length(a_size_uncommon) + length(b_size_uncommon))
+        for common_ixs in Iterators.product([1:length(v.support) for v in common_vars]...)
+            a_selection[a_common_mask] .= common_ixs
+            b_selection[b_common_mask] .= common_ixs[b_ordering]
+            
+            a_table = reshape(view(A.table, a_selection...), a_size_uncommon..., ones(Int, length(b_size_uncommon))...)
+            b_table = reshape(view(B.table, b_selection...), ones(Int, length(a_size_uncommon))..., b_size_uncommon...)
+
+            broadcast!(*, view(table, common_ixs..., table_colon...), a_table, b_table)
+        end
+
+        vars = vcat(common_vars, A.neighbours[.!a_common_mask], B.neighbours[.!b_common_mask])
+        # println("vars: ", vars)
+        return FactorNode(vars, table)
+    end
+end
+
+export get_factor_graph, factor_product

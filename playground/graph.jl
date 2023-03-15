@@ -391,7 +391,7 @@ using TinyPPL.Graph
 model = @ppl Survey begin
     let A ~ Categorical([0.3, 0.5, 0.2]), # yound adult old
         S ~ Categorical([0.6, 0.4]), # M, F
-        E = if (A == 1 && S == 1) # high, uni
+        E ~ if (A == 1 && S == 1) # high, uni
             Categorical([0.75, 0.25])
         elseif (A == 2 && S == 1)
             Categorical([0.72, 0.28])
@@ -403,7 +403,7 @@ model = @ppl Survey begin
             Categorical([0.7, 0.3])
         elseif (A == 3 && S == 2)
             Categorical([0.9, 0.1])
-        end ↦ 1,
+        end,# ↦ 1,
         R ~ if (E == 1) # small, big
             Categorical([0.25, 0.75])
         else
@@ -436,3 +436,45 @@ sum(W[[r == (1., 1.) for r in retvals]])
 0.3427
 
 variable_nodes, factor_nodes = get_factor_graph(model)
+for v in variable_nodes
+    println(v, ": ", v.support)
+end
+for v in factor_nodes
+    println(v, ": ")
+    # display(v.table)
+end
+
+factor_nodes[4].table[1,2,:]
+
+A = rand(2,3)
+B = rand(4,3)
+
+A2 = reshape(A, 2, 3, 1, 1)
+A2[1,1,1,1] = 7800
+
+C = reshape(A, 2, 3, 1, 1) .* reshape(B, 1, 1, 4, 3)
+
+C[1,2,4,3] == A[1,2] * B[4,3]
+
+
+f1 = factor_nodes[3]
+f2 = factor_nodes[5]
+
+f = factor_product(f1, f2)
+sum(f1.table)
+sum(f2.table)
+sum(f.table)
+
+f = reduce(factor_product, factor_nodes)
+
+
+f1.table[1,1,2] * f2.table[2,1,1]
+f.table[2,1,1,1,1]
+
+all(f1.table .^2 .≈ f.table)
+f1.table
+
+a = ["a", "b", "c"]
+b = ["b", "c", "a"]
+ord = [findfirst(x->x==v, a) for v in b]
+a[ord]
