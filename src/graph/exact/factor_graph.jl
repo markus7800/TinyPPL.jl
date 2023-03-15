@@ -20,7 +20,7 @@ mutable struct FactorNode <: FactorGraphNode
     table::Array{Float64}
 end
 function Base.show(io::IO, factor_node::FactorNode)
-    print(io, "FactorNode(", [n.variable for n in factor_node.neighbours], ")")
+    print(io, "FactorNode(", [n.address for n in factor_node.neighbours], ")")
     # println(io, factor_node.table)
 end
 
@@ -48,12 +48,19 @@ function get_support(pgm::PGM, node::VariableNode, parents::Vector{VariableNode}
     return sort(collect(supp))
 end
 
-# conditional probability distribution p(x|parents(x))
-function get_cpd(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
+# conditional probability distribution p(x|parents(x)) for unobserved
+# likelihood p(y=e|parents(y)) for observed
+function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
     X = Vector{Float64}(undef, pgm.n_variables)
     dist = pgm.distributions[node.variable]
+    obs = pgm.observed_values[node.variable]
+    is_observed = !isnothing(obs)
 
-    cpd = zeros([length(parent.support) for parent in parents]..., length(node.support))
+    if !is_observed
+        cpd = zeros([length(parent.support) for parent in parents]..., length(node.support))
+    else
+        cpd = zeros([length(parent.support) for parent in parents]...)
+    end
     
     for assignment in Iterators.product([1:length(parent.support) for parent in parents]...)
         # if parents is empty, assigment = () and next loop is skipped
@@ -61,8 +68,13 @@ function get_cpd(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
             X[parent.variable] = parent.support[i]
         end
         d = dist(X)
-        for (i, x) in enumerate(node.support)
-            cpd[assignment..., i] = pdf(d, x) # TODO: replace with logpdf
+        if !is_observed
+            for (i, x) in enumerate(node.support)
+                cpd[assignment..., i] = pdf(d, x) # TODO: replace with logpdf
+            end
+        else
+            x = obs(X)
+            cpd[assignment...] = pdf(d, x) # TODO: replace with logpdf
         end
     end
 
@@ -75,12 +87,14 @@ function get_factor_graph(pgm::PGM)
     for v in pgm.topological_order
         parents = VariableNode[variable_nodes[x] for (x,y) in pgm.edges if y == v]
         node = variable_nodes[v]
-        node.support = get_support(pgm, node, parents)
-        if !isnothing(pgm.observed_values[v])
-            continue
+        if isnothing(pgm.observed_values[v])
+            node.support = get_support(pgm, node, parents)
+            cpd = get_table(pgm, node, parents)
+            factor_node = FactorNode(push!(parents, node), cpd)
+        else
+            cpd = get_table(pgm, node, parents)
+            factor_node = FactorNode(parents, cpd)
         end
-        cpd = get_cpd(pgm, node, parents)
-        factor_node = FactorNode(push!(parents, node), cpd)
         for neighbour in factor_node.neighbours
             push!(neighbour.neighbours, factor_node)
         end
