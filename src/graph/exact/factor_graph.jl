@@ -1,5 +1,5 @@
 
-import Distributions: support, pdf
+import Distributions: support, logpdf
 
 abstract type FactorGraphNode end 
 mutable struct VariableNode <: FactorGraphNode
@@ -70,11 +70,11 @@ function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
         d = dist(X)
         if !is_observed
             for (i, x) in enumerate(node.support)
-                cpd[assignment..., i] = pdf(d, x) # TODO: replace with logpdf
+                cpd[assignment..., i] = logpdf(d, x)
             end
         else
             x = obs(X)
-            cpd[assignment...] = pdf(d, x) # TODO: replace with logpdf
+            cpd[assignment...] = logpdf(d, x)
         end
     end
 
@@ -100,6 +100,7 @@ function get_factor_graph(pgm::PGM)
         end
         push!(factor_nodes, factor_node)
     end
+    # likelihood of observed variables is integrated in factor
     variable_nodes = variable_nodes[isnothing.(pgm.observed_values)]
     return variable_nodes, factor_nodes
 end
@@ -113,7 +114,7 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
         # reshaping shares data
         a_table = reshape(A.table, a_size..., ones(Int, length(b_size))...)
         b_table = reshape(B.table, ones(Int, length(a_size))..., b_size...)
-        broadcast!(*, table, a_table, b_table)
+        broadcast!(+, table, a_table, b_table)
         vars = vcat(A.neighbours, B.neighbours)
         return FactorNode(vars, table)
     else
@@ -126,9 +127,6 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
         @assert length(b_ordering) == length(common_vars)
         @assert common_vars[b_ordering] == B.neighbours[b_common_mask]
         @assert a_size[a_common_ixs] == b_size[b_common_ixs]
-
-        # println("common_vars: ", common_vars)
-        # println("b_common_vars: ", B.neighbours[b_common_mask])
 
         a_size_uncommon = a_size[.!a_common_mask]
         b_size_uncommon = b_size[.!b_common_mask]
@@ -145,13 +143,21 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
             a_table = reshape(view(A.table, a_selection...), a_size_uncommon..., ones(Int, length(b_size_uncommon))...)
             b_table = reshape(view(B.table, b_selection...), ones(Int, length(a_size_uncommon))..., b_size_uncommon...)
 
-            broadcast!(*, view(table, common_ixs..., table_colon...), a_table, b_table)
+            broadcast!(+, view(table, common_ixs..., table_colon...), a_table, b_table)
         end
-
+        
         vars = vcat(common_vars, A.neighbours[.!a_common_mask], B.neighbours[.!b_common_mask])
-        # println("vars: ", vars)
         return FactorNode(vars, table)
     end
 end
 
-export get_factor_graph, factor_product
+function factor_sum(factor_node::FactorNode, dims::Vector{Int})
+    vars = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
+    size = [length(v.support) for v in vars]
+    # table = mapslices(sum, factor_node.table, dims=dims)
+    table = mapslices(logsumexp, factor_node.table, dims=dims)
+    table = reshape(table, size...)
+    return FactorNode(vars, table)
+end
+
+export get_factor_graph, factor_product, factor_sum

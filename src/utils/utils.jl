@@ -10,6 +10,8 @@ function normalise(logprobs::Vector{Float64})
     return logprobs .- l
 end
 
+logsumexp(x) = log(sum(exp, x .- maximum(x))) + maximum(x)
+
 
 function reverse_pair(pair::Pair)
     new_pair = pair[1]

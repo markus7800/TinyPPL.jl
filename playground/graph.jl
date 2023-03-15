@@ -435,13 +435,14 @@ W = exp.(lps);
 sum(W[[r == (1., 1.) for r in retvals]])
 0.3427
 
-variable_nodes, factor_nodes = get_factor_graph(model)
+variable_nodes, factor_nodes = get_factor_graph(model);
 for v in variable_nodes
     println(v, ": ", v.support)
 end
 for v in factor_nodes
     println(v, ": ")
-    # display(v.table)
+    display(v.table)
+    @assert all(v.table .< 0)
 end
 
 factor_nodes[4].table[1,2,:]
@@ -465,10 +466,17 @@ sum(f1.table)
 sum(f2.table)
 sum(f.table)
 
-f = reduce(factor_product, factor_nodes)
+@time f = reduce(factor_product, factor_nodes)
+sum(exp, f.table)
+
 sum(f.table)
 P = f.table / sum(f.table);
-sum(P, dims=[2,3,4])
+sum(P, dims=[1])
+
+g = factor_sum(f, [2,3,4])
+P = exp.(g.table) / sum(exp, g.table)
+
+mapslices(sum, P, dims=[2,3,4])
 
 f1.table[1,1,2] * f2.table[2,1,1]
 f.table[2,1,1,1,1]
@@ -480,3 +488,8 @@ a = ["a", "b", "c"]
 b = ["b", "c", "a"]
 ord = [findfirst(x->x==v, a) for v in b]
 a[ord]
+
+
+logsumexp(x) = log(sum(exp, x .- maximum(x))) + maximum(x)
+lp = log.(P)
+exp.(mapslices(logsumexp, lp, dims=[2,3,4]))
