@@ -386,6 +386,9 @@ W = exp.(lps);
 retvals'W
 # 1/3, 2/3, 9/569
 
+@time f = variable_elimination(model)
+evaluate_return_expr_over_factor(model, f)
+
 using TinyPPL.Graph
 
 model = @ppl Survey begin
@@ -441,9 +444,14 @@ for v in variable_nodes
 end
 for v in factor_nodes
     println(v, ": ")
-    display(v.table)
     @assert all(v.table .< 0)
 end
+
+@time f = variable_elimination(model)
+sum(exp, f.table)
+exp.(f.table) / sum(exp, f.table)
+
+evaluate_return_expr_over_factor(model, f)
 
 factor_nodes[4].table[1,2,:]
 

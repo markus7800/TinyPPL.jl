@@ -9,4 +9,5 @@ module Graph
     include("compiled/LW.jl")
     include("compiled/LMH.jl")
     include("exact/factor_graph.jl")
+    include("exact/variable_elemination.jl")
 end

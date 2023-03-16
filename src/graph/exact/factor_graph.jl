@@ -145,19 +145,25 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
 
             broadcast!(+, view(table, common_ixs..., table_colon...), a_table, b_table)
         end
-        
+
         vars = vcat(common_vars, A.neighbours[.!a_common_mask], B.neighbours[.!b_common_mask])
         return FactorNode(vars, table)
     end
 end
 
 function factor_sum(factor_node::FactorNode, dims::Vector{Int})
-    vars = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
-    size = [length(v.support) for v in vars]
+    variables = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
+    size = [length(v.support) for v in variables]
     # table = mapslices(sum, factor_node.table, dims=dims)
     table = mapslices(logsumexp, factor_node.table, dims=dims)
     table = reshape(table, size...)
-    return FactorNode(vars, table)
+    return FactorNode(variables, table)
+end
+
+
+function factor_sum(factor_node::FactorNode, variables::Vector{VariableNode})
+    dims = [i for (i,v) in enumerate(factor_node.neighbours) if v in variables]
+    factor_sum(factor_node, dims)
 end
 
 export get_factor_graph, factor_product, factor_sum
