@@ -11,8 +11,9 @@ mutable struct VariableNode <: FactorGraphNode
         return new(variable, address, FactorGraphNode[], Float64[])
     end
 end
+export VariableNode
 function Base.show(io::IO, variable_node::VariableNode)
-    print(io, "VariableNode(", variable_node.variable, ", ", variable_node.address, ")")
+    print(io, "VariableNode(", variable_node.variable, ", ", variable_node.address, "; ", length(variable_node.support), ")")
 end
  
 mutable struct FactorNode <: FactorGraphNode
@@ -20,9 +21,10 @@ mutable struct FactorNode <: FactorGraphNode
     table::Array{Float64}
 end
 function Base.show(io::IO, factor_node::FactorNode)
-    print(io, "FactorNode(", [n.address for n in factor_node.neighbours], ")")
+    print(io, "FactorNode(", [n.address for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
     # println(io, factor_node.table)
 end
+export FactorNode
 
 function get_support(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
     X = Vector{Float64}(undef, pgm.n_variables)
@@ -164,7 +166,18 @@ end
 
 function factor_sum(factor_node::FactorNode, variables::Vector{VariableNode})
     dims = [i for (i,v) in enumerate(factor_node.neighbours) if v in variables]
-    factor_sum(factor_node, dims)
+    return factor_sum(factor_node, dims)
 end
 
-export get_factor_graph, factor_product, factor_sum
+function factor_permute_vars(factor_node::FactorNode, perm::Vector{Int})
+    return FactorNode(factor_node.neighbours[perm], permutedims(factor_node.table, perm))
+end
+
+function factor_permute_vars(factor_node::FactorNode, variables::Vector{VariableNode})
+    perm = Int[findfirst(av -> av==v, factor_node.neighbours) for v in variables]
+    permuted_factor = factor_permute_vars(factor_node, perm)
+    @assert variables == permuted_factor.neighbours
+    return permuted_factor
+end
+
+export get_factor_graph, factor_product, factor_sum, factor_permute_vars

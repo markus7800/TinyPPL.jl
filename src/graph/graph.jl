@@ -10,4 +10,5 @@ module Graph
     include("compiled/LMH.jl")
     include("exact/factor_graph.jl")
     include("exact/variable_elemination.jl")
+    include("exact/belief_propagation.jl")
 end

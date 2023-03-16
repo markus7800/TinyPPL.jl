@@ -447,6 +447,15 @@ for v in factor_nodes
     @assert all(v.table .< 0)
 end
 
+root = BeliefNode(variable_nodes[5], nothing);
+print_belief_tree(root)
+
+return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
+root = BeliefNode(return_factor, nothing)
+print_belief_tree(root)
+
+f, evidence = belief_propagation(model)
+
 @time f = variable_elimination(model)
 sum(exp, f.table)
 exp.(f.table) / sum(exp, f.table)
@@ -501,3 +510,11 @@ a[ord]
 logsumexp(x) = log(sum(exp, x .- maximum(x))) + maximum(x)
 lp = log.(P)
 exp.(mapslices(logsumexp, lp, dims=[2,3,4]))
+
+factor_node = factor_nodes[4]
+factor_permute_vars(factor_node, [2, 3, 1])
+
+variables = [variable_nodes[3], variable_nodes[5], variable_nodes[2]]
+perm = Int[findfirst(av -> av==v, factor_node.neighbours) for v in variables]
+
+factor_permute_vars(factor_nodes[4], variables)
