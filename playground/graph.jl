@@ -393,20 +393,6 @@ model = @ppl Survey begin
         (S, T)
     end
 end
-#=
-FactorNode([:T, :S]; (3, 2))
-  VariableNode(6, T; 3)
-    FactorNode([:O, :R, :T]; (2, 2, 3))
-      VariableNode(3, O; 2)
-        FactorNode([:O]; (2,))
-      VariableNode(4, R; 2)
-        FactorNode([:R]; (2,))
-  VariableNode(5, S; 2)
-    FactorNode([:S]; (2,))
-    FactorNode([:S, :A]; (2, 3))
-      VariableNode(1, A; 3)
-        FactorNode([:A]; (3,))
-=#
 
 include("../examples/exact_inference/evidence_2.jl")
 model = get_model()
@@ -435,7 +421,12 @@ return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
 root = BeliefNode(return_factor, nothing)
 print_belief_tree(root)
 
-f, evidence = belief_propagation(model)
+f, evidence = belief_propagation(model, false)
+f, marginals = belief_propagation(model, true)
+
+for (_, address, table) in marginals
+    println(address, ": ", exp.(table) / sum(exp, table), " ",  sum(exp, table))
+end
 
 @time f = variable_elimination(model)
 sum(exp, f.table)

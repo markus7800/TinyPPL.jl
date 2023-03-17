@@ -11,7 +11,7 @@ mutable struct BeliefNode
     parent::Union{Nothing,BeliefNode}
     children::Vector{BeliefNode}
     message_sent::Bool
-    belief::Array{Float64}
+    messages::Vector{Vector{Float64}}
     function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,FactorGraphNode})
         children = [BeliefNode(n, node) for n in node.neighbours if n != parent]
         @assert length(children) + !isnothing(parent) == length(node.neighbours)
@@ -21,8 +21,9 @@ mutable struct BeliefNode
         else
             belief = zeros(size(node.table))
         end
+        messages = Vector{Vector{Float64}}(undef, length(children) + !isnothing(parent))
         # parent variable is set in child constructor
-        this = new(node, nothing, children, message_sent, belief)
+        this = new(node, nothing, children, message_sent, messages)
         for child in children
             child.parent = this
         end
@@ -93,16 +94,49 @@ end
 
 export is_tree
 
-function belief_propagation(pgm::PGM)
+function get_variable_nodes(belief_node::BeliefNode, variable_nodes=BeliefNode[])
+    if belief_node.node isa VariableNode
+        push!(variable_nodes, belief_node)
+    end
+    for child in belief_node.children
+        get_variable_nodes(child, variable_nodes)
+    end
+    return variable_nodes
+end
+
+function belief_propagation(pgm::PGM, all_marginals=false)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
     return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
     @assert is_tree(variable_nodes, factor_nodes)
 
     root = BeliefNode(return_factor, nothing)
     # print_belief_tree(root)
-    evidence = exp(forward(root)[1])
-    return_factor.table .= root.belief
-    return return_factor, evidence
+    res = forward(root)
+    evidence = exp(res[1])
+
+    
+    # [root.children].node are root.node.neighbours
+    table = zeros([length(message) for message in root.messages]...)
+    shape = ones(Int, length(root.children))
+    for (i, message) in enumerate(root.messages)
+        shape[i] = length(message)
+        table .+= reshape(message, shape...) # broadcasting -> factor product
+        shape[i] = 1
+    end
+    return_factor.table .= table
+
+    if all_marginals
+        backward(root)
+        variable_nodes = get_variable_nodes(root)
+        marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
+        for (i,v) in enumerate(variable_nodes)
+            varnode = v.node
+            marginals[i] = (varnode.variable, varnode.address, v.belief)
+        end
+        return return_factor, marginals
+    else
+        return return_factor, evidence
+    end
 end
 
 # message from children to parents, start at leaves
@@ -126,9 +160,11 @@ function forward(belief_node::BeliefNode)
         message = zeros(length(belief_node.node.support))
         for (i, child) in enumerate(belief_node.children)
             # child is FactorNode
-            message .+= forward(child) # no broadcasting
+            child_message = forward(child)
+            belief_node.messages[i] = child_message
+            message .+= child_message # no broadcasting
         end
-        belief_node.belief .= message
+        # belief_node.belief .= message
     else
         # message to VariableNode
         message_table = zeros([length(child.node.support) for child in belief_node.children]...)
@@ -136,6 +172,7 @@ function forward(belief_node::BeliefNode)
         for (i, child) in enumerate(belief_node.children)
             # child is VariableNode
             child_message = forward(child)
+            belief_node.messages[i] = child_message
             @assert length(child_message) == length(child.node.support)
             shape[i] = length(child_message)
             message_table .+= reshape(child_message, shape...) # broadcasting -> factor product
@@ -148,7 +185,7 @@ function forward(belief_node::BeliefNode)
         @assert prod(size(message_factor.table)) == prod(size(belief_node.node.table))
         @assert length(message_factor.neighbours ∩ belief_node.node.neighbours) == length(belief_node.node.neighbours)
 
-        belief_node.belief .= factor_permute_vars(message_factor, belief_node.node.neighbours).table
+        # belief_node.belief .= factor_permute_vars(message_factor, belief_node.node.neighbours).table
         message_factor = factor_sum(message_factor, child_variables)
         if !isnothing(belief_node.parent)
             @assert length(size(message_factor.table)) == 1 # should sum out all variables except parent
@@ -161,8 +198,37 @@ function forward(belief_node::BeliefNode)
     return message
 end
 
-# function backward(node::BeliefNode)
-# simply add backward messages to belief with factor product
+# function backward(belief_node::BeliefNode)
+#     @assert belief_node.message_sent
+#     # belief_node has received all messages from children !and! parent
+
+#     for child in belief_node.children
+#         if belief_node.node isa VariableNode
+#             # message to FactorNode children
+#             message_factor = FactorNode([belief_node.node], belief_node.belief)
+#             child_belief_factor = FactorNode(child.node.neighbours, child.belief)
+#             message_factor = factor_product(child_belief_factor, message_factor)
+#             @assert length(message_factor.neighbours ∩ child.node.neighbours) == length(child.node.neighbours)
+#             @assert prod(size(message_factor.table)) == prod(size(child.node.table))
+#             # @assert message_factor.neighbours == child.node.neighbours
+
+#             child.belief .= factor_permute_vars(message_factor, child.node.neighbours).table
+#         else
+#             # message to VariableNode children
+#             message_factor = FactorNode(belief_node.node.neighbours, belief_node.belief)
+#             sum_out_vars = VariableNode[c.node for c in belief_node.children if c != child]
+#             if !isnothing(belief_node.parent)
+#                 push!(sum_out_vars, belief_node.parent.node)
+#             end
+#             message_factor = factor_sum(message_factor, sum_out_vars)
+#             @assert length(size(message_factor.table)) == 1 # should sum out all variables except child
+#             @assert length(message_factor.table) == length(child.node.support)
+#             message = message_factor.table
+
+#             child.belief .+= message # is a VariableNode
+#         end
+#         backward(child)
+#     end
 # end
 
 export BeliefNode, print_belief_tree, add_return_factor!, belief_propagation

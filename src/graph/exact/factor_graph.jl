@@ -147,9 +147,8 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
 
             broadcast!(+, view(table, common_ixs..., table_colon...), a_table, b_table)
         end
-        # table[table .== Inf] .= -Inf # logpdf -Inf * -Inf = -Inf corresponds to pdf 0 * 0 = 0
         @assert all(table .<= 0)
-        
+
         vars = vcat(common_vars, A.neighbours[.!a_common_mask], B.neighbours[.!b_common_mask])
         return FactorNode(vars, table)
     end
