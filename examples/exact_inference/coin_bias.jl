@@ -1,7 +1,5 @@
-using TinyPPL.Graph
-
-function inference(show_results=false)
-    model = @ppl CoinBias begin
+function get_model()
+    @ppl CoinBias begin
         function and(x, y)
             min(x, y)
         end
@@ -12,18 +10,8 @@ function inference(show_results=false)
             firstCoin
         end
     end
-
-    f = variable_elimination(model)
-    retvals = evaluate_return_expr_over_factor(model, f)
-
-    if show_results
-        display(retvals)
-        println("Reference: ", "P(0)=", 2/3, " P(1)=", 1/3)
-    end
 end
 
-inference(true)
-
-using BenchmarkTools
-b = @benchmark inference()
-show(Base.stdout, MIME"text/plain"(), b)
+function print_reference_solution()
+    println("Reference: ", "P(0)=", 2/3, " P(1)=", 1/3)
+end

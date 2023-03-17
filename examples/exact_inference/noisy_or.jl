@@ -1,7 +1,5 @@
-using TinyPPL.Graph
-
-function inference(show_results=false)
-    model = @ppl NoisyOr begin
+function get_model()
+    @ppl NoisyOr begin
         function or(x, y)
             max(x, y)
         end
@@ -19,18 +17,8 @@ function inference(show_results=false)
             n3
         end
     end
-
-    f = variable_elimination(model)
-    retvals = evaluate_return_expr_over_factor(model, f)
-
-    if show_results
-        display(retvals)
-        println("Reference: ",  "P(0)=", 29693/160000, " P(1)=", 130307/160000,)
-    end
 end
 
-inference(true)
-
-using BenchmarkTools
-b = @benchmark inference()
-show(Base.stdout, MIME"text/plain"(), b)
+function print_reference_solution()
+    println("Reference: ",  "P(0)=", 29693/160000, " P(1)=", 130307/160000)
+end

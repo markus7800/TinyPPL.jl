@@ -1,7 +1,5 @@
-using TinyPPL.Graph
-
-function inference(show_results=false)
-    model = @ppl MurderMystery begin
+function get_model()
+    @ppl MurderMystery begin
         function mystery()
             let aliceDunnit ~ Bernoulli(0.3),
                 withGun ~ (aliceDunnit == 1 ? Bernoulli(0.03) : Bernoulli(0.8))
@@ -21,19 +19,8 @@ function inference(show_results=false)
             posterior
         end
     end
-
-    f = variable_elimination(model)
-    retvals = evaluate_return_expr_over_factor(model, f)
-
-    if show_results
-        display(retvals)
-        println("Reference: ", "P(0)=", 1-9/569, " P(1)=", 9/569)
-    end
 end
 
-inference(true)
-
-using BenchmarkTools
-b = @benchmark inference()
-show(Base.stdout, MIME"text/plain"(), b)
-
+function print_reference_solution()
+    println("Reference: ", "P(0)=", 1-9/569, " P(1)=", 9/569)
+end
