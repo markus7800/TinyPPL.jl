@@ -85,16 +85,11 @@ function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, fa
 end
 
 function variable_elimination(pgm::PGM, factor_nodes::Vector{FactorNode}, elimination_order::Vector{VariableNode})
-    # println("elimination_order: ", elimination_order)
 
     factor_nodes = Set(factor_nodes)    
-    # println("factor_nodes: ", factor_nodes)
-    # println()
 
     for node in elimination_order
-        # println("node to eliminate: ", node)
         neighbour_factors = Set(f for f in factor_nodes if node in f.neighbours)
-        # println("neighbour_factors: ", neighbour_factors)
 
         for f in neighbour_factors
             delete!(factor_nodes, f)
@@ -102,11 +97,7 @@ function variable_elimination(pgm::PGM, factor_nodes::Vector{FactorNode}, elimin
 
         psi = reduce(factor_product, neighbour_factors)
         tau = factor_sum(psi, [node])
-        # println("tau: ", tau)
         push!(factor_nodes, tau)
-
-        # println("factor_nodes: ", factor_nodes)
-        # println()
     end
 
     return reduce(factor_product, factor_nodes)

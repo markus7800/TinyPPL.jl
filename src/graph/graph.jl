@@ -11,4 +11,5 @@ module Graph
     include("exact/factor_graph.jl")
     include("exact/variable_elemination.jl")
     include("exact/belief_propagation.jl")
+    include("exact/junction_tree.jl")
 end

@@ -394,6 +394,22 @@ model = @ppl Survey begin
     end
 end
 
+
+model = @ppl Student begin
+    let C ~ Categorical([1.]),
+        D ~ Categorical(C==1. ? 1. : 1.),
+        I ~ Categorical([1.]),
+        G ~ Categorical(D==1. && I==1. ? 1. : 1.),
+        L ~ Categorical(G==1. ? 1. : 1.),
+        S ~ Categorical(I==1. ? 1. : 1.),
+        J ~ Categorical(L==1. && S==1. ? 1. : 1.),
+        H ~ Categorical(G==1. && J==1. ? 1. : 1.)
+
+        J
+    end
+end
+
+
 include("../examples/exact_inference/evidence_2.jl")
 model = get_model()
 is_tree(model)
@@ -434,59 +450,13 @@ exp.(f.table) / sum(exp, f.table)
 
 evaluate_return_expr_over_factor(model, f)
 
-factor_nodes[4].table[1,2,:]
+f = get_junction_tree(model)
 
-A = rand(2,3)
-B = rand(4,3)
+variable_nodes, factor_nodes = get_factor_graph(model);
+elimination_order = variable_nodes[[1, 2, 5, 4, 3, 8, 7]]
 
-A2 = reshape(A, 2, 3, 1, 1)
-A2[1,1,1,1] = 7800
+cluster_nodes = get_junction_tree(model, variable_nodes, factor_nodes, elimination_order)
 
-C = reshape(A, 2, 3, 1, 1) .* reshape(B, 1, 1, 4, 3)
-
-C[1,2,4,3] == A[1,2] * B[4,3]
-
-
-f1 = factor_nodes[3]
-f2 = factor_nodes[5]
-
-f = factor_product(f1, f2)
-sum(f1.table)
-sum(f2.table)
-sum(f.table)
-
-@time f = reduce(factor_product, factor_nodes)
-sum(exp, f.table)
-
-sum(f.table)
-P = f.table / sum(f.table);
-sum(P, dims=[1])
-
-g = factor_sum(f, [2,3,4])
-P = exp.(g.table) / sum(exp, g.table)
-
-mapslices(sum, P, dims=[2,3,4])
-
-f1.table[1,1,2] * f2.table[2,1,1]
-f.table[2,1,1,1,1]
-
-all(f1.table .^2 .≈ f.table)
-f1.table
-
-a = ["a", "b", "c"]
-b = ["b", "c", "a"]
-ord = [findfirst(x->x==v, a) for v in b]
-a[ord]
-
-
-logsumexp(x) = log(sum(exp, x .- maximum(x))) + maximum(x)
-lp = log.(P)
-exp.(mapslices(logsumexp, lp, dims=[2,3,4]))
-
-factor_node = factor_nodes[4]
-factor_permute_vars(factor_node, [2, 3, 1])
-
-variables = [variable_nodes[3], variable_nodes[5], variable_nodes[2]]
-perm = Int[findfirst(av -> av==v, factor_node.neighbours) for v in variables]
-
-factor_permute_vars(factor_nodes[4], variables)
+for cluster_node in cluster_nodes
+    println(cluster_node, " ", cluster_node.neighbours, " ", cluster_node.factors)
+end
