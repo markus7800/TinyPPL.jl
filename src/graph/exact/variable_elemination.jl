@@ -129,8 +129,14 @@ function evaluate_return_expr_over_factor(pgm::PGM, factor::FactorNode)
         prob = exp(factor.table[indices...]) / Z
         result[indices...] = (retval, prob)
     end
+    result = reshape(result, :)
+    values = Dict(val => 0. for (val, prob) in result)
+    for (val, prob) in result
+        values[val] = values[val] + prob
+    end
+    simplified_result = sort([(val, prob) for (val, prob) in values])
 
-    return result
+    return simplified_result
 end
 
 export evaluate_return_expr_over_factor

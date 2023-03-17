@@ -21,7 +21,7 @@ mutable struct BeliefNode
         else
             belief = zeros(size(node.table))
         end
-        # parent variable is set in parent constructor
+        # parent variable is set in child constructor
         this = new(node, nothing, children, message_sent, belief)
         for child in children
             child.parent = this
@@ -52,11 +52,54 @@ function add_return_factor!(pgm::PGM, variable_nodes::Vector{VariableNode}, fact
     return return_factor
 end
 
+function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
+
+    function is_cycle(node, visited, parent, tab="")
+        visited[node] = true
+
+        for neighbour in node.neighbours
+            if visited[neighbour] == false
+                if is_cycle(neighbour, visited, node, tab*"  ")
+                    return true
+                end
+            elseif neighbour != parent
+                return true
+            end
+        end
+
+        return false
+    end
+    
+    visited = Dict(v => false for v in vcat(variable_nodes, factor_nodes))
+    if is_cycle(factor_nodes[end], visited, nothing)
+        return false
+    end
+
+    for (_, b) in visited
+        if !b
+            # not connected
+            return false
+        end
+    end
+
+    return true
+end
+
+function is_tree(pgm::PGM)
+    variable_nodes, factor_nodes = get_factor_graph(pgm)
+    return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
+    return is_tree(variable_nodes, factor_nodes)
+end
+
+export is_tree
+
 function belief_propagation(pgm::PGM)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
     return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
+    @assert is_tree(variable_nodes, factor_nodes)
+
     root = BeliefNode(return_factor, nothing)
-    print_belief_tree(root)
+    # print_belief_tree(root)
     evidence = exp(forward(root)[1])
     return_factor.table .= root.belief
     return return_factor, evidence
@@ -83,9 +126,9 @@ function forward(belief_node::BeliefNode)
         message = zeros(length(belief_node.node.support))
         for (i, child) in enumerate(belief_node.children)
             # child is FactorNode
-            message .+= forward(child)
+            message .+= forward(child) # no broadcasting
         end
-        belief_node.belief .+= message
+        belief_node.belief .= message
     else
         # message to VariableNode
         message_table = zeros([length(child.node.support) for child in belief_node.children]...)
@@ -95,24 +138,23 @@ function forward(belief_node::BeliefNode)
             child_message = forward(child)
             @assert length(child_message) == length(child.node.support)
             shape[i] = length(child_message)
-            message_table .+= reshape(child_message, shape...) # broadcasting
+            message_table .+= reshape(child_message, shape...) # broadcasting -> factor product
             shape[i] = 1
         end
         child_variables = [child.node for child in belief_node.children]
         message_factor = FactorNode(child_variables, message_table)
-        println("belief node: ", belief_node.node)
-        println("message_factor 1: ", message_factor)
-        message_factor = factor_product(belief_node.node, message_factor) # left argument dictates order of common nodes
-        println("message_factor 2: ", message_factor)
+
+        message_factor = factor_product(belief_node.node, message_factor)
         @assert prod(size(message_factor.table)) == prod(size(belief_node.node.table))
         @assert length(message_factor.neighbours ∩ belief_node.node.neighbours) == length(belief_node.node.neighbours)
-        println("belief: ", size(belief_node.belief))
-        belief_node.belief .+= factor_permute_vars(message_factor, belief_node.node.neighbours).table
+
+        belief_node.belief .= factor_permute_vars(message_factor, belief_node.node.neighbours).table
         message_factor = factor_sum(message_factor, child_variables)
         if !isnothing(belief_node.parent)
-            @assert length(size(message_factor.table)) == 1 # should factor out all variables except parent
+            @assert length(size(message_factor.table)) == 1 # should sum out all variables except parent
             @assert length(message_factor.table) == length(belief_node.parent.node.support)
         end
+
         message = message_factor.table
     end
 
@@ -120,7 +162,7 @@ function forward(belief_node::BeliefNode)
 end
 
 # function backward(node::BeliefNode)
-# simply add backward messages to belief?
+# simply add backward messages to belief with factor product
 # end
 
 export BeliefNode, print_belief_tree, add_return_factor!, belief_propagation

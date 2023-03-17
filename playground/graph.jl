@@ -344,43 +344,6 @@ lw = compile_likelihood_weighting(model, static_observes=true)
 @time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000, static_observes=true); # 1.2s
 
 
-model = @ppl Evidence begin
-    let evidence ~ Bernoulli(0.5)
-        if evidence == 1
-            {:coin} ~ Bernoulli(0.5) ↦ 1
-        end
-        evidence
-    end
-end
-model = @ppl Evidence2 begin
-    let evidence ~ Bernoulli(0.5)
-        if evidence == 1
-            {:coin1} ~ Bernoulli(0.5) ↦ 1
-        else
-            {:coin2} ~ Bernoulli(0.5)
-        end
-    end
-end
-model = @ppl MurderMystery begin
-    function mystery()
-        let aliceDunnit ~ Bernoulli(0.3),
-            withGun ~ (aliceDunnit == 1 ? Bernoulli(0.03) : Bernoulli(0.8))
-            (aliceDunnit, withGun)
-        end
-    end
-    function gunFoundAtScene(gunFound)
-        let t = mystery(),
-            aliceDunnit = t[1],
-            withGun = t[2]
-
-            Dirac(withGun) ↦ 1
-            aliceDunnit
-        end
-    end
-    let posterior = gunFoundAtScene(true)
-        posterior
-    end
-end
 @time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
 W = exp.(lps);
 retvals'W
@@ -430,6 +393,24 @@ model = @ppl Survey begin
         (S, T)
     end
 end
+#=
+FactorNode([:T, :S]; (3, 2))
+  VariableNode(6, T; 3)
+    FactorNode([:O, :R, :T]; (2, 2, 3))
+      VariableNode(3, O; 2)
+        FactorNode([:O]; (2,))
+      VariableNode(4, R; 2)
+        FactorNode([:R]; (2,))
+  VariableNode(5, S; 2)
+    FactorNode([:S]; (2,))
+    FactorNode([:S, :A]; (2, 3))
+      VariableNode(1, A; 3)
+        FactorNode([:A]; (3,))
+=#
+
+include("../examples/exact_inference/evidence_2.jl")
+model = get_model()
+is_tree(model)
 
 @time traces, retvals, lps = likelihood_weighting(model, 10_000_000);
 W = exp.(lps);
@@ -440,11 +421,11 @@ sum(W[[r == (1., 1.) for r in retvals]])
 
 variable_nodes, factor_nodes = get_factor_graph(model);
 for v in variable_nodes
-    println(v, ": ", v.support)
+    println(v, ": ", v.support)#, ", ", v.neighbours)
 end
 for v in factor_nodes
     println(v, ": ")
-    @assert all(v.table .< 0)
+    @assert all(v.table .<= 0)
 end
 
 root = BeliefNode(variable_nodes[5], nothing);
