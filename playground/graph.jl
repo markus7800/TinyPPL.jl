@@ -422,10 +422,10 @@ root = BeliefNode(return_factor, nothing)
 print_belief_tree(root)
 
 f, evidence = belief_propagation(model, false)
-f, marginals = belief_propagation(model, true)
+f, evidence, marginals = belief_propagation(model, true)
 
 for (_, address, table) in marginals
-    println(address, ": ", exp.(table) / sum(exp, table), " ",  sum(exp, table))
+    println(address, ": ", table / sum(table), " ",  sum(table))
 end
 
 @time f = variable_elimination(model)

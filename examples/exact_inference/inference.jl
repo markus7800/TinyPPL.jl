@@ -9,7 +9,7 @@ function inference(show_results=false; algo=:VE)
     if algo == :VE
         f = variable_elimination(model)
     else
-        f = belief_propagation(model)
+        f, _ = belief_propagation(model)
     end
     retvals = evaluate_return_expr_over_factor(model, f)
 
