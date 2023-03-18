@@ -156,6 +156,27 @@ function forward(node::ClusterNode)::FactorNode
     return message
 end
 
+function backward(node::ClusterNode)
+    for (i, neighbour) in enumerate(node.neighbours)
+        neighbour == node.parent && continue
+        
+        # could be made more efficient if we multiply every message
+        # and divide out child message
+        message = node.potential
+        index_in_child = 0
+        for (j, n) in enumerate(node.neighbours)
+            if n == neighbour
+                index_in_child = j
+                continue
+            end
+            message = factor_product(message, node.messages[j])
+        end
+        neighbour.messages[index_in_child] = factor_sum(message, setdiff(node.cluster, neighbour.cluster))
+
+        backward(neighbour)
+    end
+end
+
 function junction_tree_message_passing(pgm::PGM, junction_tree::Vector{ClusterNode}, root_factor::FactorNode, all_marginals::Bool)
     root = junction_tree[findfirst(x -> isnothing(x.parent), junction_tree)]
     @assert root_factor in root.factors
@@ -164,23 +185,39 @@ function junction_tree_message_passing(pgm::PGM, junction_tree::Vector{ClusterNo
     res = forward(root)
     evidence = exp(res.table[1])
 
+    return_factor = reduce(factor_product, root.messages, init=root.potential)
+    return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
 
     if all_marginals
-        # backward(root)
-        # variable_nodes = get_variable_nodes(root)
-        # marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
-        # for (i,v) in enumerate(variable_nodes)
-        #     varnode = v.node
-        #     table = exp.(sum(v.messages))
-        #     marginals[i] = (varnode.variable, varnode.address, table)
-        # end
+        backward(root)
 
-        # return_factor.table .= table
+        variable_nodes = Dict{VariableNode, ClusterNode}()
+        for cluster_node in junction_tree
+            for variable in cluster_node.cluster
+                if !haskey(variable_nodes, variable)
+                    variable_nodes[variable] = cluster_node
+                else
+                    other_cluster_node = variable_nodes[variable]
+                    if length(other_cluster_node.cluster) > length(cluster_node.cluster)
+                        variable_nodes[variable] = cluster_node
+                    end
+                end
+            end
+        end
+        
+        marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
+        cached_factors = Dict{ClusterNode, FactorNode}()
+        for (i,(v,cluster_node)) in enumerate(variable_nodes)
+            factor = get!(cached_factors, cluster_node, reduce(factor_product, cluster_node.messages, init=cluster_node.potential))
+            factor = factor_sum(factor, setdiff(factor.neighbours, [v]))
 
-        # return return_factor, evidence, marginals
+            table = exp.(factor.table)
+            table /= sum(table)
+            marginals[i] = (v.variable, v.address, table)
+        end
+
+        return return_factor, evidence, marginals
     else
-        return_factor = reduce(factor_product, root.messages, init=root.potential)
-        return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
 
         return return_factor, evidence
     end

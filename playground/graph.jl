@@ -440,9 +440,9 @@ print_belief_tree(root)
 f, evidence = belief_propagation(model, false)
 f, evidence, marginals = belief_propagation(model, true)
 
-for (_, address, table) in marginals
-    println(address, ": ", table / sum(table), " ",  sum(table))
-end
+# for (_, address, table) in marginals
+#     println(address, ": ", table / sum(table), " ",  sum(table))
+# end
 
 @time f = variable_elimination(model)
 sum(exp, f.table)
@@ -452,6 +452,10 @@ evaluate_return_expr_over_factor(model, f)
 
 junction_tree, root_factor = get_junction_tree(model)
 f, evidence = junction_tree_message_passing(model)
+return_factor, evidence, marginals = junction_tree_message_passing(model, true)
+for (_, address, table) in marginals
+    println(address, ": ", table)
+end
 
 variable_nodes, factor_nodes = get_factor_graph(model)
 return_factor = add_return_factor!(model, variable_nodes, factor_nodes)

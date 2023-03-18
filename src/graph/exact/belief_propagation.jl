@@ -124,6 +124,7 @@ function belief_propagation(pgm::PGM, all_marginals=false)
         for (i,v) in enumerate(variable_nodes)
             varnode = v.node
             table = exp.(sum(v.messages))
+            table /= sum(table)
             marginals[i] = (varnode.variable, varnode.address, table)
         end
 
