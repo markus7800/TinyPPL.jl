@@ -410,7 +410,7 @@ model = @ppl Student begin
 end
 
 
-include("../examples/exact_inference/evidence_2.jl")
+include("../examples/exact_inference/burglary.jl")
 model = get_model()
 is_tree(model)
 
@@ -450,13 +450,17 @@ exp.(f.table) / sum(exp, f.table)
 
 evaluate_return_expr_over_factor(model, f)
 
-f = get_junction_tree(model)
+junction_tree = get_junction_tree(model)
+junction_tree_message_passing(model)
 
-variable_nodes, factor_nodes = get_factor_graph(model);
-elimination_order = variable_nodes[[1, 2, 5, 4, 3, 8, 7]]
+variable_nodes, factor_nodes = get_factor_graph(model)
+return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
+elimination_order = variable_nodes[[1, 2, 5, 4, 3, 8, 7, 6]]
 
-cluster_nodes = get_junction_tree(model, variable_nodes, factor_nodes, elimination_order)
+junction_tree = get_junction_tree(factor_nodes, elimination_order, return_factor)
 
-for cluster_node in cluster_nodes
+junction_tree_message_passing(model, junction_tree)
+
+for cluster_node in junction_tree
     println(cluster_node, " ", cluster_node.neighbours, " ", cluster_node.factors)
 end

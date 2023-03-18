@@ -1,11 +1,4 @@
 
-
-struct Message
-    from::FactorGraphNode
-    to::FactorGraphNode
-    table::Array{Float64}
-end
-
 mutable struct BeliefNode
     node::FactorGraphNode
     parent::Union{Nothing,BeliefNode}
