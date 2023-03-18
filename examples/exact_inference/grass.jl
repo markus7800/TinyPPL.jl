@@ -9,8 +9,8 @@ function get_model()
         let cloudy ~ Bernoulli(0.5),
             rain ~ Bernoulli(cloudy == 1 ? 0.8 : 0.2),
             sprinkler ~ Bernoulli(cloudy == 1 ? 0.1 : 0.5),
-            temp1 ~ Bernoulli(0.7),
-            wetRoof = and(temp1, rain),
+            #temp1 ~ Bernoulli(0.7),
+            #wetRoof = and(temp1, rain),
             temp2 ~ Bernoulli(0.9),
             temp3 ~ Bernoulli(0.9),
             wetGrass = or(and(temp2, rain), and(temp3, sprinkler))

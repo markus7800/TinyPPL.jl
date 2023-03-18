@@ -154,6 +154,20 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
     end
 end
 
+# A / B
+function factor_division(A::FactorNode, B::FactorNode)::FactorGraphNode
+    a_size = size(A.table)
+    b_size = size(B.table)
+    @assert B.neighbours ⊆ A.neighbours
+
+    B = factor_permute_vars(B, [v for v in A.neighbours if v in B.neighbours]) # same factor, but variables are in order of A
+    b_table = reshape(B.table, size(B.table)..., ones(Int, length(a_size) - length(b_size))...)
+    table = A.table .- b_table # -Inf - -Inf = -Inf <-> 0/0 = 0
+    @assert all(table .<= 0)
+    
+    return FactorNode(A.neighbours, table)
+end
+
 function factor_sum(factor_node::FactorNode, dims::Vector{Int})
     variables = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
     size = [length(v.support) for v in variables]

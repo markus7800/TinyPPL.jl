@@ -157,21 +157,20 @@ function forward(node::ClusterNode)::FactorNode
 end
 
 function backward(node::ClusterNode)
+    message = reduce(factor_product, node.messages, init=node.potential)
     for (i, neighbour) in enumerate(node.neighbours)
         neighbour == node.parent && continue
         
-        # could be made more efficient if we multiply every message
-        # and divide out child message
-        message = node.potential
-        index_in_child = 0
-        for (j, n) in enumerate(node.neighbours)
-            if n == neighbour
-                index_in_child = j
-                continue
-            end
-            message = factor_product(message, node.messages[j])
-        end
-        neighbour.messages[index_in_child] = factor_sum(message, setdiff(node.cluster, neighbour.cluster))
+        # message = node.potential
+        # for (j, n) in enumerate(node.neighbours)
+        #     n == neighbour && continue
+        #     message = factor_product(message, node.messages[j])
+        # end
+
+        child_message = factor_division(message, node.messages[i])
+
+        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours))
+        neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward(neighbour)
     end

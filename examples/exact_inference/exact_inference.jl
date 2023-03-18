@@ -8,8 +8,10 @@ function inference(show_results=false; algo=:VE)
 
     if algo == :VE
         f = variable_elimination(model)
-    else
+    elseif algo == :BP
         f, _ = belief_propagation(model)
+    elseif algo == :JT
+        f, _ = junction_tree_message_passing(model)
     end
     retvals = evaluate_return_expr_over_factor(model, f)
 
@@ -19,12 +21,17 @@ function inference(show_results=false; algo=:VE)
 end
 model = get_model()
 
-@info "Variable Elimation"
+@info "Variable Elimination"
 inference(true,algo=:VE)
 print_reference_solution()
 
 # b = @benchmark inference(algo=:VE)
 # show(Base.stdout, MIME"text/plain"(), b)
+
+
+@info "Junction Tree Message Passing"
+inference(true,algo=:JT)
+print_reference_solution()
 
 if is_tree(model)
     @info "Belief Propagation"
