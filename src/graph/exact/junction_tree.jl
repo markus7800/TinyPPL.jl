@@ -12,13 +12,25 @@ mutable struct ClusterNode
     neighbours::Set{ClusterNode}
     factors::Set{FactorNode}
     parent::Union{ClusterNode, Nothing}
-    messages::Vector{Array{Float64}}
+    messages::Vector{FactorNode}
+    potential::FactorNode
     function ClusterNode(cluster::Vector{VariableNode})
-        return new(cluster, Set{ClusterNode}(), Set{FactorNode}(), nothing, Vector{Array{Float64}}())
+        potential = FactorNode(cluster, zeros([length(v.support) for v in cluster]...))
+        return new(cluster, Set{ClusterNode}(), Set{FactorNode}(), nothing, Vector{FactorNode}(), potential)
     end
 end
 function Base.show(io::IO, cluster_node::ClusterNode)
     print(io, "ClusterNode(", [node.address for node in cluster_node.cluster], ")")
+end
+
+function make_directed(node::ClusterNode, parent::Union{ClusterNode, Nothing})
+    node.parent = parent
+    for neighbour in node.neighbours
+        if neighbour == parent
+            continue
+        end
+        make_directed(neighbour, node)
+    end
 end
 
 function get_junction_tree(factor_nodes::Vector{FactorNode}, elimination_order::Vector{VariableNode}, root_factor::FactorNode)
@@ -106,31 +118,74 @@ function get_junction_tree(factor_nodes::Vector{FactorNode}, elimination_order::
     root_cluster_node = junction_tree[findfirst(x -> root_factor in x.factors, junction_tree)]
     make_directed(root_cluster_node, nothing)
 
-    return junction_tree
+    return junction_tree, root_factor
 end
 
 export get_junction_tree
-function junction_tree_message_passing(pgm::PGM)
-    junction_tree = get_junction_tree(pgm)
-    junction_tree_message_passing(pgm, junction_tree)
+function junction_tree_message_passing(pgm::PGM, all_marginals::Bool=false)
+    junction_tree, root_factor = get_junction_tree(pgm)
+    junction_tree_message_passing(pgm, junction_tree, root_factor, all_marginals)
 end
 
-function make_directed(node::ClusterNode, parent::Union{ClusterNode, Nothing})
-    node.parent = parent
+
+function initialise(node::ClusterNode)
+    node.potential = reduce(factor_product, node.factors, init=node.potential)
+    node.messages = Vector{FactorNode}(undef, length(node.neighbours))
     for neighbour in node.neighbours
-        if neighbour == parent
-            continue
-        end
-        make_directed(neighbour, node)
+        neighbour == node.parent && continue
+        initialise(neighbour)
     end
 end
 
-function junction_tree_message_passing(pgm::PGM, junction_tree::Vector{ClusterNode})
+function forward(node::ClusterNode)::FactorNode
+    message = node.potential
+    for (i, neighbour) in enumerate(node.neighbours)
+        neighbour == node.parent && continue
+        child_message = forward(neighbour)
+        node.messages[i] = child_message
+        message = factor_product(message, child_message)
+    end
+
+    if !isnothing(node.parent)
+        message = factor_sum(message, setdiff(node.cluster, node.parent.cluster))
+    else
+        # only at root, computes evidence
+        message = factor_sum(message, node.cluster)
+    end
+
+    return message
+end
+
+function junction_tree_message_passing(pgm::PGM, junction_tree::Vector{ClusterNode}, root_factor::FactorNode, all_marginals::Bool)
     root = junction_tree[findfirst(x -> isnothing(x.parent), junction_tree)]
-    println(root)
-    # for cluster_node in junction_tree
-    #     println(cluster_node, ": ", cluster_node.neighbours, " - parent: ", cluster_node.parent)
-    # end
+    @assert root_factor in root.factors
+    initialise(root)
+
+    res = forward(root)
+    evidence = exp(res.table[1])
+
+
+    if all_marginals
+        # backward(root)
+        # variable_nodes = get_variable_nodes(root)
+        # marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
+        # for (i,v) in enumerate(variable_nodes)
+        #     varnode = v.node
+        #     table = exp.(sum(v.messages))
+        #     marginals[i] = (varnode.variable, varnode.address, table)
+        # end
+
+        # return_factor.table .= table
+
+        # return return_factor, evidence, marginals
+    else
+        return_factor = reduce(factor_product, root.messages, init=root.potential)
+        return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
+
+        return return_factor, evidence
+    end
+
+    return evidence
 end
 
 export junction_tree_message_passing

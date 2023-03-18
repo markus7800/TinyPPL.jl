@@ -450,17 +450,26 @@ exp.(f.table) / sum(exp, f.table)
 
 evaluate_return_expr_over_factor(model, f)
 
-junction_tree = get_junction_tree(model)
-junction_tree_message_passing(model)
+junction_tree, root_factor = get_junction_tree(model)
+f, evidence = junction_tree_message_passing(model)
 
 variable_nodes, factor_nodes = get_factor_graph(model)
 return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
 elimination_order = variable_nodes[[1, 2, 5, 4, 3, 8, 7, 6]]
 
-junction_tree = get_junction_tree(factor_nodes, elimination_order, return_factor)
+junction_tree, root_factor = get_junction_tree(factor_nodes, elimination_order, return_factor)
 
 junction_tree_message_passing(model, junction_tree)
 
 for cluster_node in junction_tree
     println(cluster_node, " ", cluster_node.neighbours, " ", cluster_node.factors)
 end
+
+
+# println("a_size[a_common_ixs]: ", a_size[a_common_ixs])
+# println("b_size[b_common_ixs]: ", b_size[b_common_ixs])
+# println("b_size[b_common_ixs[b_ordering]]: ", b_size[b_common_ixs[b_ordering]])
+# println("b_ordering: ", b_ordering)
+# println("common_vars: ", common_vars)
+# println("A.neighbours: ", A.neighbours)
+# println("B.neighbours: ", B.neighbours)

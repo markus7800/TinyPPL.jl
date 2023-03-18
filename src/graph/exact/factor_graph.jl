@@ -128,7 +128,7 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
         b_ordering = [findfirst(av -> av==bv, common_vars) for bv in B.neighbours[b_common_mask]]
         @assert length(b_ordering) == length(common_vars)
         @assert common_vars[b_ordering] == B.neighbours[b_common_mask]
-        @assert a_size[a_common_ixs] == b_size[b_common_ixs]
+        @assert a_size[a_common_ixs[b_ordering]] == b_size[b_common_ixs]
 
         a_size_uncommon = a_size[.!a_common_mask]
         b_size_uncommon = b_size[.!b_common_mask]
