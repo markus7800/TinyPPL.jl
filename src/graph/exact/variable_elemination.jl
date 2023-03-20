@@ -32,12 +32,12 @@ end
 function get_undirected_edge(x::Int, y::Int)::UndirectedEdge
     return UndirectedEdge(min(x,y), max(x,y))
 end
-function min_fill(node::Int, undirected_graph::Set{UndirectedEdge}, node_to_var::Dict{Int, VariableNode}, weighted::Bool=true)::Int
-    adjacent_edges = [edge for edge in undirected_graph if edge.x == node || edge.y == node]
-    neighbours = [edge.x == node ? edge.y : edge.x for edge in adjacent_edges]
-
+function min_fill(node::Int, undirected_graph::Set{UndirectedEdge}, node_to_var::Dict{Int, VariableNode}, node_to_neighbours::Dict{Int,Set{Int}}, weighted::Bool=true)::Int
+    if !haskey(node_to_neighbours, node)
+        return 0
+    end
+    neighbours = node_to_neighbours[node]
     cost = 0
-
     added_edges = Set{UndirectedEdge}()
     for x in neighbours, y in neighbours
         x == y && continue
@@ -54,17 +54,51 @@ function min_fill(node::Int, undirected_graph::Set{UndirectedEdge}, node_to_var:
 
     return cost
 end
+function min_neighbour(node::Int, node_to_neighbours::Dict{Int,Set{Int}})
+    if !haskey(node_to_neighbours, node)
+        return 0
+    end
+    return length(node_to_neighbours[node])
+end
 
-function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})::Vector{VariableNode}
+function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, cost::Symbol=:WeightedMinFill)::Vector{VariableNode}
+
     nodes = Set(node for node in 1:pgm.n_variables if !(node in marginal_variables) && isnothing(pgm.observed_values[node]))
+    
     undirected_graph = Set(get_undirected_edge(x,y) for (x,y) in pgm.edges if (x in nodes) && (y in nodes))
+    if cost == :MinNeighbours
+        # moralize
+        for node in nodes
+            parents = [x for (x,y) in pgm.edges if y == node]
+            for p1 in parents, p2 in parents
+                p1 == p2 && continue
+                push!(undirected_graph, get_undirected_edge(p1,p2))
+            end
+        end
+    end
+    node_to_neighbours = Dict{Int,Set{Int}}()
+    for edge in undirected_graph
+        x_neighbours = get!(node_to_neighbours, edge.x, Set{Int}())
+        push!(x_neighbours, edge.y)
+        y_neighbours = get!(node_to_neighbours, edge.y, Set{Int}())
+        push!(y_neighbours, edge.x)
+    end
 
     node_to_var = Dict(var.variable => var for var in variable_nodes)
 
     ordering = VariableNode[]
 
-    while !isempty(nodes)
-        node = argmin(node -> min_fill(node, undirected_graph, node_to_var, true), nodes)
+    @progress for _ in 1:length(nodes)
+        if cost == :WeightedMinFill
+            node = argmin(node -> min_fill(node, undirected_graph, node_to_var, node_to_neighbours, true), nodes)
+        elseif cost == :MinFill
+            node = argmin(node -> min_fill(node, undirected_graph, node_to_var, node_to_neighbours, false), nodes)
+        elseif cost == :MinNeighbours
+            node = argmin(node -> min_neighbour(node, node_to_neighbours), nodes)
+        else
+            error("Unsupported cost $cost.")
+        end
+
         push!(ordering, node_to_var[node])
         delete!(nodes, node)
         neighbours = [edge.x == node ? edge.y : edge.x for edge in undirected_graph if edge.x == node || edge.y == node]
@@ -75,20 +109,22 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
             push!(undirected_graph, edge)
         end
     end
+    @assert isempty(nodes)
 
     return ordering
 end
+export get_elimination_order
 
 function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int})
     elimination_order = get_elimination_order(pgm, variable_nodes, marginal_variables)
-    variable_elimination(pgm, factor_nodes, elimination_order)
+    variable_elimination(factor_nodes, elimination_order)
 end
 
-function variable_elimination(pgm::PGM, factor_nodes::Vector{FactorNode}, elimination_order::Vector{VariableNode})
+function variable_elimination(factor_nodes::Vector{FactorNode}, elimination_order::Vector{VariableNode})
 
     factor_nodes = Set(factor_nodes)    
 
-    for node in elimination_order
+    @progress for node in elimination_order
         neighbour_factors = Set(f for f in factor_nodes if node in f.neighbours)
 
         for f in neighbour_factors
