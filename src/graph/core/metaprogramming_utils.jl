@@ -126,7 +126,7 @@ function substitute(var::Symbol, with, in_expr)
             binding = in_expr.args[1]
             @assert binding.head == :(=)
             if binding.args[1] == var
-                # redefinition of variable, do not substitute
+                # redefinition of variable, do not substitute in let body
                 # however, old variable can still be in expression that we assign
                 return Expr(:let,
                     Expr(:(=), var, substitute(var, with, binding.args[2])),
@@ -136,6 +136,30 @@ function substitute(var::Symbol, with, in_expr)
         return Expr(in_expr.head, [substitute(var, with, arg) for arg in in_expr.args]...)
     elseif in_expr isa Symbol && in_expr == var
         return with
+    else
+        return in_expr
+    end
+end
+function substitute(var_to_expr::Dict{Symbol,Any}, in_expr)
+    if in_expr isa Expr
+        if in_expr.head == :let 
+            binding = in_expr.args[1]
+            @assert binding.head == :(=)
+            if haskey(var_to_expr, binding.args[1])
+                var = binding.args[1]
+                with_expr = var_to_expr[var]
+                # redefinition of variable, do not substitute in let body
+                # however, old variable can still be in expression that we assign
+                new_binding = substitute(var_to_expr, binding.args[2])
+                delete!(var_to_expr, var)
+                new_body = substitute(var_to_expr, in_expr.args[2])
+                var_to_expr[var] = with_expr
+                return Expr(:let, Expr(:(=), var, new_binding), new_body)
+            end
+        end
+        return Expr(in_expr.head, [substitute(var_to_expr, arg) for arg in in_expr.args]...)
+    elseif in_expr isa Symbol && haskey(var_to_expr, in_expr)
+        return var_to_expr[in_expr]
     else
         return in_expr
     end
@@ -182,4 +206,14 @@ function simplify_if(expr)
     else
         return expr
     end
+end
+
+
+function repeatf_symbolic(n, f, x)
+    v = gensym(:v)
+    block_args = [:($v = $f($x))]
+    for _ in 1:(n-1)
+        push!(block_args, :($v = $f($v)))
+    end
+    return unwrap_let(Expr(:let, Expr(:block, block_args...), Expr(:block, v)))
 end

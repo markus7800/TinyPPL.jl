@@ -49,15 +49,20 @@ include("pretty_print.jl")
     unwraps let expressions
     and transpiles to symbolic PGM, which is compiled to concrete PGM.
 =#
-macro ppl(annotation, name, foppl)
-    return ppl_macro(annotation, name, foppl)
+macro ppl(annotations, name, foppl)
+    if annotations isa Symbol
+        annotations = Set{Symbol}([annotations])
+    else
+        annotations = Set{Symbol}(annotations.args)
+    end
+    return ppl_macro(annotations, name, foppl)
 end
 
 macro ppl(name, foppl)
-    return ppl_macro(nothing, name, foppl)
+    return ppl_macro(Set{Symbol}(), name, foppl)
 end
 
-function ppl_macro(annotation, name, foppl)
+function ppl_macro(annotations, name, foppl)
     foppl = rmlines(foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
@@ -65,11 +70,11 @@ function ppl_macro(annotation, name, foppl)
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_) ? Expr(:sample, symbol, dist) : expr,  foppl);
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
     foppl = unwrap_let(foppl)
-    
+
     G, E, variable_to_address = transpile_program(foppl);
     
     # println(foppl)
-    pgm = compile_symbolic_pgm(name, G, E, variable_to_address, annotation);
+    pgm = compile_symbolic_pgm(name, G, E, variable_to_address, annotations);
 
     return pgm
 end
@@ -101,10 +106,8 @@ end
 #=
     for `j=>sym` in `ix_to_sym` replaces sym with `X[j]`
 =#
-function subtitute_for_syms(n_variables::Int, ix_to_sym::Dict{Int,Symbol}, d::Any, X::Symbol)
-    for j in 1:n_variables
-        d = substitute(ix_to_sym[j], :($X[$j]), d)
-    end
+function subtitute_for_syms(var_to_expr::Dict{Symbol,Any}, d::Any, X::Symbol)
+    d = substitute(var_to_expr, d)
     d = reduce_array_accesses(d, X)
     d = unnest_array_accesses(d, X)
     return d
@@ -161,28 +164,27 @@ end
 #=
     replaces symbols with corresponding vector entry X[j] for each distribution expression in symbolic_pgm.
 =#
-function get_symbolic_distributions(symbolic_pgm::SymbolicPGM, n_variables::Int, sym_to_ix::Dict{Symbol,Int}, X::Symbol)
-    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
+function get_symbolic_distributions(symbolic_pgm::SymbolicPGM, n_variables::Int, ix_to_sym::Dict{Int,Symbol}, var_to_expr::Dict{Symbol,Any}, X::Symbol)
     symbolic_dists = []
     for node in 1:n_variables
         sym = ix_to_sym[node]
         d = symbolic_pgm.P[sym]
-        d = subtitute_for_syms(n_variables, ix_to_sym, d, X)
+        d = subtitute_for_syms(var_to_expr, d, X)
         push!(symbolic_dists, d)
     end
     return symbolic_dists
 end
 
 function get_symbolic_distributions(pgm::PGM, X::Symbol)
-    return get_symbolic_distributions(pgm.symbolic_pgm, pgm.n_variables, pgm.sym_to_ix, X)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:pgm.n_variables)
+    return get_symbolic_distributions(pgm.symbolic_pgm, pgm.n_variables, ix_to_sym, var_to_expr, X)
 end
 
 #=
     replaces symbols with corresponding vector entry X[j] for each observed value expression in symbolic_pgm.
 =#
-function get_symbolic_observed_values(symbolic_pgm::SymbolicPGM, n_variables::Int, sym_to_ix::Dict{Symbol,Int}, X::Symbol, static_observes::Bool)
-    ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
-
+function get_symbolic_observed_values(symbolic_pgm::SymbolicPGM, n_variables::Int, ix_to_sym::Dict{Int,Symbol}, var_to_expr::Dict{Symbol,Any}, X::Symbol, static_observes::Bool)
     symbolic_observes = []
     for node in 1:n_variables
         sym = ix_to_sym[node]
@@ -190,7 +192,7 @@ function get_symbolic_observed_values(symbolic_pgm::SymbolicPGM, n_variables::In
             push!(symbolic_observes, nothing)
         else
             y = symbolic_pgm.Y[sym]
-            y = subtitute_for_syms(n_variables, ix_to_sym, y, X)
+            y = subtitute_for_syms(var_to_expr, y, X)
             if static_observes
                 y = eval(y)
             end
@@ -201,7 +203,9 @@ function get_symbolic_observed_values(symbolic_pgm::SymbolicPGM, n_variables::In
 end
 
 function get_symbolic_observed_values(pgm::PGM, X::Symbol, static_observes::Bool)
-    return get_symbolic_observed_values(pgm.symbolic_pgm, pgm.n_variables, pgm.sym_to_ix, X, static_observes)
+    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:pgm.n_variables)
+    return get_symbolic_observed_values(pgm.symbolic_pgm, pgm.n_variables, ix_to_sym, var_to_expr, X, static_observes)
 end
 
 # sort by address
@@ -303,7 +307,7 @@ function compile_symbolic_pgm(
     name::Symbol, 
     spgm::SymbolicPGM, E::Union{Expr, Symbol, Real}, 
     variable_to_address::Dict{Symbol, Any}, 
-    annotation::Union{Nothing, Symbol}
+    annotations::Set{Symbol}
     )
 
     n_variables = length(spgm.V)
@@ -318,9 +322,10 @@ function compile_symbolic_pgm(
     topolical_ordered = get_topolocial_order(n_variables, edges)
 
     X = gensym(:X)
-    symbolic_dists = get_symbolic_distributions(spgm, n_variables, sym_to_ix, X)
-    static_observes = annotation == :plated
-    symbolic_observes = get_symbolic_observed_values(spgm, n_variables, sym_to_ix, X, static_observes)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:n_variables)
+    symbolic_dists = get_symbolic_distributions(spgm, n_variables, ix_to_sym, var_to_expr, X)
+    static_observes = :plated in annotations
+    symbolic_observes = get_symbolic_observed_values(spgm, n_variables, ix_to_sym, var_to_expr, X, static_observes)
 
     distributions = Vector{Function}(undef, n_variables)
     observed_values = Vector{Union{Nothing,Function}}(undef, n_variables)
@@ -355,7 +360,7 @@ function compile_symbolic_pgm(
 
     # wrap return expression in function
     f_name = Symbol("$(name)_return")
-    new_E =  subtitute_for_syms(n_variables, ix_to_sym, deepcopy(E), X)
+    new_E =  subtitute_for_syms(var_to_expr, deepcopy(E), X)
     f = rmlines(:(
         function $f_name($X::AbstractVector{Float64})
             $new_E
@@ -364,7 +369,7 @@ function compile_symbolic_pgm(
     # display(f)
     return_expr = eval(f)
 
-    if annotation == :plated
+    if  :plated in annotations
         plate_symbols = unique([addr[1] for addr in addresses if addr isa Pair])
         println("plate_symbols: ", plate_symbols)
         plates, plated_edges = get_plates(n_variables, edges, addresses, plate_symbols)
@@ -378,15 +383,17 @@ function compile_symbolic_pgm(
     sample = get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X)
     logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, X)
 
-    # force compilation
-    X = Vector{Float64}(undef, n_variables)
-    Base.invokelatest(sample, X)
-    Base.invokelatest(return_expr, X)
-    Base.invokelatest(logpdf, X)
-    for i in 1:n_variables
-        Base.invokelatest(distributions[i], X)
-        if !isnothing(observed_values[i])
-            Base.invokelatest(observed_values[i], X)
+    if !(:uninvoked in annotations)
+        # force compilation
+        X = Vector{Float64}(undef, n_variables)
+        Base.invokelatest(sample, X)
+        Base.invokelatest(return_expr, X)
+        Base.invokelatest(logpdf, X)
+        for i in 1:n_variables
+            Base.invokelatest(distributions[i], X)
+            if !isnothing(observed_values[i])
+                Base.invokelatest(observed_values[i], X)
+            end
         end
     end
 

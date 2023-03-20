@@ -317,6 +317,13 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         else
             return EmptyPGM(), v # v has to be literal (bool, float, etc.)
         end
+    elseif expr.head == :macrocall
+        if expr.args[1] == Symbol("@iterate")
+            new_expr = repeatf_symbolic(expr.args[3:5]...)
+            return transpile(t, phi, new_expr)
+        else
+            error("Unsupported macro $(expr.args[1])")
+        end
     else
         println(expr.args)
         error("Unsupported expression $(expr.head).")

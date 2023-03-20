@@ -408,7 +408,49 @@ model = @ppl Student begin
         J
     end
 end
+model = @ppl MontyHall begin
+    let C = 1, # contestant
+        P ~ Categorical([1/3, 1/3, 1/3]), # prize
+        H ~ if P == 1. # host
+            Categorical([0, 1/2, 1/2]) # can be arbitrary
+        elseif P == 2.
+            Categorical([0, 0, 1])
+        elseif P == 3.
+            Categorical([0, 1, 0])
+        end,
+        S ~ Dirac(P != C) # should switch?
 
+        S
+    end
+end
+
+model = @ppl MontyHall begin
+    let C ~ Categorical([1/3, 1/3, 1/3]), # contestant, can be arbitrary
+        P ~ Categorical([1/3, 1/3, 1/3]), # prize
+        H ~ if C == 1. && P == 1. # host
+            Categorical([0, 1/2, 1/2]) # can be arbitrary (except 0)
+        elseif C == 2. && P == 2.
+            Categorical([1/2, 0, 1/2]) # can be arbitrary (except 0)
+        elseif C == 3. && P == 3.
+            Categorical([1/2, 1/2, 0]) # can be arbitrary (except 0)
+        elseif C == 1. && P == 2.
+            Categorical([0, 0, 1])
+        elseif C == 1. && P == 3.
+            Categorical([0, 1, 0])
+        elseif C == 2. && P == 1.
+            Categorical([0, 0, 1])
+        elseif C == 2. && P == 3.
+            Categorical([1, 0, 0])
+        elseif C == 3. && P == 1.
+            Categorical([0, 1, 0])
+        elseif C == 3. && P == 2.
+            Categorical([1, 0, 0])
+        end,
+        S ~ Dirac(P != C) # should switch?
+
+        S
+    end
+end
 
 include("../examples/exact_inference/burglary.jl")
 model = get_model()
@@ -470,10 +512,246 @@ for cluster_node in junction_tree
 end
 
 
-# println("a_size[a_common_ixs]: ", a_size[a_common_ixs])
-# println("b_size[b_common_ixs]: ", b_size[b_common_ixs])
-# println("b_size[b_common_ixs[b_ordering]]: ", b_size[b_common_ixs[b_ordering]])
-# println("b_ordering: ", b_ordering)
-# println("common_vars: ", common_vars)
-# println("A.neighbours: ", A.neighbours)
-# println("B.neighbours: ", B.neighbours)
+
+
+model = @ppl Diamond begin
+    function or(x, y)
+        max(x, y)
+    end
+    function and(x, y)
+        min(x, y)
+    end
+    function diamond(s1)
+        let route ~ Bernoulli(s1 == 1 ? 0.4 : 0.6),
+            s2 = route == 1. ? s1 : false,
+            s3 = route == 1. ? false : s1,
+            drop ~ Bernoulli(0.0001)
+
+            or(s2, and(s3, 1-drop))
+        end
+    end
+    let net1 = diamond(1.),
+        net2 = diamond(net1)
+
+        diamond(net2)
+    end
+end
+
+model = @ppl Diamond begin
+    function or(x, y)
+        max(x, y)
+    end
+    function and(x, y)
+        min(x, y)
+    end
+    function diamond(s1)
+        let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
+            s2 = route == 1. ? s1 : false,
+            s3 = route == 1. ? false : s1,
+            drop ~ Bernoulli(0.0001)
+
+            or(s2, and(s3, 1-drop))
+        end
+    end
+    let net1 ~ Dirac(diamond(1.)),
+        net2 ~ Dirac(diamond(net1)),
+        net3 ~ Dirac(diamond(net2))
+
+        net3
+    end
+end
+
+using TinyPPL.Graph
+N = 500
+# model = @ppl Diamond begin
+@time model = Graph.ppl_macro(nothing, :Diamond, :(begin
+    function or(x, y)
+        max(x, y)
+    end
+    function and(x, y)
+        min(x, y)
+    end
+    function diamond(s1)
+        let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
+            s2 = route == 1. ? s1 : false,
+            s3 = route == 1. ? false : s1,
+            drop ~ Bernoulli(0.001)
+
+            or(s2, and(s3, 1-drop))
+        end
+    end
+    function func(old_net)
+        let net ~ Dirac(diamond(old_net))
+            net
+        end
+    end
+    @iterate(1000, func, 1.)
+end));
+
+variable_nodes, factor_nodes = get_factor_graph(model);
+
+res = variable_elimination(model)
+exp.(res.table)
+sum(exp, res.table)
+
+marginal_variables = return_expr_variables(model)
+elimination_order = get_elimination_order(model, variable_nodes, marginal_variables);
+elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :MinNeighbours);
+@time variable_elimination(factor_nodes, elimination_order)
+
+return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
+return_factor.neighbours
+order = [var for var in variable_nodes if !(var in return_factor.neighbours)];
+res = variable_elimination(model, factor_nodes, order)
+
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+
+lw = compile_likelihood_weighting(model, static_observes=true)
+@time traces, retvals, lps = compiled_likelihood_weighting(model, lw, 1_000_000, static_observes=true);
+
+retvals'exp.(lps)
+
+R = 0.5
+D = 0.001
+T0 = 1.
+T(t) = t*(R + (1-D)*(1-R))
+T(T(T(T0)))
+repeatf(n, f, x...) = n > 1 ? f(repeatf(n-1, f, x...)...) : f(x...)
+repeatf(N, T, T0)
+
+
+variable_nodes, factor_nodes = get_factor_graph(model, logscale=false);
+to_net_file("/Users/markus/Documents/AQUA/diamond_$N.net", variable_nodes, factor_nodes)
+to_bif_file("/Users/markus/Documents/AQUA/diamond_$N.bif", variable_nodes, factor_nodes)
+return_expr_variables(model)
+
+
+function to_net_file(path, variable_nodes, factor_nodes)
+    open(path, "w") do io
+        println(io, "net\n{\n}")
+        for v in variable_nodes
+            println(io, "node X", v.variable)
+            println(io, "{")
+            print(io, "  states = ( ")
+            for s in v.support
+                print(io, "\"", Int(s), "\" ")
+            end
+            println(io, ");")
+            println(io, "}")
+        end
+        function print_prob_recurse(vars::Vector{VariableNode}, f::FactorNode, index=Int[])
+            if isempty(vars)
+                @assert !isempty(index)
+                print(io, "(")
+                print(io, join(f.table[index..., :], " "))
+                print(io, ")")
+            else
+                v = popfirst!(vars)
+                print(io, "(")
+                for i in 1:length(v.support)
+                    push!(index, i)
+                    print_prob_recurse(vars, f, index)
+                    pop!(index)
+                end
+                print(io, ")")
+                pushfirst!(vars, v)
+            end
+        end
+        for v in factor_nodes
+            print(io, "potential ( X", v.neighbours[end].variable)
+            if length(v.neighbours) > 1
+                print(io, " | ")
+                for n in v.neighbours[1:end-1]
+                    print(io, "X", n.variable, " ")
+                end
+                println(io, ")")
+            else
+                println(io, " )")
+            end
+            println(io, "{")
+            print(io, "  data = ")
+            if length(v.neighbours) > 1
+                print_prob_recurse(v.neighbours[1:end-1], v)
+                println(io, ";")
+            else
+                print(io, "(")
+                print(io, join(v.table, " "))
+                println(io, ");")
+            end
+            println(io, "}")
+        end
+    end
+end
+
+function to_bif_file(path, variable_nodes, factor_nodes)
+    open(path, "w") do io
+        println(io, "network unknown {\n}")
+        for v in variable_nodes
+            print(io, "variable X", v.variable)
+            println(io, " {")
+            print(io, "  type discrete [ $(length(v.support)) ] { ")
+            print(io, join(Int.(v.support), ", "))
+            println(io, " };")
+            println(io, "}")
+        end
+        function print_prob_recurse(vars::Vector{VariableNode}, f::FactorNode, index=Int[])
+            if isempty(vars)
+                @assert !isempty(index)
+                @assert length(index) == length(f.neighbours)-1
+                print(io, "  (")
+                values = map(t -> Int(t[2].support[index[t[1]]]), enumerate(f.neighbours[1:end-1]))
+                print(io, join(values, ", "))
+                print(io, ") ")
+                print(io, join(f.table[index..., :], ", "))
+                println(io, ";")
+            else
+                v = popfirst!(vars)
+                for i in 1:length(v.support)
+                    push!(index, i)
+                    print_prob_recurse(vars, f, index)
+                    pop!(index)
+                end
+                pushfirst!(vars, v)
+            end
+        end
+        for v in factor_nodes
+            print(io, "probability ( X", v.neighbours[end].variable)
+            if length(v.neighbours) > 1
+                print(io, " | ")
+                print(io, join(map(x -> "X$(x.variable)", v.neighbours[1:end-1]), ", "))
+                print(io, " )")
+            else
+                print(io, " )")
+            end
+            println(io, " {")
+            if length(v.neighbours) > 1
+                print_prob_recurse(v.neighbours[1:end-1], v)
+            else
+                print(io, "  table ")
+                print(io, join(v.table, ", "))
+                println(io, ";")
+            end
+            println(io, "}")
+        end
+    end
+end
+
+expr = Graph.rmlines(:(
+    let x = y
+        x
+    end;
+    let y = x
+        y
+    end;
+    let x = 1
+        x + y
+    end;
+    let x = 1
+        y
+        let y = y + x
+            x + y
+        end
+        y
+    end
+));
+Graph.substitute(Dict{Symbol,Any}(:y=>2), expr)
