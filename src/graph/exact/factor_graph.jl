@@ -1,5 +1,5 @@
 
-import Distributions: support, logpdf
+import Distributions: support, logpdf, pdf
 
 abstract type FactorGraphNode end 
 mutable struct VariableNode <: FactorGraphNode
@@ -52,7 +52,7 @@ end
 
 # conditional probability distribution p(x|parents(x)) for unobserved
 # likelihood p(y=e|parents(y)) for observed
-function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
+function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode}, logscale::Bool)
     X = Vector{Float64}(undef, pgm.n_variables)
     dist = pgm.distributions[node.variable]
     obs = pgm.observed_values[node.variable]
@@ -72,18 +72,18 @@ function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
         d = dist(X)
         if !is_observed
             for (i, x) in enumerate(node.support)
-                cpd[assignment..., i] = logpdf(d, x)
+                cpd[assignment..., i] = logscale ? logpdf(d, x) : pdf(d, x)
             end
         else
             x = obs(X)
-            cpd[assignment...] = logpdf(d, x)
+            cpd[assignment...] = logscale ? logpdf(d, x) : pdf(d, x)
         end
     end
 
     return cpd
 end
 
-function get_factor_graph(pgm::PGM)
+function get_factor_graph(pgm::PGM; logscale::Bool=true)
     variable_nodes = [VariableNode(i, pgm.addresses[i]) for i in 1:pgm.n_variables]
     factor_nodes = FactorNode[]
     for v in pgm.topological_order
@@ -91,10 +91,10 @@ function get_factor_graph(pgm::PGM)
         node = variable_nodes[v]
         if isnothing(pgm.observed_values[v])
             node.support = get_support(pgm, node, parents)
-            cpd = get_table(pgm, node, parents)
+            cpd = get_table(pgm, node, parents, logscale)
             factor_node = FactorNode(push!(parents, node), cpd)
         else
-            cpd = get_table(pgm, node, parents)
+            cpd = get_table(pgm, node, parents, logscale)
             factor_node = FactorNode(parents, cpd)
         end
         for neighbour in factor_node.neighbours
@@ -147,7 +147,7 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
 
             broadcast!(+, view(table, common_ixs..., table_colon...), a_table, b_table)
         end
-        @assert all(table .<= 0)
+        # @assert all(table .<= 0) table
 
         vars = vcat(common_vars, A.neighbours[.!a_common_mask], B.neighbours[.!b_common_mask])
         return FactorNode(vars, table)
@@ -164,7 +164,7 @@ function factor_division(A::FactorNode, B::FactorNode)::FactorGraphNode
     b_table = reshape(B.table, size(B.table)..., ones(Int, length(a_size) - length(b_size))...)
     table = A.table .- b_table # -Inf - -Inf = -Inf <-> 0/0 = 0
     @assert all(table .<= 0)
-    
+
     return FactorNode(A.neighbours, table)
 end
 
