@@ -408,49 +408,6 @@ model = @ppl Student begin
         J
     end
 end
-model = @ppl MontyHall begin
-    let C = 1, # contestant
-        P ~ Categorical([1/3, 1/3, 1/3]), # prize
-        H ~ if P == 1. # host
-            Categorical([0, 1/2, 1/2]) # can be arbitrary
-        elseif P == 2.
-            Categorical([0, 0, 1])
-        elseif P == 3.
-            Categorical([0, 1, 0])
-        end,
-        S ~ Dirac(P != C) # should switch?
-
-        S
-    end
-end
-
-model = @ppl MontyHall begin
-    let C ~ Categorical([1/3, 1/3, 1/3]), # contestant, can be arbitrary
-        P ~ Categorical([1/3, 1/3, 1/3]), # prize
-        H ~ if C == 1. && P == 1. # host
-            Categorical([0, 1/2, 1/2]) # can be arbitrary (except 0)
-        elseif C == 2. && P == 2.
-            Categorical([1/2, 0, 1/2]) # can be arbitrary (except 0)
-        elseif C == 3. && P == 3.
-            Categorical([1/2, 1/2, 0]) # can be arbitrary (except 0)
-        elseif C == 1. && P == 2.
-            Categorical([0, 0, 1])
-        elseif C == 1. && P == 3.
-            Categorical([0, 1, 0])
-        elseif C == 2. && P == 1.
-            Categorical([0, 0, 1])
-        elseif C == 2. && P == 3.
-            Categorical([1, 0, 0])
-        elseif C == 3. && P == 1.
-            Categorical([0, 1, 0])
-        elseif C == 3. && P == 2.
-            Categorical([1, 0, 0])
-        end,
-        S ~ Dirac(P != C) # should switch?
-
-        S
-    end
-end
 
 include("../examples/exact_inference/burglary.jl")
 model = get_model()
@@ -512,59 +469,10 @@ for cluster_node in junction_tree
 end
 
 
-
-
-model = @ppl Diamond begin
-    function or(x, y)
-        max(x, y)
-    end
-    function and(x, y)
-        min(x, y)
-    end
-    function diamond(s1)
-        let route ~ Bernoulli(s1 == 1 ? 0.4 : 0.6),
-            s2 = route == 1. ? s1 : false,
-            s3 = route == 1. ? false : s1,
-            drop ~ Bernoulli(0.0001)
-
-            or(s2, and(s3, 1-drop))
-        end
-    end
-    let net1 = diamond(1.),
-        net2 = diamond(net1)
-
-        diamond(net2)
-    end
-end
-
-model = @ppl Diamond begin
-    function or(x, y)
-        max(x, y)
-    end
-    function and(x, y)
-        min(x, y)
-    end
-    function diamond(s1)
-        let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
-            s2 = route == 1. ? s1 : false,
-            s3 = route == 1. ? false : s1,
-            drop ~ Bernoulli(0.0001)
-
-            or(s2, and(s3, 1-drop))
-        end
-    end
-    let net1 ~ Dirac(diamond(1.)),
-        net2 ~ Dirac(diamond(net1)),
-        net3 ~ Dirac(diamond(net2))
-
-        net3
-    end
-end
-
 using TinyPPL.Graph
-N = 500
+N = 1000
 # model = @ppl Diamond begin
-@time model = Graph.ppl_macro(nothing, :Diamond, :(begin
+@time model = Graph.ppl_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
     function or(x, y)
         max(x, y)
     end
@@ -588,16 +496,30 @@ N = 500
     @iterate(1000, func, 1.)
 end));
 
-variable_nodes, factor_nodes = get_factor_graph(model);
+# HELLO WORLD, I AM MARKUS
+# [8,5,12,12,15, 23,15,18,12,4, 9, 1,13, 13,1,18,11,21,19] 
 
-res = variable_elimination(model)
+(exp.(W) / sum(exp, W))[1]
+(exp.(res.table) / sum(exp, res.table))[1]
+sum(abs, (exp.(W) / sum(exp, W)) .- exp.(res.table) / sum(exp, res.table))
+
+@time variable_nodes, factor_nodes = get_factor_graph(model);
+var_to_node = Dict(v.variable => v for v in variable_nodes);
+
+@time res, evidence = belief_propagation(model)
+
+@time res = variable_elimination(model, order=:Topological)
 exp.(res.table)
 sum(exp, res.table)
+exp.(res.table) / sum(exp, res.table)
 
 marginal_variables = return_expr_variables(model)
-elimination_order = get_elimination_order(model, variable_nodes, marginal_variables);
+elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :WeightedMinFill);
+elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :Topological);
 elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :MinNeighbours);
 @time variable_elimination(factor_nodes, elimination_order)
+
+elimination_order = [var_to_node[v] for v in model.topological_order if !(v in marginal_variables)];
 
 return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
 return_factor.neighbours
@@ -611,14 +533,17 @@ lw = compile_likelihood_weighting(model, static_observes=true)
 
 retvals'exp.(lps)
 
-R = 0.5
-D = 0.001
-T0 = 1.
-T(t) = t*(R + (1-D)*(1-R))
-T(T(T(T0)))
-repeatf(n, f, x...) = n > 1 ? f(repeatf(n-1, f, x...)...) : f(x...)
-repeatf(N, T, T0)
-
+p_d = 0.001
+p_f = 0.6
+function T(P)
+    t = (P[2,2] + P[2,1]) * (1 - p_d) + P[1,2]
+    return [
+        (P[1,1] + (P[2,2] + P[2,1]) * p_d) (1-p_f)*t;
+        (p_f * t) 0
+    ]
+end
+T(T(T([0 0; 1 0])))
+repeatf(500, T, [0 0; 1 0])
 
 variable_nodes, factor_nodes = get_factor_graph(model, logscale=false);
 to_net_file("/Users/markus/Documents/AQUA/diamond_$N.net", variable_nodes, factor_nodes)
