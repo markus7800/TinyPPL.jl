@@ -16,13 +16,13 @@ function parse_marginal_variables(pgm::PGM, addresses::Vector{Any})::Vector{Int}
     return Int[addr_to_variable[addr] for addr in addresses]
 end
 
-function variable_elimination(pgm::PGM; marginal_variables=nothing)
+function variable_elimination(pgm::PGM; marginal_variables=nothing, order::Symbol=:Topological)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
-    variable_elimination(pgm, variable_nodes, factor_nodes, parse_marginal_variables(pgm, marginal_variables))
+    variable_elimination(pgm, variable_nodes, factor_nodes, parse_marginal_variables(pgm, marginal_variables), order)
 end
 
-function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}; marginal_variables=nothing)
-    variable_elimination(pgm, variable_nodes, factor_nodes, parse_marginal_variables(pgm, marginal_variables))
+function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}; marginal_variables=nothing, order::Symbol=:Topological)
+    variable_elimination(pgm, variable_nodes, factor_nodes, parse_marginal_variables(pgm, marginal_variables), order)
 end
 
 struct UndirectedEdge
@@ -61,12 +61,17 @@ function min_neighbour(node::Int, node_to_neighbours::Dict{Int,Set{Int}})
     return length(node_to_neighbours[node])
 end
 
-function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, cost::Symbol=:WeightedMinFill)::Vector{VariableNode}
+function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)::Vector{VariableNode}
+    if order == :Topological
+        var_to_node = Dict(v.variable => v for v in variable_nodes);
+        ordering = [var_to_node[v] for v in pgm.topological_order if !(v in marginal_variables)]
+        return ordering
+    end
 
     nodes = Set(node for node in 1:pgm.n_variables if !(node in marginal_variables) && isnothing(pgm.observed_values[node]))
     
     undirected_graph = Set(get_undirected_edge(x,y) for (x,y) in pgm.edges if (x in nodes) && (y in nodes))
-    if cost == :MinNeighbours
+    if order == :MinNeighbours
         # moralize
         for node in nodes
             parents = [x for (x,y) in pgm.edges if y == node]
@@ -89,11 +94,11 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
     ordering = VariableNode[]
 
     @progress for _ in 1:length(nodes)
-        if cost == :WeightedMinFill
+        if order == :WeightedMinFill
             node = argmin(node -> min_fill(node, undirected_graph, node_to_var, node_to_neighbours, true), nodes)
-        elseif cost == :MinFill
+        elseif order == :MinFill
             node = argmin(node -> min_fill(node, undirected_graph, node_to_var, node_to_neighbours, false), nodes)
-        elseif cost == :MinNeighbours
+        elseif order == :MinNeighbours
             node = argmin(node -> min_neighbour(node, node_to_neighbours), nodes)
         else
             error("Unsupported cost $cost.")
@@ -115,8 +120,8 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
 end
 export get_elimination_order
 
-function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int})
-    elimination_order = get_elimination_order(pgm, variable_nodes, marginal_variables)
+function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int}, order::Symbol)
+    elimination_order = get_elimination_order(pgm, variable_nodes, marginal_variables, order)
     variable_elimination(factor_nodes, elimination_order)
 end
 
