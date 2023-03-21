@@ -3,7 +3,7 @@
 function get_junction_tree(pgm::PGM)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
     return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
-    elimination_order = get_elimination_order(pgm, variable_nodes, Int[])
+    elimination_order = get_elimination_order(pgm, variable_nodes, Int[], :Topological)
     return get_junction_tree(factor_nodes, elimination_order, return_factor)
 end
 

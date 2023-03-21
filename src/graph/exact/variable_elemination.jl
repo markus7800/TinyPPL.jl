@@ -64,7 +64,7 @@ end
 function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)::Vector{VariableNode}
     if order == :Topological
         var_to_node = Dict(v.variable => v for v in variable_nodes);
-        ordering = [var_to_node[v] for v in pgm.topological_order if !(v in marginal_variables)]
+        ordering = [var_to_node[v] for v in pgm.topological_order if !(v in marginal_variables) && haskey(var_to_node, v)]
         return ordering
     end
 

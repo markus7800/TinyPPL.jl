@@ -48,7 +48,8 @@ function compile_likelihood_weighting(pgm::PGM; static_observes::Bool=false)
         end
     end
     ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
-    new_E = subtitute_for_syms(pgm.n_variables, ix_to_sym, deepcopy(pgm.symbolic_return_expr), X)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:pgm.n_variables)
+    new_E = subtitute_for_syms(var_to_expr, deepcopy(pgm.symbolic_return_expr), X)
 
     return_value = gensym(:return)
     push!(block_args, :($return_value = $new_E))
