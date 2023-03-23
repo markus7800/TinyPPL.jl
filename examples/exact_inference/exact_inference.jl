@@ -57,8 +57,7 @@ function test_ve_order(model)
     for order in [:Topological, :MinNeighbours, :MinFill, :WeightedMinFill]
         @info order
         elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, order)
-        variable_elimination(factor_nodes, elimination_order)
-        b = @benchmark variable_elimination($factor_nodes, $elimination_order)
+        b = @benchmark variable_elimination($variable_nodes, $elimination_order)
         show(Base.stdout, MIME"text/plain"(), b)
         println()
     end

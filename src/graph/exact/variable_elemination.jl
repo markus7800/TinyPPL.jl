@@ -122,25 +122,32 @@ export get_elimination_order
 
 function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int}, order::Symbol)
     elimination_order = get_elimination_order(pgm, variable_nodes, marginal_variables, order)
-    variable_elimination(factor_nodes, elimination_order)
+    variable_elimination(variable_nodes, elimination_order)
 end
 
-function variable_elimination(factor_nodes::Vector{FactorNode}, elimination_order::Vector{VariableNode})
-
-    factor_nodes = Set(factor_nodes)    
+function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode})
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
 
     @progress for node in elimination_order
-        neighbour_factors = Set(f for f in factor_nodes if node in f.neighbours)
-
-        for f in neighbour_factors
-            delete!(factor_nodes, f)
-        end
+        neighbour_factors = factor_nodes[node]
 
         psi = reduce(factor_product, neighbour_factors)
         tau = factor_sum(psi, [node])
-        push!(factor_nodes, tau)
-    end
 
+        for f in neighbour_factors
+            for v in f.neighbours
+                delete!(factor_nodes[v], f)
+            end
+        end
+
+        for v in tau.neighbours
+            push!(factor_nodes[v], tau)
+        end
+
+        delete!(factor_nodes, node)
+    end
+    
+    factor_nodes = reduce(∪, values(factor_nodes))
     return reduce(factor_product, factor_nodes)
 end
 

@@ -517,8 +517,10 @@ marginal_variables = return_expr_variables(model)
 elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :WeightedMinFill);
 elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :Topological);
 elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :MinNeighbours);
-@time variable_elimination(factor_nodes, elimination_order)
+@time variable_elimination(variable_nodes, elimination_order)
+@profview [variable_elimination(variable_nodes, elimination_order) for i in 1:10]
 
+# 0.537834 seconds (5.31 M allocations: 172.169 MiB, 3.92% gc time)
 elimination_order = [var_to_node[v] for v in model.topological_order if !(v in marginal_variables)];
 
 return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
@@ -680,3 +682,11 @@ expr = Graph.rmlines(:(
     end
 ));
 Graph.substitute(Dict{Symbol,Any}(:y=>2), expr)
+
+X = [1.]
+function f(X)
+    X .= 2.
+    X[1]
+end
+
+@btime f($(copy(X)))
