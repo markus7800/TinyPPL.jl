@@ -108,10 +108,12 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
         delete!(nodes, node)
         neighbours = [edge.x == node ? edge.y : edge.x for edge in undirected_graph if edge.x == node || edge.y == node]
 
-        for x in neighbours, y in neighbours
-            x == y && continue
-            edge = get_undirected_edge(x, y)
-            push!(undirected_graph, edge)
+        if order == WeightedMinFill || order == :MinFill
+            for x in neighbours, y in neighbours
+                x == y && continue
+                edge = get_undirected_edge(x, y)
+                push!(undirected_graph, edge)
+            end
         end
     end
     @assert isempty(nodes)
@@ -133,6 +135,7 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
 
         psi = reduce(factor_product, neighbour_factors)
         tau = factor_sum(psi, [node])
+        # println(size(tau.table))
 
         for f in neighbour_factors
             for v in f.neighbours

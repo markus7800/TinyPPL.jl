@@ -21,7 +21,7 @@ mutable struct FactorNode <: FactorGraphNode
     table::Array{Float64}
 end
 function Base.show(io::IO, factor_node::FactorNode)
-    print(io, "FactorNode(", [n.address for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
+    print(io, "FactorNode(", [(n.variable, n.address) for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
     # println(io, factor_node.table)
 end
 export FactorNode
@@ -83,7 +83,7 @@ function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode}, 
     return cpd
 end
 
-function get_factor_graph(pgm::PGM; logscale::Bool=true)
+function get_factor_graph(pgm::PGM; logscale::Bool=true, sorted::Bool=true)
     variable_nodes = [VariableNode(i, pgm.addresses[i]) for i in 1:pgm.n_variables]
     factor_nodes = FactorNode[]
     for v in pgm.topological_order
@@ -97,6 +97,9 @@ function get_factor_graph(pgm::PGM; logscale::Bool=true)
             cpd = get_table(pgm, node, parents, logscale)
             factor_node = FactorNode(parents, cpd)
         end
+        if sorted # have to sort for ops
+            factor_node = factor_permute_vars(factor_node, sort(factor_node.neighbours, lt=(x,y)->x.variable<y.variable))
+        end
         for neighbour in factor_node.neighbours
             push!(neighbour.neighbours, factor_node)
         end
@@ -107,55 +110,63 @@ function get_factor_graph(pgm::PGM; logscale::Bool=true)
     return variable_nodes, factor_nodes
 end
 
-function factor_product(A::FactorNode, B::FactorNode)::FactorGraphNode
-    a_size = size(A.table)
-    b_size = size(B.table)
-    common_vars = A.neighbours ∩ B.neighbours
-    if isempty(common_vars)
-        table = Array{Float64}(undef, a_size..., b_size...)
-        # reshaping shares data
-        a_table = reshape(A.table, a_size..., ones(Int, length(b_size))...)
-        b_table = reshape(B.table, ones(Int, length(a_size))..., b_size...)
-        broadcast!(+, table, a_table, b_table)
-        vars = vcat(A.neighbours, B.neighbours)
-        return FactorNode(vars, table)
-    else
-        a_common_mask = [v in common_vars for v in A.neighbours]
-        b_common_mask = [v in common_vars for v in B.neighbours]
-        a_common_ixs = collect(1:length(A.neighbours))[a_common_mask]
-        b_common_ixs = collect(1:length(B.neighbours))[b_common_mask]
-        common_vars = A.neighbours[a_common_mask] # sorted
-        b_ordering = [findfirst(av -> av==bv, common_vars) for bv in B.neighbours[b_common_mask]]
-        @assert length(b_ordering) == length(common_vars)
-        @assert common_vars[b_ordering] == B.neighbours[b_common_mask]
-        @assert a_size[a_common_ixs[b_ordering]] == b_size[b_common_ixs]
-
-        a_size_uncommon = a_size[.!a_common_mask]
-        b_size_uncommon = b_size[.!b_common_mask]
-        
-        table = Array{Float64}(undef,  a_size[a_common_ixs]..., a_size_uncommon..., b_size_uncommon...)
-
-        a_selection = Any[Colon() for _ in 1: length(a_size)]
-        b_selection = Any[Colon() for _ in 1: length(b_size)]
-        table_colon = fill(Colon(), length(a_size_uncommon) + length(b_size_uncommon))
-        for common_ixs in Iterators.product([1:length(v.support) for v in common_vars]...)
-            a_selection[a_common_mask] .= common_ixs
-            b_selection[b_common_mask] .= common_ixs[b_ordering]
-            
-            a_table = reshape(view(A.table, a_selection...), a_size_uncommon..., ones(Int, length(b_size_uncommon))...)
-            b_table = reshape(view(B.table, b_selection...), ones(Int, length(a_size_uncommon))..., b_size_uncommon...)
-
-            broadcast!(+, view(table, common_ixs..., table_colon...), a_table, b_table)
+function factor_product(A::FactorNode, B::FactorNode)::FactorNode
+    # @assert issorted([a.variable for a in A.neighbours])
+    # @assert issorted([b.variable for b in B.neighbours])
+    i = 1
+    j = 1
+    a_size = Int[]
+    b_size = Int[]
+    vars = VariableNode[]
+    while i <= length(A.neighbours) && j <= length(B.neighbours)
+        a = A.neighbours[i]
+        b = B.neighbours[j]
+        if a.variable == b.variable
+            push!(a_size, length(a.support))
+            push!(b_size, length(b.support))
+            push!(vars, a)
+            i += 1
+            j += 1
+        elseif a.variable < b.variable
+            push!(a_size, length(a.support))
+            push!(b_size, 1)
+            i += 1
+            push!(vars, a)
+        else # a.variable > b.variable
+            push!(a_size, 1)
+            push!(b_size, length(b.support))
+            j += 1
+            push!(vars, b)
         end
-        # @assert all(table .<= 0) table
-
-        vars = vcat(common_vars, A.neighbours[.!a_common_mask], B.neighbours[.!b_common_mask])
-        return FactorNode(vars, table)
     end
+    while i <= length(A.neighbours)
+        a = A.neighbours[i]
+        push!(a_size, length(a.support))
+        push!(b_size, 1)
+        i += 1
+        push!(vars, a)
+    end
+    while j <= length(B.neighbours)
+        b = B.neighbours[j]
+        push!(a_size, 1)
+        push!(b_size, length(b.support))
+        j += 1
+        push!(vars, b)
+    end
+    # @assert length(a_size) == length(b_size)
+    # @assert issorted([v.variable for v in vars])
+    # @assert Set(vars) == Set(A.neighbours) ∪ Set(B.neighbours)
+
+    a_table = reshape(A.table, Tuple(a_size))
+    b_table = reshape(B.table, Tuple(b_size))
+
+    table = broadcast(+, a_table, b_table)
+
+    return FactorNode(vars, table)
 end
 
 # A / B
-function factor_division(A::FactorNode, B::FactorNode)::FactorGraphNode
+function factor_division(A::FactorNode, B::FactorNode)::FactorNode
     a_size = size(A.table)
     b_size = size(B.table)
     @assert B.neighbours ⊆ A.neighbours
@@ -168,26 +179,27 @@ function factor_division(A::FactorNode, B::FactorNode)::FactorGraphNode
     return FactorNode(A.neighbours, table)
 end
 
-function factor_sum(factor_node::FactorNode, dims::Vector{Int})
+function factor_sum(factor_node::FactorNode, dims::Vector{Int})::FactorNode
     variables = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
     size = [length(v.support) for v in variables]
     # table = mapslices(sum, factor_node.table, dims=dims)
-    table = mapslices(logsumexp, factor_node.table, dims=dims)
+    # table = mapslices(logsumexp, factor_node.table, dims=dims)
+    table = log.(sum(exp, factor_node.table, dims=dims))
     table = reshape(table, size...)
     return FactorNode(variables, table)
 end
 
 
-function factor_sum(factor_node::FactorNode, variables::Vector{VariableNode})
+function factor_sum(factor_node::FactorNode, variables::Vector{VariableNode})::FactorNode
     dims = [i for (i,v) in enumerate(factor_node.neighbours) if v in variables]
     return factor_sum(factor_node, dims)
 end
 
-function factor_permute_vars(factor_node::FactorNode, perm::Vector{Int})
+function factor_permute_vars(factor_node::FactorNode, perm::Vector{Int})::FactorNode
     return FactorNode(factor_node.neighbours[perm], permutedims(factor_node.table, perm))
 end
 
-function factor_permute_vars(factor_node::FactorNode, variables::Vector{VariableNode})
+function factor_permute_vars(factor_node::FactorNode, variables::Vector{VariableNode})::FactorNode
     perm = Int[findfirst(av -> av==v, factor_node.neighbours) for v in variables]
     permuted_factor = factor_permute_vars(factor_node, perm)
     @assert variables == permuted_factor.neighbours
