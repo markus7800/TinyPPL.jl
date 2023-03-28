@@ -493,8 +493,11 @@ N = 1000
             net
         end
     end
-    @iterate(1000, func, 1.)
+    @iterate(3, func, 1.)
 end));
+
+include("../examples/exact_inference/ladder.jl")
+model = get_model()
 
 # HELLO WORLD, I AM MARKUS
 # [8,5,12,12,15, 23,15,18,12,4, 9, 1,13, 13,1,18,11,21,19] 
@@ -515,8 +518,8 @@ exp.(res.table) / sum(exp, res.table)
 
 marginal_variables = return_expr_variables(model)
 elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :WeightedMinFill);
-elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :Topological);
 elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :MinNeighbours);
+elimination_order = get_elimination_order(model, variable_nodes, marginal_variables, :Topological);
 @time variable_elimination(variable_nodes, elimination_order)
 @profview [variable_elimination(variable_nodes, elimination_order) for i in 1:10]
 
@@ -544,123 +547,25 @@ function T(P)
         (p_f * t) 0
     ]
 end
+
 T(T(T([0 0; 1 0])))
-repeatf(500, T, [0 0; 1 0])
+repeatf(5000, T, [0 0; 1 0])
+
+R = 0.5
+D = 0.001
+T0 = 1.
+T(t) = t*(R + (1-D)*(1-R))
+
+T(T(T([0 0; 1 0])))
+repeatf(5000, T, 1)
 
 variable_nodes, factor_nodes = get_factor_graph(model, logscale=false);
 to_net_file("/Users/markus/Documents/AQUA/diamond_$N.net", variable_nodes, factor_nodes)
 to_bif_file("/Users/markus/Documents/AQUA/diamond_$N.bif", variable_nodes, factor_nodes)
 return_expr_variables(model)
 
-
-function to_net_file(path, variable_nodes, factor_nodes)
-    open(path, "w") do io
-        println(io, "net\n{\n}")
-        for v in variable_nodes
-            println(io, "node X", v.variable)
-            println(io, "{")
-            print(io, "  states = ( ")
-            for s in v.support
-                print(io, "\"", Int(s), "\" ")
-            end
-            println(io, ");")
-            println(io, "}")
-        end
-        function print_prob_recurse(vars::Vector{VariableNode}, f::FactorNode, index=Int[])
-            if isempty(vars)
-                @assert !isempty(index)
-                print(io, "(")
-                print(io, join(f.table[index..., :], " "))
-                print(io, ")")
-            else
-                v = popfirst!(vars)
-                print(io, "(")
-                for i in 1:length(v.support)
-                    push!(index, i)
-                    print_prob_recurse(vars, f, index)
-                    pop!(index)
-                end
-                print(io, ")")
-                pushfirst!(vars, v)
-            end
-        end
-        for v in factor_nodes
-            print(io, "potential ( X", v.neighbours[end].variable)
-            if length(v.neighbours) > 1
-                print(io, " | ")
-                for n in v.neighbours[1:end-1]
-                    print(io, "X", n.variable, " ")
-                end
-                println(io, ")")
-            else
-                println(io, " )")
-            end
-            println(io, "{")
-            print(io, "  data = ")
-            if length(v.neighbours) > 1
-                print_prob_recurse(v.neighbours[1:end-1], v)
-                println(io, ";")
-            else
-                print(io, "(")
-                print(io, join(v.table, " "))
-                println(io, ");")
-            end
-            println(io, "}")
-        end
-    end
-end
-
-function to_bif_file(path, variable_nodes, factor_nodes)
-    open(path, "w") do io
-        println(io, "network unknown {\n}")
-        for v in variable_nodes
-            print(io, "variable X", v.variable)
-            println(io, " {")
-            print(io, "  type discrete [ $(length(v.support)) ] { ")
-            print(io, join(Int.(v.support), ", "))
-            println(io, " };")
-            println(io, "}")
-        end
-        function print_prob_recurse(vars::Vector{VariableNode}, f::FactorNode, index=Int[])
-            if isempty(vars)
-                @assert !isempty(index)
-                @assert length(index) == length(f.neighbours)-1
-                print(io, "  (")
-                values = map(t -> Int(t[2].support[index[t[1]]]), enumerate(f.neighbours[1:end-1]))
-                print(io, join(values, ", "))
-                print(io, ") ")
-                print(io, join(f.table[index..., :], ", "))
-                println(io, ";")
-            else
-                v = popfirst!(vars)
-                for i in 1:length(v.support)
-                    push!(index, i)
-                    print_prob_recurse(vars, f, index)
-                    pop!(index)
-                end
-                pushfirst!(vars, v)
-            end
-        end
-        for v in factor_nodes
-            print(io, "probability ( X", v.neighbours[end].variable)
-            if length(v.neighbours) > 1
-                print(io, " | ")
-                print(io, join(map(x -> "X$(x.variable)", v.neighbours[1:end-1]), ", "))
-                print(io, " )")
-            else
-                print(io, " )")
-            end
-            println(io, " {")
-            if length(v.neighbours) > 1
-                print_prob_recurse(v.neighbours[1:end-1], v)
-            else
-                print(io, "  table ")
-                print(io, join(v.table, ", "))
-                println(io, ";")
-            end
-            println(io, "}")
-        end
-    end
+open("tmp.txt", "w") do io
+    println(io, ["X$(v.variable)" for v in elimination_order])
 end
 
 expr = Graph.rmlines(:(
@@ -690,3 +595,40 @@ function f(X)
 end
 
 @btime f($(copy(X)))
+
+
+# diamond
+include("../examples/exact_inference/diamond.jl")
+variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(5000);
+# 0.9179663055680979
+# 0.0820336944319021
+@time res = variable_elimination(variable_nodes, variable_nodes[1:end-1])
+exp.(res.table)
+print_reference_solution(5000)
+
+# ladder
+include("../examples/exact_inference/ladder.jl")
+variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(500);
+# 0.950278   0.0198889
+# 0.0298334  0.0
+
+@time res = variable_elimination(variable_nodes, variable_nodes[1:end-2])
+@profview res = greedy_variable_elimination(variable_nodes, marginal_variables)
+exp.(res.table)
+print_reference_solution(500)
+
+include("../examples/exact_inference/caesar.jl")
+
+model = get_model();
+model = get_model_2();
+
+variable_nodes, factor_nodes = get_factor_graph(model);
+marginal_variables = return_expr_variables(model)
+
+@time res = variable_elimination(model, order=:Topological)
+@time res = variable_elimination(model, order=:MinNeighbours)
+exp.(res.table) / sum(exp, res.table)
+
+print_reference_solution()
+
+@time res = greedy_variable_elimination(variable_nodes, marginal_variables)

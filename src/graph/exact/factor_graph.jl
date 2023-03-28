@@ -13,7 +13,7 @@ mutable struct VariableNode <: FactorGraphNode
 end
 export VariableNode
 function Base.show(io::IO, variable_node::VariableNode)
-    print(io, "VariableNode(", variable_node.variable, ", ", variable_node.address, "; ", length(variable_node.support), ")")
+    print(io, "VariableNode(", (variable_node.variable, variable_node.address), "; ", length(variable_node.support), ")")
 end
  
 mutable struct FactorNode <: FactorGraphNode

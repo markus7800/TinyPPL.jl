@@ -108,7 +108,7 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
         delete!(nodes, node)
         neighbours = [edge.x == node ? edge.y : edge.x for edge in undirected_graph if edge.x == node || edge.y == node]
 
-        if order == WeightedMinFill || order == :MinFill
+        if order == :WeightedMinFill || order == :MinFill
             for x in neighbours, y in neighbours
                 x == y && continue
                 edge = get_undirected_edge(x, y)
@@ -135,7 +135,7 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
 
         psi = reduce(factor_product, neighbour_factors)
         tau = factor_sum(psi, [node])
-        # println(size(tau.table))
+        # println(node, ": ", tau)
 
         for f in neighbour_factors
             for v in f.neighbours
@@ -154,7 +154,200 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
     return reduce(factor_product, factor_nodes)
 end
 
-export variable_elimination
+mutable struct ReductionSize
+    nodes::Set{VariableNode} # set of variables connected to node via some factor
+    individual::Int
+    combined::Int
+    reduction::Int
+end
+
+function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+
+    reduction_size = Dict{VariableNode, ReductionSize}()
+    for v in variable_nodes
+        (v.variable in marginal_variables) && continue
+        r = ReductionSize(Set{VariableNode}(), 0, 1, 0)
+        for f in v.neighbours
+            r.individual += length(f.table)
+            for n in f.neighbours
+                if !(n in r.nodes) && !(n == v)
+                    push!(r.nodes, n)
+                    r.combined *= length(n.support)
+                end
+            end
+        end
+        r.reduction = r.combined - r.individual
+        reduction_size[v] = r
+    end
+
+    
+    function reduction_size_func(node::VariableNode)
+        if node.variable in marginal_variables
+            return -1
+        else
+            r = 0.
+            variables = Set{VariableNode}()
+            for f in factor_nodes[node]
+                r -= length(f.table)
+                for v in f.neighbours
+                    push!(variables, v)
+                end
+            end
+            delete!(variables, node)
+            r += prod(length(v.support) for v in variables)
+            return r
+        end
+    end
+
+    @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
+        node, r = argmin(t -> t[2].reduction, reduction_size)
+        
+
+        neighbour_factors = factor_nodes[node]
+
+        psi = reduce(factor_product, neighbour_factors)
+        tau = factor_sum(psi, [node])
+        # println(node, ": ", tau)
+        # println("neighbour_factors: ", neighbour_factors)
+
+        # if r.reduction != reduction_size_func(node)
+        #     println(r.reduction, " vs ", reduction_size_func(node))
+        #     println("factor_nodes[node]: ", factor_nodes[node])
+        #     println(r)
+        #     @assert false
+        # end
+        @assert r.reduction == reduction_size_func(node)
+
+        # We add tau to all nodes in tau.neighbours and remove all neighbour_factors f from its neighbours. (1)
+        # After the deletion, the set of variables connected to a node via some factor (reduction_size[v].nodes) is decreased by node.
+        # Proof:
+        # Let v be a variable connected to node via factor f.
+
+        # f is in neighbour_factors
+        # v is in f.neighbours
+        # v is in tau.neighbours
+        # reduction_size[v].nodes = ∪ f.neighbours for f in factor_nodes[v] \ [v]
+
+        # For all factors g neighbouring v (g ∈ factor_nodes[v]), if node in g.neighbours => g in neighbour_factors
+        # => g is removed from factor_nodes[v], therefore eliminating node from reduction_size[v].nodes (there is atleast f).
+
+        # Let w be a variable removed from reduction_size[v].nodes with (1).
+        # => There has to be a factor f in factor_nodes[v] with w ∈ f.neighbours that is removed => f ∈ neighbour_factors
+        # tau.neighbours = (∪ f.neighbours for f in neighbour_factors) \ [node]
+        # => f.neighbours \ [node] ⊆ tau.neighbours
+        # tau is added to factor_nodes[v] => tau.neighbours ⊆ reduction_size[v].nodes ∪ [v]
+        # w ∈ f.neighbours and w ∉ reduction_size[v].nodes ∪ [v] and f.neighbours \ [node] ⊆ reduction_size[v].nodes ∪ [v] implies that w == node
+
+        for f in neighbour_factors
+            for v in f.neighbours
+                (v == node) && continue
+
+                @assert f in factor_nodes[v]
+                @assert f.neighbours ⊆ (tau.neighbours ∪ [node])
+                @assert !(f.neighbours ⊆ tau.neighbours)
+
+                delete!(factor_nodes[v], f)
+
+                if haskey(reduction_size, v) # v is not a marginal variable
+                    r = reduction_size[v]
+                    # if !(f.neighbours ⊆ r.nodes ∪ [node, v])
+                    #     println("f: ", f)
+                    #     println("v: ", v)
+                    #     println("f.neighbours: ", f.neighbours)
+                    #     println("factor_nodes[v]: ", factor_nodes[v])
+                    #     println("r: ", r)
+                    #     @assert false
+                    # end
+                    @assert f.neighbours ⊆ r.nodes ∪ [node, v]
+                    
+                    r.individual -= length(f.table)
+                    if node in r.nodes
+                        # node can be in multiple f
+                        r.combined /= length(node.support)
+                        delete!(r.nodes, node)
+                    end
+                end
+            end
+        end
+
+        for v in tau.neighbours
+            push!(factor_nodes[v], tau)
+
+            if haskey(reduction_size, v) # v is not a marginal variable
+            r = reduction_size[v]
+                r.individual += length(tau.table)
+                for n in tau.neighbours
+                    if !(n in r.nodes) && !(n == v)
+                        push!(r.nodes, n)
+                        r.combined *= length(n.support)
+                    end
+                end
+
+                r.reduction = r.combined - r.individual
+            end
+        end
+
+        delete!(factor_nodes, node)
+        delete!(reduction_size, node)
+    end
+
+    @assert isempty(reduction_size)
+    
+    factor_nodes = reduce(∪, values(factor_nodes))
+    return reduce(factor_product, factor_nodes)
+end
+
+
+function greedy_variable_elimination_slow(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+    
+    function reduction_size_func(node::VariableNode)
+        if node.variable in marginal_variables
+            return -1
+        else
+            r = 0.
+            variables = Set{VariableNode}()
+            for f in factor_nodes[node]
+                r -= length(f.table)
+                for v in f.neighbours
+                    push!(variables, v)
+                end
+            end
+            delete!(variables, node)
+            r += prod(length(v.support) for v in variables)
+            return r
+        end
+    end
+
+    @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
+        node = argmin(n -> reduction_size_func(n), keys(factor_nodes))
+        
+        neighbour_factors = factor_nodes[node]
+
+        psi = reduce(factor_product, neighbour_factors)
+        tau = factor_sum(psi, [node])
+        # println(node, ": ", tau)
+        # println("neighbour_factors: ", neighbour_factors)
+
+        for f in neighbour_factors
+            for v in f.neighbours
+                delete!(factor_nodes[v], f)
+            end
+        end
+
+        for v in tau.neighbours
+            push!(factor_nodes[v], tau)
+        end
+
+        delete!(factor_nodes, node)
+    end
+    
+    factor_nodes = reduce(∪, values(factor_nodes))
+    return reduce(factor_product, factor_nodes)
+end
+
+export variable_elimination, greedy_variable_elimination, greedy_variable_elimination_slow
 
 function evaluate_return_expr_over_factor(pgm::PGM, factor::FactorNode)
     result = Array{Tuple{Any, Float64}}(undef, size(factor.table))
