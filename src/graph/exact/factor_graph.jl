@@ -207,3 +207,31 @@ function factor_permute_vars(factor_node::FactorNode, variables::Vector{Variable
 end
 
 export get_factor_graph, factor_product, factor_sum, factor_permute_vars
+
+
+function evaluate_return_expr_over_factor(pgm::PGM, factor::FactorNode)
+    result = Array{Tuple{Any, Float64}}(undef, size(factor.table))
+
+    X = Vector{Float64}(undef, pgm.n_variables)
+    Z = sum(exp, factor.table)
+    for indices in Iterators.product([1:length(node.support) for node in factor.neighbours]...)
+        # if parents is empty, assigment = () and next loop is skipped
+        for (node, i) in zip(factor.neighbours, indices)
+            X[node.variable] = node.support[i]
+        end
+        
+        retval = pgm.return_expr(X) # observed values in return expr are subsituted with their value
+        prob = exp(factor.table[indices...]) / Z
+        result[indices...] = (retval, prob)
+    end
+    result = reshape(result, :)
+    values = Dict(val => 0. for (val, prob) in result)
+    for (val, prob) in result
+        values[val] = values[val] + prob
+    end
+    simplified_result = sort([(val, prob) for (val, prob) in values])
+
+    return simplified_result
+end
+
+export evaluate_return_expr_over_factor

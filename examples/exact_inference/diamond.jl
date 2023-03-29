@@ -51,11 +51,55 @@ function get_model()
     end
 end
 
-function print_reference_solution()
+function get_model_factor_graph(N)
+
+    variable_nodes = VariableNode[]
+    factor_nodes = FactorNode[]
+
+    net = VariableNode(length(variable_nodes), :net)
+    net_factor = FactorNode([net], [-Inf, 0.])
+    net.support = [0,1]
+    push!(variable_nodes, net)
+    push!(factor_nodes, net_factor)
+
+    net_table = reshape([0.0, -Inf, 0.0, -Inf, 0.0, 0.0, 0.0, -Inf, -Inf, 0.0, -Inf, 0.0, -Inf, -Inf, -Inf, 0.0], 2, 2, 2, 2)
+    for _ in 1:N
+        route = VariableNode(length(variable_nodes), :route)
+        route.support = [0,1]
+        route_factor = FactorNode([route], [log(0.5), log(0.5)])
+        push!(variable_nodes, route)
+        push!(factor_nodes, route_factor)
+
+        drop = VariableNode(length(variable_nodes), :drop)
+        drop_factor = FactorNode([drop], [log(1-0.001), log(0.001)])
+        drop.support = [0,1]
+        push!(variable_nodes, drop)
+        push!(factor_nodes, drop_factor)
+
+        old_net = net
+        net = VariableNode(length(variable_nodes), :net)
+        net_factor = FactorNode([old_net, route, drop, net], copy(net_table))
+        net.support = [0,1]
+        push!(variable_nodes, net)
+        push!(factor_nodes, net_factor)
+    end
+
+    marginal_variables = [net.variable]
+
+    for f in factor_nodes
+        for v in f.neighbours
+            push!(v.neighbours, f)
+        end
+    end
+
+    variable_nodes, factor_nodes, marginal_variables
+end
+
+function print_reference_solution(N=100)
     repeatf(n, f, x) = n > 1 ? f(repeatf(n-1, f, x)) : f(x)
     R = 0.5
     D = 0.001
     T0 = 1.
     T(t) = t*(R + (1-D)*(1-R))
-    println("Reference: P(1)=", repeatf(100, T, T0))
+    println("Reference: P(1)=", repeatf(N, T, T0))
 end

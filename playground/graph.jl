@@ -608,7 +608,7 @@ print_reference_solution(5000)
 
 # ladder
 include("../examples/exact_inference/ladder.jl")
-variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(500);
+variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(5000);
 # 0.950278   0.0198889
 # 0.0298334  0.0
 

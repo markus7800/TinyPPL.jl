@@ -30,11 +30,76 @@ function get_model()
                 (x1, x2)
             end
         end
-        @iterate(100, func, (1., 0.))
+        @iterate(2, func, (1., 0.))
     end
 end
 
-function print_reference_solution()
+function get_model_factor_graph(N)
+
+    variable_nodes = VariableNode[]
+    factor_nodes = FactorNode[]
+
+    x1 = VariableNode(length(variable_nodes), :x1)
+    x1_factor = FactorNode([x1], [-Inf, 0.])
+    x1.support = [0,1]
+    push!(variable_nodes, x1)
+    push!(factor_nodes, x1_factor)
+
+    x2 = VariableNode(length(variable_nodes), :x2)
+    x2_factor = FactorNode([x2], [0., -Inf])
+    x2.support = [0,1]
+    push!(variable_nodes, x2)
+    push!(factor_nodes, x2_factor)
+
+    x1_table = reshape([0.0, 0.0, 0.0, 0.0, 0.0, -Inf, 0.0, -Inf, 0.0, 0.0, -Inf, 0.0, 0.0, -Inf, -Inf, -Inf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -Inf, 0.0, 0.0, 0.0, -Inf, 0.0, -Inf, -Inf, -Inf, -Inf, -Inf, 0.0, -Inf, 0.0, -Inf, -Inf, 0.0, -Inf, -Inf, 0.0, 0.0, 0.0, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, 0.0, -Inf, -Inf, -Inf, 0.0, -Inf], 2, 2, 2, 2, 2, 2)
+    x2_table = reshape([0.0, -Inf, -Inf, -Inf, 0.0, 0.0, -Inf, 0.0, 0.0, -Inf, 0.0, -Inf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -Inf, 0.0, 0.0, 0.0, -Inf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -Inf, 0.0, 0.0, 0.0, -Inf, -Inf, 0.0, -Inf, -Inf, 0.0, -Inf, 0.0, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, 0.0, -Inf, -Inf, -Inf, 0.0, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf, -Inf], 2, 2, 2, 2, 2, 2)
+
+    for _ in 1:N
+        f1 = VariableNode(length(variable_nodes), :f1)
+        f1.support = [0,1]
+        f1_factor = FactorNode([f1], [log(0.4), log(0.6)])
+        push!(variable_nodes, f1)
+        push!(factor_nodes, f1_factor)
+
+        f2 = VariableNode(length(variable_nodes), :f2)
+        f2.support = [0,1]
+        f2_factor = FactorNode([f2], [log(0.4), log(0.6)])
+        push!(variable_nodes, f2)
+        push!(factor_nodes, f2_factor)
+
+        d = VariableNode(length(variable_nodes), :d)
+        d_factor = FactorNode([d], [log(1-0.001), log(0.001)])
+        d.support = [0,1]
+        push!(variable_nodes, d)
+        push!(factor_nodes, d_factor)
+
+        old_x1 = x1
+        old_x2 = x2
+        x1 = VariableNode(length(variable_nodes), :x1)
+        x1_factor = FactorNode([old_x1, old_x2, f1, f2, d, x1], copy(x1_table))
+        x1.support = [0,1]
+        push!(variable_nodes, x1)
+        push!(factor_nodes, x1_factor)
+
+        x2 = VariableNode(length(variable_nodes), :x2)
+        x2_factor = FactorNode([old_x1, old_x2, f1, f2, d, x2], copy(x2_table))
+        x2.support = [0,1]
+        push!(variable_nodes, x2)
+        push!(factor_nodes, x2_factor)
+    end
+
+    marginal_variables = [x1.variable, x2.variable]
+
+    for f in factor_nodes
+        for v in f.neighbours
+            push!(v.neighbours, f)
+        end
+    end
+
+    return variable_nodes, factor_nodes, marginal_variables
+end
+
+function print_reference_solution(N=100)
     repeatf(n, f, x) = n > 1 ? f(repeatf(n-1, f, x)) : f(x)
     p_d = 0.001
     p_f = 0.6
@@ -46,5 +111,5 @@ function print_reference_solution()
         ]
     end
     T0 = [0 0; 1 0]
-    println("Reference: P=", repeatf(100, T, T0))
+    println("Reference: P=", repeatf(N, T, T0))
 end

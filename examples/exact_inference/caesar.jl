@@ -9,7 +9,7 @@ const P = [0.08167, 0.01492, 0.02782, 0.04253, 0.12702, 0.02228, 0.02015,
 const K = 4
 const msg = [8,5,12,12,15, 23,15,18,12,4, 9, 1,13, 13,1,18,11,21,19]
 # const msg = rand(1:26, 100)
-const Os = ((msg .+ K) .% 26 .+ 1)[1:5]
+const Os = ((msg .+ K) .% 26 .+ 1)
 
 function get_model()
     @ppl Caesar begin
@@ -23,6 +23,34 @@ function get_model()
             [{:O=>i} ~ ((Fs[i] == 1.) ? Dirac(Cs[i] == Os[i]) : Dirac(((Cs[i] + K) % 26 + 1) == Os[i])) ↦ 1. for i in 1:n]
             # [{:O=>i} ~ Dirac(((Cs[i] + K) % 26 + 1) == Os[i]) ↦ 1. for i in 1:n]
     
+            K
+        end
+    end
+end
+
+function get_model_2()
+    @ppl Caesar begin
+        function draw_char(K, i, P, Os)
+            let c ~ Categorical(P),
+                f ~ Bernoulli(0.0001)
+                {:o} ~ (f == 1. ? Dirac(c == Os[i]) : Dirac(((c + K) % 26 + 1) == Os[i])) ↦ 1.
+                i+1
+            end
+        end
+        function func(t)
+            let K = t[1], i = t[2], P = t[3], Os = t[4],
+                new_i = draw_char(K, i, P, Os),
+                new_K ~ Dirac(K)
+
+                (new_K, new_i, P, Os)  
+            end
+        end
+        let Os = $(Main.Os),
+            K ~ DiscreteUniform(1, 26),
+            P = $(Main.P)
+
+            @iterate(19, func, (K,1,P,Os))
+
             K
         end
     end
