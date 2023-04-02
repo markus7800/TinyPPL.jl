@@ -436,12 +436,12 @@ return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
 root = BeliefNode(return_factor, nothing)
 print_belief_tree(root)
 
-f, evidence = belief_propagation(model, false)
-f, evidence, marginals = belief_propagation(model, true)
+f, evidence = belief_propagation(model, all_marginals=false)
+f, evidence, marginals = belief_propagation(model, all_marginals=true)
 
-# for (_, address, table) in marginals
-#     println(address, ": ", table / sum(table), " ",  sum(table))
-# end
+for (_, address, table) in marginals
+    println(address, ": ", table)
+end
 
 @time f = variable_elimination(model)
 sum(exp, f.table)

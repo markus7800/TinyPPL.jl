@@ -95,7 +95,8 @@ function get_variable_nodes(belief_node::BeliefNode, variable_nodes=BeliefNode[]
     if belief_node.node isa VariableNode
         push!(variable_nodes, belief_node)
     end
-    for child in belief_node.children
+    for child in belief_node.neighbours
+        child == belief_node.parent && continue
         get_variable_nodes(child, variable_nodes)
     end
     return variable_nodes
@@ -115,11 +116,11 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
 
     
     # [root.neighbours].node are root.node.neighbours
-    table = zeros([length(message) for message in root.messages]...)
+    return_table = zeros([length(message) for message in root.messages]...)
     shape = ones(Int, length(root.neighbours))
     for (i, message) in enumerate(root.messages)
         shape[i] = length(message)
-        table .+= reshape(message, shape...) # broadcasting -> factor product
+        return_table .+= reshape(message, shape...) # broadcasting -> factor product
         shape[i] = 1
     end
 
@@ -134,12 +135,12 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
             marginals[i] = (varnode.variable, varnode.address, table)
         end
 
-        return_factor.table .= table
+        return_factor.table .= return_table
 
         return return_factor, evidence, marginals
     else
 
-        return_factor.table .= table
+        return_factor.table .= return_table
 
         return return_factor, evidence
     end
@@ -175,17 +176,17 @@ function forward(belief_node::BeliefNode)
         # message to VariableNode
         message_table = zeros([length(child.node.support) for child in belief_node.neighbours if child != belief_node.parent]...)
         shape = ones(Int, ndims(message_table))
-        i = 1
-        for child in belief_node.neighbours
+        j = 1
+        for (i, child) in enumerate(belief_node.neighbours)
             # child is VariableNode
             child == belief_node.parent && continue
             child_message = forward(child)
             belief_node.messages[i] = child_message
             @assert length(child_message) == length(child.node.support)
-            shape[i] = length(child_message)
+            shape[j] = length(child_message)
             message_table .+= reshape(child_message, shape...) # broadcasting -> factor product
-            shape[i] = 1
-            i += 1
+            shape[j] = 1
+            j += 1
         end
         child_variables = [child.node for child in belief_node.neighbours if child != belief_node.parent]
         message_factor = FactorNode(child_variables, message_table)
@@ -211,7 +212,8 @@ function backward(belief_node::BeliefNode)
     # belief_node has received all messages from children !and! parent
 
     if belief_node.node isa VariableNode
-        for (i, child) in enumerate(belief_node.children)
+        for (i, child) in enumerate(belief_node.neighbours)
+            child == belief_node.parent && continue
             # message to FactorNode child i 
             message = zeros(length(belief_node.node.support))
             for child_message in belief_node.messages
@@ -220,38 +222,35 @@ function backward(belief_node::BeliefNode)
             end
             message .-= belief_node.messages[i]
 
-            child.messages[end] = message # reserved for parent / should be undef !TODO!
+            child.messages[child.parent_index] = message
             backward(child)
         end
     else
-        neighbours = BeliefNode[child for child in belief_node.children]
-        # sort!(neighbours)
-        if !isnothing(belief_node.parent)
-            push!(neighbours, belief_node.parent)
-        end
-        mask = trues(length(neighbours))
-        @assert length(mask) == length(belief_node.messages)
+        mask = trues(length(belief_node.neighbours))
 
-        for (i, child) in enumerate(belief_node.children)
-            # message to VariableNode child i
-            mask[i] = false
-            message_vars = VariableNode[neighbour.node for neighbour in neighbours[mask]]
+        for child in belief_node.neighbours
+            child == belief_node.parent && continue
+            # message to VariableNode child
+            message_vars = VariableNode[neighbour.node for neighbour in belief_node.neighbours if neighbour != child]
             message_table = zeros([length(variable.support) for variable in message_vars]...)
-            shape = ones(Int, length(size(message_table)))
-            for (j, child_message) in enumerate(belief_node.messages[mask])
+            shape = ones(Int, ndims(message_table))
+            j = 1
+            for (i, neighbour) in enumerate(belief_node.neighbours)
                 # child is VariableNode
+                neighbour == child && continue
+                child_message = belief_node.messages[i]
                 shape[j] = length(child_message)
                 message_table .+= reshape(child_message, shape...) # broadcasting -> factor product
                 shape[j] = 1
+                j += 1
             end
-            mask[i] = true
 
             message_factor = FactorNode(message_vars, message_table)
-            println("neighbours: ", neighbours)
-            println("message_factor_1: ", message_factor)
+            # println("neighbours: ", neighbours)
+            # println("message_factor_1: ", message_factor)
 
             message_factor = factor_product(belief_node.node, message_factor)
-            println("message_factor_2: ", message_factor)
+            # println("message_factor_2: ", message_factor)
             @assert prod(size(message_factor.table)) == prod(size(belief_node.node.table)) (message_factor, belief_node.node)
             @assert length(message_factor.neighbours ∩ belief_node.node.neighbours) == length(belief_node.node.neighbours)
 
@@ -261,7 +260,7 @@ function backward(belief_node::BeliefNode)
 
             message = message_factor.table
 
-            child.messages[end] = message # reserved for parent / should be undef
+            child.messages[child.parent_index] = message
             backward(child)
         end
     end

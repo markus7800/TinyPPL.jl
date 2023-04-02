@@ -42,6 +42,11 @@ function get_model()
 end
 
 function print_reference_solution()
-    println("Reference: ", "P=", [0.3426644 0.1736599 0.09623271; 0.2167356 0.1098401 0.06086729])
-    # TODO_ print all marginal reference
+    println("Reference: ", "P(S,T|E=1)=", [0.3426644 0.1736599 0.09623271; 0.2167356 0.1098401 0.06086729])
+    println("Marginals:")
+    println("P(A|E=1)=", [0.2841427 0.4775959 0.2382613])
+    println("P(S|E=1)=", [0.612557, 0.387443])
+    println("P(O|E=1)=", [0.96 0.04])
+    println("P(R|E=1)=", [0.25  0.75])
+    println("P(T|E=1)=", [0.5594 0.2835 0.1571])
 end
