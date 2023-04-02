@@ -43,4 +43,5 @@ end
 
 function print_reference_solution()
     println("Reference: ", "P=", [0.3426644 0.1736599 0.09623271; 0.2167356 0.1098401 0.06086729])
+    # TODO_ print all marginal reference
 end

@@ -3,6 +3,8 @@ using BenchmarkTools
 
 include(ARGS[1])
 
+const BENCHMARK = false
+
 function inference(show_results=false; algo=:VE)
     model = get_model()
 
@@ -26,16 +28,20 @@ println(model.name)
 inference(true,algo=:VE)
 print_reference_solution()
 
-b = @benchmark inference(algo=:VE)
-show(Base.stdout, MIME"text/plain"(), b)
+if BENCHMARK
+    b = @benchmark inference(algo=:VE)
+    show(Base.stdout, MIME"text/plain"(), b)
+end
 println()
 
 # @info "Junction Tree Message Passing"
 # inference(true,algo=:JT)
 # print_reference_solution()
 
-# b = @benchmark inference(algo=:JT)
-# show(Base.stdout, MIME"text/plain"(), b)
+# if BENCHMARK
+#     b = @benchmark inference(algo=:JT)
+#     show(Base.stdout, MIME"text/plain"(), b)
+# end
 # println()
 
 if is_tree(model)
@@ -43,8 +49,10 @@ if is_tree(model)
     inference(true,algo=:BP)
     print_reference_solution()
 
-    b = @benchmark inference(algo=:BP)
-    show(Base.stdout, MIME"text/plain"(), b)
+    if BENCHMARK
+        b = @benchmark inference(algo=:BP)
+        show(Base.stdout, MIME"text/plain"(), b)
+    end
     println()
 else
     @info "Cannot apply Belief Propagation"

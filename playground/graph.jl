@@ -599,7 +599,7 @@ end
 
 # diamond
 include("../examples/exact_inference/diamond.jl")
-variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(5000);
+variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(500);
 # 0.9179663055680979
 # 0.0820336944319021
 @time res = variable_elimination(variable_nodes, variable_nodes[1:end-1])
@@ -608,7 +608,7 @@ print_reference_solution(5000)
 
 # ladder
 include("../examples/exact_inference/ladder.jl")
-variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(5000);
+variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(50000);
 # 0.950278   0.0198889
 # 0.0298334  0.0
 
@@ -632,3 +632,5 @@ exp.(res.table) / sum(exp, res.table)
 print_reference_solution()
 
 @time res = greedy_variable_elimination(variable_nodes, marginal_variables)
+
+belief_propagation(model, all_marginals=true)

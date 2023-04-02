@@ -2,24 +2,28 @@
 mutable struct BeliefNode
     node::FactorGraphNode
     parent::Union{Nothing,BeliefNode}
-    children::Vector{BeliefNode}
+    parent_index::Int
+    neighbours::Vector{BeliefNode}
     message_sent::Bool
     messages::Vector{Vector{Float64}}
-    function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,FactorGraphNode})
-        children = [BeliefNode(n, node) for n in node.neighbours if n != parent]
-        @assert length(children) + !isnothing(parent) == length(node.neighbours)
-        message_sent = false
-        if node isa VariableNode
-            belief = zeros(length(node.support))
-        else
-            belief = zeros(size(node.table))
+    function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,BeliefNode})
+        this = new()
+        this.node = node
+        this.parent = parent
+        this.parent_index = 0
+        this.neighbours = Vector{Vector{BeliefNode}}(undef, length(node.neighbours))
+        this.message_sent = false
+        this.messages = Vector{Vector{Float64}}(undef, length(node.neighbours))
+
+        for (i, n) in enumerate(node.neighbours)
+            if !isnothing(parent) && parent.node == n
+                this.parent_index = i
+                this.neighbours[i] = parent
+            else
+                this.neighbours[i] = BeliefNode(n, this)
+            end
         end
-        messages = Vector{Vector{Float64}}(undef, length(children) + !isnothing(parent))
-        # parent variable is set in child constructor
-        this = new(node, nothing, children, message_sent, messages)
-        for child in children
-            child.parent = this
-        end
+
         return this
     end
 end
@@ -96,21 +100,23 @@ function get_variable_nodes(belief_node::BeliefNode, variable_nodes=BeliefNode[]
     end
     return variable_nodes
 end
-
-function belief_propagation(pgm::PGM, all_marginals=false)
+function belief_propagation(pgm::PGM; all_marginals=false)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
     return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
     @assert is_tree(variable_nodes, factor_nodes)
+    belief_propagation(return_factor, all_marginals)
+end
 
+function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
     root = BeliefNode(return_factor, nothing)
     # print_belief_tree(root)
     res = forward(root)
     evidence = exp(res[1])
 
     
-    # [root.children].node are root.node.neighbours
+    # [root.neighbours].node are root.node.neighbours
     table = zeros([length(message) for message in root.messages]...)
-    shape = ones(Int, length(root.children))
+    shape = ones(Int, length(root.neighbours))
     for (i, message) in enumerate(root.messages)
         shape[i] = length(message)
         table .+= reshape(message, shape...) # broadcasting -> factor product
@@ -144,9 +150,9 @@ function forward(belief_node::BeliefNode)
     @assert !belief_node.message_sent
     belief_node.message_sent = true
 
-    if isempty(belief_node.children) # has to have parent
+    if length(belief_node.neighbours) == 1 && !isnothing(belief_node.parent) # has to be parent
         if belief_node.node isa VariableNode
-            message = zeros(size(belief_node.parent.table))
+            message = zeros(length(belief_node.node.support))
         else
             message = belief_node.node.table
             # parent is VariableNode
@@ -158,26 +164,30 @@ function forward(belief_node::BeliefNode)
     if belief_node.node isa VariableNode
         # message to FactorNode
         message = zeros(length(belief_node.node.support))
-        for (i, child) in enumerate(belief_node.children)
+        for (i, child) in enumerate(belief_node.neighbours)
             # child is FactorNode
+            child == belief_node.parent && continue
             child_message = forward(child)
             belief_node.messages[i] = child_message
             message .+= child_message # no broadcasting
         end
     else
         # message to VariableNode
-        message_table = zeros([length(child.node.support) for child in belief_node.children]...)
-        shape = ones(Int, length(belief_node.children))
-        for (i, child) in enumerate(belief_node.children)
+        message_table = zeros([length(child.node.support) for child in belief_node.neighbours if child != belief_node.parent]...)
+        shape = ones(Int, ndims(message_table))
+        i = 1
+        for child in belief_node.neighbours
             # child is VariableNode
+            child == belief_node.parent && continue
             child_message = forward(child)
             belief_node.messages[i] = child_message
             @assert length(child_message) == length(child.node.support)
             shape[i] = length(child_message)
             message_table .+= reshape(child_message, shape...) # broadcasting -> factor product
             shape[i] = 1
+            i += 1
         end
-        child_variables = [child.node for child in belief_node.children]
+        child_variables = [child.node for child in belief_node.neighbours if child != belief_node.parent]
         message_factor = FactorNode(child_variables, message_table)
 
         message_factor = factor_product(belief_node.node, message_factor)
@@ -210,11 +220,12 @@ function backward(belief_node::BeliefNode)
             end
             message .-= belief_node.messages[i]
 
-            child.messages[end] = message # reserved for parent / should be undef
+            child.messages[end] = message # reserved for parent / should be undef !TODO!
             backward(child)
         end
     else
         neighbours = BeliefNode[child for child in belief_node.children]
+        # sort!(neighbours)
         if !isnothing(belief_node.parent)
             push!(neighbours, belief_node.parent)
         end
@@ -224,7 +235,7 @@ function backward(belief_node::BeliefNode)
         for (i, child) in enumerate(belief_node.children)
             # message to VariableNode child i
             mask[i] = false
-            message_vars = [neighbour.node for neighbour in neighbours[mask]]
+            message_vars = VariableNode[neighbour.node for neighbour in neighbours[mask]]
             message_table = zeros([length(variable.support) for variable in message_vars]...)
             shape = ones(Int, length(size(message_table)))
             for (j, child_message) in enumerate(belief_node.messages[mask])
@@ -236,9 +247,12 @@ function backward(belief_node::BeliefNode)
             mask[i] = true
 
             message_factor = FactorNode(message_vars, message_table)
+            println("neighbours: ", neighbours)
+            println("message_factor_1: ", message_factor)
 
             message_factor = factor_product(belief_node.node, message_factor)
-            @assert prod(size(message_factor.table)) == prod(size(belief_node.node.table))
+            println("message_factor_2: ", message_factor)
+            @assert prod(size(message_factor.table)) == prod(size(belief_node.node.table)) (message_factor, belief_node.node)
             @assert length(message_factor.neighbours ∩ belief_node.node.neighbours) == length(belief_node.node.neighbours)
 
             message_factor = factor_sum(message_factor, message_vars)
