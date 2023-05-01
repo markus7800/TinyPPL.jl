@@ -86,13 +86,17 @@ function get_model_factor_graph(N)
 
     marginal_variables = [net.variable]
 
+
     for f in factor_nodes
         for v in f.neighbours
             push!(v.neighbours, f)
         end
     end
 
-    variable_nodes, factor_nodes, marginal_variables
+    return_variables = [net]
+    return_factor = add_return_factor!(factor_nodes, return_variables)
+
+    variable_nodes, factor_nodes, marginal_variables, return_factor
 end
 
 function print_reference_solution(N=100)

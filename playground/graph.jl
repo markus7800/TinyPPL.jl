@@ -2,6 +2,30 @@ using TinyPPL.Distributions
 using TinyPPL.Graph
 import Random
 
+model = @ppl normal begin
+    let X ~ Normal(0., 1.),
+        Y ~ Normal(X, 1.),
+        Z = Normal(Y, 1.) ↦ 1.
+        X
+    end
+end
+
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+retvals'W
+
+using StatsPlots
+histogram(retvals, weights=W, normalize=true);
+plot!(x -> exp(logpdf(Normal(1/3,sqrt(2/3)), x)))
+
+@time traces, retvals = lmh(model, 1_000_000);
+@time traces, retvals = rwmh(model, 1_000_000);
+mean(retvals)
+
+histogram(retvals, normalize=true);
+plot!(x -> exp(logpdf(Normal(1/3,sqrt(2/3)), x)))
+
+
 p = Proposal(:x=>Bernoulli(0.), (:x=>:y=>:z)=>Bernoulli(1.));
 haskey(p, :x), p[:x]
 haskey(p, :x=>:y), p[:x=>:y]
@@ -599,23 +623,28 @@ end
 
 # diamond
 include("../examples/exact_inference/diamond.jl")
-variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(500);
+variable_nodes, factor_nodes, marginal_variables, return_factor = get_model_factor_graph(500);
 # 0.9179663055680979
 # 0.0820336944319021
 @time res = variable_elimination(variable_nodes, variable_nodes[1:end-1])
 exp.(res.table)
 print_reference_solution(5000)
 
+is_tree(variable_nodes, factor_nodes)
+@time belief_propagation(return_factor, false);
+
 # ladder
 include("../examples/exact_inference/ladder.jl")
-variable_nodes, factor_nodes, marginal_variables = get_model_factor_graph(50000);
+variable_nodes, factor_nodes, marginal_variables, return_factor = get_model_factor_graph(5000);
 # 0.950278   0.0198889
 # 0.0298334  0.0
 
 @time res = variable_elimination(variable_nodes, variable_nodes[1:end-2])
-@profview res = greedy_variable_elimination(variable_nodes, marginal_variables)
+@time res = greedy_variable_elimination(variable_nodes, marginal_variables)
 exp.(res.table)
 print_reference_solution(500)
+is_tree(variable_nodes, factor_nodes)
+@time belief_propagation(return_factor, false);
 
 include("../examples/exact_inference/caesar.jl")
 
@@ -633,4 +662,4 @@ print_reference_solution()
 
 @time res = greedy_variable_elimination(variable_nodes, marginal_variables)
 
-belief_propagation(model, all_marginals=true)
+belief_propagation(model, all_marginals=true);

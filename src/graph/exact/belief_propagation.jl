@@ -39,17 +39,6 @@ function print_belief_tree(root::BeliefNode, tab="")
     end
 end
 
-function add_return_factor!(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
-    variable_to_node = Dict(node.variable=>node for node in variable_nodes)
-    return_variables = [variable_to_node[v] for v in return_expr_variables(pgm)]
-    return_factor = FactorNode(return_variables, zeros([length(node.support) for node in return_variables]...))
-    for variable in return_variables
-        push!(variable.neighbours, return_factor)
-    end
-    push!(factor_nodes, return_factor)
-    return return_factor
-end
-
 function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
 
     function is_cycle(node, visited, parent, tab="")
