@@ -4,14 +4,14 @@ import Random
 
 mutable struct LMH <: Sampler
     W::Float64
-    Q::Float64
+    Q::Dict{Any, Float64}
     Q_correction::Float64
     proposal::Proposal
     resample_addr::Any
     trace_current::Dict{Any, Real}
     trace::Dict{Any, Real}
     function LMH(proposal)
-        return new(0., 0., 0., proposal, nothing, Dict(), Dict())
+        return new(0., Dict{Any, Float64}(), 0., proposal, nothing, Dict{Any, Real}(), Dict{Any, Real}())
     end
 end
 
@@ -23,11 +23,13 @@ function sample(sampler::LMH, addr::Any, dist::Distribution, obs::Union{Nothing,
     proposal_dist = get(sampler.proposal, addr, dist)
     if sampler.resample_addr == addr
         value = rand(proposal_dist)
+        # current - proposed
+        sampler.Q_correction += logpdf(proposal_dist, sampler.trace_current[addr]) - logpdf(proposal_dist, value)
     else
         value = get(sampler.trace_current, addr, rand(proposal_dist))
     end
     sampler.W += logpdf(dist, value)
-    sampler.Q += logpdf(proposal_dist, value)
+    sampler.Q[addr] = logpdf(proposal_dist, value)
     sampler.trace[addr] = value
     
     return value
@@ -54,7 +56,7 @@ function single_site_sampler(model::Function, args::Tuple, observations::Dict, n
         end
         for addr in addresses
             sampler.W = 0.
-            sampler.Q = 0.
+            sampler.Q = Dict{Any, Float64}()
             sampler.Q_correction = 0.
             sampler.trace_current = trace_current
             sampler.trace = Dict{Any, Real}()
@@ -68,7 +70,17 @@ function single_site_sampler(model::Function, args::Tuple, observations::Dict, n
 
             sampler.Q_correction += log(length(trace_current)) - log(length(trace_proposed))
 
-            log_α = W_proposed - Q_proposed - W_current + Q_current + sampler.Q_correction
+            log_α = W_proposed - W_current + sampler.Q_correction
+            for (addr, q) in Q_proposed
+                if !haskey(Q_current, addr) # resampled
+                    log_α -= q
+                end
+            end
+            for (addr, q) in Q_current
+                if !haskey(Q_proposed, addr) # resampled
+                    log_α += q
+                end
+            end
 
             if log(rand()) < log_α
                 retval_current, trace_current = retval_proposed, trace_proposed
