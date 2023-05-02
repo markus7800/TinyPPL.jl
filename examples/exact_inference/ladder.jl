@@ -96,7 +96,10 @@ function get_model_factor_graph(N)
         end
     end
 
-    return variable_nodes, factor_nodes, marginal_variables
+    return_variables = [net]
+    return_factor = add_return_factor!(factor_nodes, return_variables)
+
+    return variable_nodes, factor_nodes, marginal_variables, return_factor
 end
 
 function print_reference_solution(N=100)

@@ -44,7 +44,18 @@ traces, retvals, lps = lmh(LinReg, (xs,), observations, 100); # for compilation
 @time traces, retvals, lps = lmh(LinReg, (xs,), observations, 1_000_000);
 println("for 1_000_000 samples.")
 
-W = exp.(lps);
+slope_est = mean([r[1] for r in retvals])
+intercept_est = mean([r[2] for r in retvals])
+
+println("convergence:")
+println("  slope: ", slope_true, " vs. ", slope_est, " (estimated) vs. ", map[2], " (map)")
+println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated) vs. ", map[1], " (map)")
+
+
+@info "RWMH"
+traces, retvals, lps = rwmh(LinReg, (xs,), observations, 100, default_var=0.1); # for compilation
+@time traces, retvals, lps = rwmh(LinReg, (xs,), observations, 1_000_000, default_var=0.1);
+println("for 1_000_000 samples.")
 
 slope_est = mean([r[1] for r in retvals])
 intercept_est = mean([r[2] for r in retvals])
