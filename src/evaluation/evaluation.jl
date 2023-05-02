@@ -9,4 +9,5 @@ module Evaluation
     include("LW.jl")
     include("LMH.jl")
     include("RWMH.jl")
+    include("dependencies.jl")
 end
