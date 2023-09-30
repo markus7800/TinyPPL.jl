@@ -2,6 +2,24 @@ using TinyPPL.Distributions
 using TinyPPL.Graph
 import Random
 
+model = @ppl lazyif begin
+    let b ~ Bernoulli(0.5),
+        mu = if b == 1.
+            let x ~ Normal(-1,1)
+                x
+            end
+        else
+            let y ~ Normal(1,1)
+                y
+            end
+        end,
+        z ~ Normal(mu,1)
+
+        z
+    end
+end
+
+
 model = @ppl normal begin
     let X ~ Normal(0., 1.),
         Y ~ Normal(X, 1.),
@@ -663,3 +681,20 @@ print_reference_solution()
 @time res = greedy_variable_elimination(variable_nodes, marginal_variables)
 
 belief_propagation(model, all_marginals=true);
+
+
+
+
+model = @ppl normal begin
+    let X ~ Normal(0., 1.)
+        if X < 0
+            let Y ~ Normal(1.,1.)
+                Y
+            end
+        else
+            let Z ~ Normal(2.,1.)
+                Z
+            end
+        end
+    end
+end

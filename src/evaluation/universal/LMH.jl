@@ -2,7 +2,7 @@
 import ..TinyPPL.Distributions: Proposal, logpdf
 import Random
 
-mutable struct LMH <: Sampler
+mutable struct LMH <: UniversalSampler
     W::Float64
     Q::Dict{Any, Float64}
     Q_correction::Float64
@@ -35,13 +35,13 @@ function sample(sampler::LMH, addr::Any, dist::Distribution, obs::Union{Nothing,
     return value
 end
 
-function single_site_sampler(model::Function, args::Tuple, observations::Dict, n_samples::Int, sampler::Sampler, gibbs::Bool)
+function single_site_sampler(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, sampler::Sampler, gibbs::Bool)
     traces = Vector{Dict{Any, Real}}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
 
     n_accepted = 0
-    retval_current = model(args..., sampler, observations)
+    retval_current = model(args, sampler, observations)
     W_current = sampler.W
     Q_current = sampler.Q
     trace_current = sampler.trace
@@ -63,7 +63,7 @@ function single_site_sampler(model::Function, args::Tuple, observations::Dict, n
 
             sampler.resample_addr = addr
 
-            retval_proposed = model(args..., sampler, observations)
+            retval_proposed = model(args, sampler, observations)
             trace_proposed = sampler.trace
             Q_proposed = sampler.Q
             W_proposed = sampler.W
@@ -98,7 +98,7 @@ function single_site_sampler(model::Function, args::Tuple, observations::Dict, n
     return traces, retvals, logprobs
 end
 
-function lmh(model::Function, args::Tuple, observations::Dict, n_samples::Int; 
+function lmh(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int; 
     proposal::Proposal=Proposal(), gibbs::Bool=false)
 
     sampler = LMH(proposal)

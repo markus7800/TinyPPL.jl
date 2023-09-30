@@ -2,7 +2,7 @@
 
 import ..TinyPPL.Distributions: Addr2Var, logpdf, random_walk_proposal_dist
 
-mutable struct RWMH <: Sampler
+mutable struct RWMH <: UniversalSampler
     W::Float64
     Q::Dict{Any, Float64}
     Q_correction::Float64
@@ -39,7 +39,7 @@ function sample(sampler::RWMH, addr::Any, dist::Distribution, obs::Union{Nothing
     return value
 end
 
-function rwmh(model::Function, args::Tuple, observations::Dict, n_samples::Int;
+function rwmh(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int;
     default_var::Float64=1., addr2var::Addr2Var=Addr2Var(), gibbs=false)
     sampler = RWMH(default_var, addr2var)
     return single_site_sampler(model, args, observations, n_samples, sampler, gibbs)

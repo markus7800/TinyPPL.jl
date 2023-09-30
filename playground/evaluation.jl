@@ -3,12 +3,56 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 
-@ppl function normal()
+import Random
+
+@ppl function urn(K::Int)
+    N ~ Poisson(6)
+    balls = []
+    for i in 1:N
+        ball = {:ball => i} ~ Bernoulli(0.5)
+        push!(balls, ball)
+    end
+    n_black = 0
+    if N > 0
+        for k in 1:K
+            ball_ix = {:drawn_ball => k} ~ DiscreteUniform(1,N)
+            n_black += balls[ball_ix]
+        end
+    end
+    {:n_black} ~ Dirac(n_black)
+    return N
+end
+
+observations = Dict(:n_black => 5);
+
+Random.seed!(0)
+@time traces, retvals, lps = likelihood_weighting(urn, (10,), observations, 5_000_000); #  12.550633 seconds (185.56 M allocations: 13.448 GiB, 39.63% gc time, 0.37% compilation time)
+@time result, retvals, lps = likelihood_weighting(urn, (10,), observations, 5_000_000, Evaluation.no_op_completion); # 5.348895 seconds (95.62 M allocations: 3.476 GiB, 25.26% gc time)
+Ns = retvals
+W = exp.(lps);
+[sum(W[Ns .== n]) for n in 1:15]
+
+
+@ppl static function normal(N)
+    X = {:X} ~ Normal(0., 1.)
+    for i in 1:N
+        X = {:X => i} ~ Normal(0., 1.)
+    end
+    Z ~ Normal(X, 1.)
+    return X
+end
+observations = Dict(:Z => 1.);
+Random.seed!(0)
+@time traces, retvals, lps = likelihood_weighting(normal, (100,), observations, 1_000_000); # 37.068228 seconds (1.01 G allocations: 19.085 GiB, 33.81% gc time, 0.23% compilation time)
+@time traces, retvals, lps = likelihood_weighting(normal, (100,), observations, 1_000_000, Set(Any[:X]));
+
+@ppl static function normal()
     X ~ Normal(0., 1.)
     Y ~ Normal(X, 1.)
     Z ~ Normal(Y, 1.)
     return X
 end
+
 
 @ppl function unif()
     X ~ Uniform(-1., 1.)
@@ -22,10 +66,16 @@ model = unif
 
 observations = Dict(:Z => 1.);
 
+addresses = Evaluation.get_addresses(model, (), observations)
+
+Random.seed!(0)
 @time traces, retvals, lps = likelihood_weighting(model, (), observations, 1_000_000);
+@time traces, retvals, lps = likelihood_weighting(model, (), observations, 5_000_000, Set(Any[:X]));
 W = exp.(lps);
 W'retvals
 ((retvals .- W'retvals).^2)'W
+
+
 using StatsPlots
 histogram(retvals, weights=W, normalize=true);
 plot!(x -> exp(logpdf(Normal(1/3,sqrt(2/3)), x)))

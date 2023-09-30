@@ -1,6 +1,6 @@
 
 
-mutable struct Forward <: Sampler
+mutable struct Forward <: UniversalSampler
 end
 
 
@@ -15,7 +15,7 @@ end
 export Forward
 
 
-mutable struct LogProb <: Sampler
+mutable struct LogProb <: UniversalSampler
     log_p_Y::Float64
     log_p_X::Float64
     function LogProb()
