@@ -14,7 +14,7 @@ function walk_ppl_sytnax(expr, sampler, constraints)
         end
     elseif MacroTools.@capture(expr, @subppl func_(args__))
         return quote
-            let value = $(func)(($(args...)), $sampler, $constraints)
+            let value = $(func).f(($(args...)), $sampler, $constraints)
                 value
             end
         end
