@@ -45,6 +45,8 @@ function (model::UniversalModel)(args::Tuple, sampler::UniversalSampler, constra
     return model.f(args..., sampler, constraints)
 end
 
+# for all executions, the same (finite number of) random variables
+# with same distribution + support
 struct StaticModel
     f::Function
 end

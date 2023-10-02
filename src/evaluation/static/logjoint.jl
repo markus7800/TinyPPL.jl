@@ -1,15 +1,14 @@
 
-
-mutable struct LogJoint <: StaticSampler
+mutable struct LogJoint{T} <: StaticSampler
     W::Float64
     addresses_to_ix::Addr2Ix
-    X::Vector{Real}
-    function LogJoint(addresses_to_ix::Addr2Ix)
-        return new(0., addresses_to_ix, Vector{Real}())
+    X::T
+    function LogJoint(addresses_to_ix::Addr2Ix, X::T) where T <: AbstractVector{<:Real}
+        return new{T}(0., addresses_to_ix, X)
     end
 end
 
-function sample(sampler::StaticSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::LogJoint, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
@@ -23,10 +22,10 @@ end
 function make_logjoint(model::StaticModel, args::Tuple, observations::Dict)
     addresses = get_addresses(model, args, observations)
     addresses_to_ix = get_address_to_ix(addresses)
-    sampler = LogJoint(addresses_to_ix)
-    return function logjoint(X::Vector{Real})
-        sampler.X = X
+    function logjoint(X::AbstractVector{<:Real})
+        sampler = LogJoint(addresses_to_ix, X)
         model(args, sampler, observations)
         return sampler.W
     end
+    return addresses_to_ix, logjoint
 end

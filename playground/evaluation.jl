@@ -339,3 +339,71 @@ import ProgressLogging: @progress
 @profview for _ in 1:10^5
     gmm(Forward(), observations) 
 end
+
+
+using TinyPPL.Distributions
+using TinyPPL.Evaluation
+import Random
+
+@ppl static function normal()
+    X ~ Normal(0., 1.)
+    Y ~ Normal(X, 1.)
+    Z ~ Normal(Y, 1.)
+    return X
+end
+observations = Dict{Any,Real}(:Z => 1.)
+
+addresses = Evaluation.get_addresses(normal, (), observations)
+addresses_to_ix = Evaluation.get_address_to_ix(addresses)
+sampler = Evaluation.LogJoint(addresses_to_ix, Float64[1.,1.])
+
+@code_warntype sample(sampler, :X, Normal(0.,1), nothing)
+
+@time sample(sampler, :X, Normal(1.,1), nothing)
+
+lj = Evaluation.make_logjoint(normal, (), observations)
+@time lj(Float64[1.,1.])
+
+
+
+@ppl static function unif()
+    X ~ Uniform(-1., 1.)
+    Y ~ Uniform(-1. + X, 1. + X)
+    Z ~ Uniform(-1. + Y, 1. + Y)
+    return X
+end
+observations = Dict{Any,Real}(:Z => 1.)
+addresses_to_ix, logjoint, transform_to_constrained, transform_to_unconstrained = Evaluation.make_unconstrained_logjoint(unif, (), observations)
+transform_to_unconstrained([0.5, 1.0])
+transform_to_constrained([0.5,100.])
+sampler = Evaluation.UnconstrainedLogJoint(addresses_to_ix, [0.5, 1.0])
+import Tracker
+x = Tracker.param([0.5, 1.0])
+sampler = Evaluation.UnconstrainedLogJoint(addresses_to_ix, x)
+typeof(sampler.W)
+
+@ppl static function unif()
+    X ~ Uniform(-1., 1.)
+    Y ~ Uniform(-1. + X, 1. + X)
+    Z ~ Uniform(-1. + Y, 1. + Y)
+    return X
+end
+observations = Dict{Any,Real}(:Z => 1.)
+observations = Dict{Any,Real}()
+addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(unif, (), observations)
+
+K = length(addresses_to_ix)
+Random.seed!(0)
+mu, sigma = advi(10_000, K, 10, 0.01, logjoint)
+
+using Plots
+
+posterior = sigma .* randn(K, 1_000_000) .+ mu
+constrained_posterior = transform_to_constrained!(copy(posterior));
+histogram(constrained_posterior[addresses_to_ix[:Y],:], normalize=true)
+
+
+function test(x::T, xs::V) where {T <: Real, V <: AbstractArray{T}}
+    return x, xs
+end
+

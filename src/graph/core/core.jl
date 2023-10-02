@@ -16,6 +16,7 @@ include("plates.jl")
     `X[i] = rand(distributions[i](X))`
     in topological order.
     In fact, this is exactly what the `sample` function does.
+    Assumption: all sample statements produce Float64 output.
 =#
 struct PGM
     name::Symbol

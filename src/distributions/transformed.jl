@@ -21,6 +21,22 @@ function image(t::Transform, domain::RealInterval)::RealInterval
     error("Not implemented.")
 end
 
+struct IdentityTransform <: Transform
+end
+function (::IdentityTransform)(x::Real)::Real
+    return x
+end
+function log_abs_det_jacobian(t::IdentityTransform, x::Real)::Real
+    return 0.
+end
+function Base.inv(t::IdentityTransform,)::Transform
+    return t
+end
+in_domain(t::IdentityTransform, x::Real) = true
+domain(t::IdentityTransform)::RealInterval = RealInterval(-Inf, Inf)
+image(t::IdentityTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(domain.ub))
+
+
 struct ExpTransform <: Transform
 end
 struct LogTransform <: Transform
@@ -82,8 +98,8 @@ domain(t::InverseSigmoidTransform) = RealInterval(0, 1)
 image(t::InverseSigmoidTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(domain.ub))
 
 struct AffineTransform <: Transform
-    k::Float64
-    d::Float64
+    k::Real
+    d::Real
 end
 function (t::AffineTransform)(x::Real)::Real
     return t.k * x + t.d
@@ -135,7 +151,7 @@ function Base.rand(t::TransformedDistribution)::Real
     return t.T(Base.rand(t.base))
 end
 
-function logpdf(t::TransformedDistribution, y::Real)::Float64
+function logpdf(t::TransformedDistribution, y::Real)::Real
     if !in_domain(t.T_inv, y) # !(y in support(t))
         return -Inf
     end
@@ -147,32 +163,38 @@ function support(t::TransformedDistribution)
     return image(t.T, support(t.base))
 end
 
-function to_unconstrained(base::ContinuousUnivariateDistribution)::ContinuousUnivariateDistribution
-    supp = support(base)
-    println("support: ", supp)
+
+function transform_to(supp::RealInterval)::Transform
     if supp.lb == -Inf && supp.ub == Inf
-        return base
+        return IdentityTransform()
     end
     if supp.ub == Inf # supp.lb != -Inf
         if supp.lb == 0
-            transform = LogTransform()
+            return LogTransform()
         else
-            transform = LogTransform() ∘ AffineTransform(1, -supp.lb)
+            return LogTransform() ∘ AffineTransform(1, -supp.lb)
         end
-
-    elseif supp.lb == -Inf # supp.ub != Inf
-        transform = LogTransform() ∘ AffineTransform(-1, supp.lb)
-
-    elseif supp.lb == 0 && supp.ub == 1
-        transform =  InverseSigmoidTransform()
-
-    else
-        scale = supp.ub - supp.lb
-        transform =  InverseSigmoidTransform() ∘ AffineTransform(1/scale, -supp.lb/scale)
     end
 
+    if supp.lb == -Inf # supp.ub != Inf
+        return LogTransform() ∘ AffineTransform(-1, supp.lb)
+    end
+
+    if supp.lb == 0 && supp.ub == 1
+        return InverseSigmoidTransform()
+    else
+        scale = supp.ub - supp.lb
+        return InverseSigmoidTransform() ∘ AffineTransform(1/scale, -supp.lb/scale)
+    end
+
+end
+function to_unconstrained(base::ContinuousUnivariateDistribution)::ContinuousUnivariateDistribution
+    supp = support(base)
+    transform = transform_to(supp)
     return TransformedDistribution(base, transform)
 end
+
+export transform_to, to_unconstrained
 
 
 # using Distributions
