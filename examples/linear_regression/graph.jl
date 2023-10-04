@@ -14,10 +14,10 @@ const model = @ppl LinReg begin
 
     let xs = $(Main.xs),
         ys = $(Main.ys),
-        slope ~ Normal(0.0, 10.),
-        intercept ~ Normal(0.0, 10.)
+        slope ~ Normal($(Main.slope_prior_mean), $(Main.slope_prior_sigma)),
+        intercept ~ Normal($(Main.intercept_prior_mean), $(Main.intercept_prior_sigma))
 
-        [(Normal(f(slope, intercept, xs[i]), 1.) ↦ ys[i]) for i in 1:$(Main.N)]
+        [(Normal(f(slope, intercept, xs[i]), $(Main.σ)) ↦ ys[i]) for i in 1:$(Main.N)]
         
         (slope, intercept)
     end
@@ -50,11 +50,13 @@ println("for 10_000_000 samples.")
 W = exp.(lps);
 
 slope_est = [r[1] for r in retvals]'W
+slope_sigma_est = sqrt([r[1]^2 for r in retvals]'W - slope_est^2)
 intercept_est = [r[2] for r in retvals]'W
+intercept_sigma_est = sqrt([r[2]^2 for r in retvals]'W - intercept_est^2)
 
 println("convergence:")
-println("  slope: ", slope_true, " vs. ", slope_est, " (estimated) vs. ", map[2], " (map)")
-println("  intercept: ", intercept_true, " vs. ", intercept_est, " (estimated) vs. ", map[1], " (map)")
+println("  slope: ", slope_true, " vs. ", slope_est, "±", slope_sigma_est, " (estimated) vs. ", map[2], "±", sqrt(S[2,2]), " (map)")
+println("  intercept: ", intercept_true," vs. ", intercept_est, "±", intercept_sigma_est, " (estimated) vs. ", map[1], "±", sqrt(S[1,1]), " (map)")
 
 
 
