@@ -394,7 +394,11 @@ addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained
 
 K = length(addresses_to_ix)
 Random.seed!(0)
-mu, sigma = advi(10_000, K, 10, 0.01, logjoint)
+mu, sigma = advi(logjoint, 10_000, 10, 0.01, K)
+
+Q = MeanFieldGaussian(K)
+Random.seed!(0)
+Q = advi(logjoint, 10_000, 10, 0.01, Q)
 
 using Plots
 

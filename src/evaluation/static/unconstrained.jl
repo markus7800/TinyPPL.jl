@@ -127,7 +127,7 @@ function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observatio
         return X
     end
 
-    function logjoint(X::AbstractVector{Float64})
+    function logjoint(X::AbstractVector{<:Real})
         sampler = UnconstrainedLogJoint(addresses_to_ix, X)
         model(args, sampler, observations)
         return sampler.W
