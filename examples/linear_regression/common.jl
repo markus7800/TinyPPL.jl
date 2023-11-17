@@ -23,8 +23,8 @@ end
 const slope_true = 2.
 const intercept_true = -1.
 
-const xs = vec(DelimitedFiles.readdlm("data/xs.txt"))
-const ys = vec(DelimitedFiles.readdlm("data/ys.txt"))
+const xs = vec(DelimitedFiles.readdlm(Base.pwd() * "/examples/linear_regression/data/xs.txt"))
+const ys = vec(DelimitedFiles.readdlm(Base.pwd() * "/examples/linear_regression/data/ys.txt"))
 
 #const xs = [1.76405235,  0.40015721,  0.97873798,  2.2408932 ,  1.86755799, -0.97727788,  0.95008842, -0.15135721, -0.10321885,  0.4105985 ]
 #const ys = [ 2.81619183,  0.08840156,  1.24556311,  3.76987354,  3.02320312, -2.66646862,  1.18826398, -1.01462727, -0.91835056,  0.10928415]
