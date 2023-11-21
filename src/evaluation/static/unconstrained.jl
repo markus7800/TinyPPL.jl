@@ -1,51 +1,5 @@
 import ..Distributions: Transform, transform_to, to_unconstrained, support
 
-# struct TransformCollector <: StaticSampler
-#     addresses_to_transforms::Dict{Any,Transform}
-#     function TransformCollector()
-#         return new(Dict())
-#     end
-# end
-
-# function sample(sampler::TransformCollector, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
-#     if !isnothing(obs)
-#         return obs
-#     end
-#     value = rand(dist)
-#     sampler.addresses_to_transforms[addr] = transform_to(support(dist))
-#     return value
-# end
-
-# function get_addresses_to_transforms(model::StaticModel, args::Tuple, observations::Dict)::Dict{Any,Transform}
-#     sampler = TransformCollector()
-#     model(args, sampler, observations)
-#     return sampler.addresses_to_transforms
-# end
-
-# struct StackedTransforms
-#     transforms::Vector{Transform}
-#     addresses_to_ix::Addr2Ix
-# end
-# function StackedTransforms(addresses_to_ix::Addr2Ix, addresses_to_transform::Dict{Any,Transform})
-#     transforms = Vector{Transform}(undef, length(addresses_to_transform))
-#     for (addr, ix) in addresses_to_ix
-#         transforms[ix] = addresses_to_transform[addr]
-#     end
-#     return StackedTransforms(transforms, addresses_to_ix)
-# end
-# function (st::StackedTransforms)(x::Vector{Float64})::Vector{Float64}
-#     return Float64[st.transforms[i](x[i]) for i in eachindex(x)]
-# end
-# function Base.inv(st::StackedTransforms)::StackedTransforms
-#     return StackedTransforms(inv.(st.transforms), st.addresses_to_ix)
-# end
-# function Base.getindex(st::StackedTransforms, addr::Any)::Transform
-#     return st.transforms[st.addresses_to_ix[addr]]
-# end
-# function (st::StackedTransforms)(addr::Any, x::Float64)::Float64
-#     return st[addr](x)
-# end
-
 mutable struct ConstraintTransformer{T} <: StaticSampler
     addresses_to_ix::Addr2Ix
     X::T
@@ -99,6 +53,7 @@ function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observatio
     addresses = get_addresses(model, args, observations)
     addresses_to_ix = get_address_to_ix(addresses)
 
+    # TODO: only input matrix, if distributions (e.g. support) is also static
     function transform_to_constrained!(X::AbstractArray{Float64})
         if ndims(X) == 2
             for i in axes(X,2)

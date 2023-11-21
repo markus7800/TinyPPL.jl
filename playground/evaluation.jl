@@ -411,3 +411,64 @@ function test(x::T, xs::V) where {T <: Real, V <: AbstractArray{T}}
     return x, xs
 end
 
+
+
+
+@ppl function six_in_a_row(N)
+    i = 1
+    nsix = 0
+    while true
+        x = {:x => i} ~ DiscreteUniform(1,6)
+        if isodd(x)
+            {:odd} ~ Dirac(true)
+            break
+        end
+        if x == 6
+            nsix += 1
+        else
+            nsix = 0
+        end
+        if nsix == N
+            {:odd} ~ Dirac(false)
+            break
+        end
+        i += 1
+    end
+    return i
+end
+
+@ppl function nth_six(N)
+    i = 1
+    nsix = 0
+    while true
+        x = {:x => i} ~ DiscreteUniform(1,6)
+        if isodd(x)
+            {:odd} ~ Dirac(true)
+            break
+        end
+        if x == 6
+            nsix += 1
+        end
+        if nsix == N
+            {:odd} ~ Dirac(false)
+            break
+        end
+        i += 1
+    end
+    return i
+end
+
+no_odds = Dict(:odd => false)
+N = 5
+
+Random.seed!(0)
+_, retvals, lp = likelihood_weighting(nth_six, (N,), no_odds, 10_000_000, Evaluation.no_op_completion);
+p = exp.(lp)
+retvals'p
+
+
+Random.seed!(0)
+_, retvals, lp = likelihood_weighting(six_in_a_row, (N,), no_odds, 10_000_000, Evaluation.no_op_completion);
+p = exp.(lp)
+retvals'p
+
