@@ -111,6 +111,9 @@ end
 function rand_and_logpdf(q::VariationalDistribution)
     error("Not implemented.")
 end
+function Base.rand(q::VariationalDistribution, n::Int)
+    error("Not implemented.")
+end
 
 function Distributions.entropy(q::VariationalDistribution)
     error("Not implemented.")
@@ -144,6 +147,11 @@ function rand_and_logpdf(q::MeanFieldGaussian)
     Z = randn(K)
     value = q.sigma .* Z .+ q.mu
     return value, -Z'Z/2 - K*log(sqrt(2π)) - log(prod(q.sigma))
+end
+function Base.rand(q::MeanFieldGaussian, n::Int)
+    K = length(q.mu)
+    Z = randn(K, n)
+    return q.sigma .* Z .+ q.mu
 end
 
 function Distributions.entropy(q::MeanFieldGaussian)
@@ -187,6 +195,9 @@ function rand_and_logpdf(q::FullRankGaussian)
     # now works with fixed Tracker randn
     value = rand(q.base)
     return value, Distributions.logpdf(q.base, value)
+end
+function Base.rand(q::FullRankGaussian, n::Int)
+    return rand(q.base, n)
 end
 
 function Distributions.entropy(q::FullRankGaussian)

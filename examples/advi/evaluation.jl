@@ -57,7 +57,7 @@ maximum(abs, Q.sigma .- map_sigma)
 Random.seed!(0)
 Q2 = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO());
 
-# TODO: mathetmatically check why these are the same
+# TODO: mathematically check why these are the same
 maximum(abs, Q2.mu .- Q.mu)
 maximum(abs, Q2.sigma .- Q.sigma)
 
@@ -72,7 +72,7 @@ Q2 = advi(logjoint, N, 10, 0.01, FullRankGaussian(K), MonteCarloELBO());
 maximum(abs, mu .- Q.base.μ)
 maximum(abs, L*L' .- Q.base.Σ)
 
-# TODO: mathetmatically check why these are the same
+# TODO: mathematically check why these are the same
 maximum(abs, Q2.base.μ .- Q.base.μ)
 maximum(abs, Q2.base.Σ .- Q.base.Σ)
 
@@ -111,3 +111,27 @@ sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"]], Q2
 
 maximum(abs, mu .- Q.mu)
 maximum(abs, sigma .- Q.sigma)
+
+
+
+using Plots
+@ppl static function unif()
+    x ~ Uniform(-1,1)
+    y ~ Uniform(x-1,x+1)
+    z ~ Uniform(y-1,y+1)
+end
+
+Random.seed!(0)
+traces, retvals, lp = likelihood_weighting(unif, (), Dict(), 1_000_000);
+histogram(traces[:z], weights=exp.(lp), normalize=true, legend=false)
+
+
+addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(unif, (), Dict());
+K = length(addresses_to_ix)
+
+Random.seed!(0)
+Q = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+Q = advi(logjoint, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
+zeta = rand(Q, 1_000_000);
+theta = transform_to_constrained!(zeta);
+histogram(theta[addresses_to_ix[:z],:], normalize=true, legend=false)
