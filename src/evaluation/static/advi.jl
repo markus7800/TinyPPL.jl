@@ -56,18 +56,16 @@ function advi_fullrank(logjoint::Function, n_samples::Int, N::Int, learning_rate
     pre = 1.1
     post = 0.9
 
-    #mask = LinearAlgebra.I(K)
     mask = LinearAlgebra.LowerTriangular(trues(K,K))
 
     @progress for i in 1:n_samples
         # setup for gradient computation
         phi_tracked = Tracker.param(phi)
-        #mu = convert(Vector{eltype(phi_tracked)}, phi_tracked[1:K])
-        mu = phi_tracked[1:K]
-        A = reshape(phi_tracked[K+1:end],K,K)
-        L = A .* mask
-        # L = LinearAlgebra.LowerTriangular(convert(Matrix{eltype(A)}, A))
-        # println(mu, ", ", L)
+        mu = phi_tracked[1:K] # Tracked K-element Vector{Float64}
+        # mu = convert(Vector{eltype(phi_tracked)}, phi_tracked[1:K]) # Vector{Tracker.TrackedReal{Float64}}
+        A = reshape(phi_tracked[K+1:end],K,K) # Tracked K×K Matrix{Float64}
+        L = A .* mask # Tracked K×K Matrix{Float64}
+        # L = LinearAlgebra.LowerTriangular(convert(Matrix{eltype(A)}, A)) # Matrix{Tracker.TrackedReal{Float64}}
 
         # estimate elbo
         elbo = 0.
@@ -75,21 +73,15 @@ function advi_fullrank(logjoint::Function, n_samples::Int, N::Int, learning_rate
             # reparametrisation trick
             eta = randn(K)
             zeta = L*eta .+ mu
-            # dist = Distributions.MultivariateNormal(mu, L*L')
-            # println(dist)
-            # zeta = rand(dist)
-            # println("zeta=", zeta)
             elbo += logjoint(zeta)
         end
         elbo = elbo / N
-        # println("elbo=", elbo)
 
         # automatically compute gradient
         Tracker.back!(elbo)
         grad = Tracker.grad(phi_tracked)
-        # println(Tracker.data(L))
         grad[K+1:end] += reshape(inv(Diagonal(Tracker.data(L))),:) # entropy
-        # println("grad=", grad)
+
         # reset from gradient computation
         phi = Tracker.data(phi)
 
@@ -169,10 +161,11 @@ end
 function update_params(q::FullRankGaussian, params::AbstractVector{<:Float64})::VariationalDistribution
     K = length(q.base)
     mu = params[1:K]
+    mu = convert(Vector{eltype(mu)}, mu)
     A = reshape(params[K+1:end], K, K)
     A = convert(Matrix{eltype(A)}, A) # Tracked K×K Matrix{Float64} -> K×K Matrix{Tracker.TrackedReal{Float64}}
 
-    L = LinearAlgebra.LowerTriangular(A)
+    L = LinearAlgebra.LowerTriangular(A) # KxK LinearAlgebra.LowerTriangular{Tracker.TrackedReal{Float64}, Matrix{Tracker.TrackedReal{Float64}}}
     return FullRankGaussian(Distributions.MultivariateNormal(mu, PDMats.PDMat(LinearAlgebra.Cholesky(L))))
 end
 
@@ -191,8 +184,8 @@ function rand_and_logpdf(q::FullRankGaussian)
     # eta = randn(K)
     # zeta = L*eta .+ q.base.μ
     # value = zeta
+    # now works with fixed Tracker randn
     value = rand(q.base)
-    # println("zeta=",value)
     return value, Distributions.logpdf(q.base, value)
 end
 
@@ -221,7 +214,6 @@ function estimate_elbo(::RelativeEntropyELBO, logjoint::Function, q::Variational
     for _ in 1:L
         # implicit reparametrisation trick (if we get gradients)
         zeta, _ = rand_and_logpdf(q)
-        # println("zeta=", zeta)
         elbo += logjoint(zeta)
     end
     elbo = elbo / L + Distributions.entropy(q)
@@ -243,12 +235,10 @@ function advi(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64
 
         # estimate elbo
         elbo = estimate_elbo(estimator, logjoint, q, L)
-        # println("elbo=", elbo)
 
         # automatically compute gradient
         Tracker.back!(elbo)
         grad = Tracker.grad(phi_tracked)
-        # println("grad=", grad)
 
         # decayed adagrad update rule
         acc = @. post * acc + pre * grad^2
