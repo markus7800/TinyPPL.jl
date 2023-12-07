@@ -17,25 +17,28 @@ function sample(sampler::ADVI, addr::Any, dist::Distribution, obs::Union{Nothing
     end
 
     if !haskey(sampler.variational_dists, addr)
-        q = VariationalDistribution(dist)
+        q = VariationalNormal()
         params = Tracker.param.(initial_params(q)) # no vector params
         sampler.variational_dists[addr] = update_params(q, params)
     end
     var_dist = sampler.variational_dists[addr]
-    value, lpq = rand_and_logpdf(var_dist)
-    sampler.ELBO += logpdf(dist, value) - lpq
+    transformed_dist = to_unconstrained(dist)
+    unconstrained_value, lpq = rand_and_logpdf(var_dist)
+    sampler.ELBO += logpdf(transformed_dist, unconstrained_value) - lpq
+    constrained_value = transformed_dist.T_inv(unconstrained_value)
 
-    return value
+    return constrained_value
 end
 
-function advi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples::Int, L::Int, learning_rate::Float64, variational_dists::Dict{Any, VariationalDistribution})
+# Only Gaussian Mean Field
+function advi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples::Int, L::Int, learning_rate::Float64)
 
     eps = 1e-8
     acc = Dict{Any, AbstractVector{Float64}}()
     pre = 1.1
     post = 0.9
 
-    sampler = ADVI(variational_dists)
+    sampler = ADVI(Dict{Any, VariationalDistribution}())
     @progress for i in 1:n_samples
 
         for (addr, var_dist) in sampler.variational_dists
@@ -68,7 +71,52 @@ function advi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
         
     end
 
-    return sampler.variational_dists
+    return UniversalMeanField(sampler.variational_dists, model, args, observations)
+end
+
+mutable struct UniversalConstraintTransformer <: UniversalSampler
+    X::Dict{Any,Float64}
+    Y::Dict{Any,Float64}
+    to::Symbol
+    function UniversalConstraintTransformer(X::Dict{Any,Float64}, to::Symbol)
+        @assert to in (:constrained, :unconstrained)
+        return new(X, Dict{Any,Float64}(), to)
+    end
+end 
+
+function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        return obs
+    end
+    transformed_dist = to_unconstrained(dist)
+    if sampler.to == :unconstrained
+        constrained_value = sampler.X[addr]
+        unconstrained_value = transformed_dist.T(constrained_value)
+        sampler.Y[addr] = unconstrained_value
+    else # samper.to == :constrained
+        unconstrained_value = sampler.X[addr]
+        constrained_value = transformed_dist.T_inv(unconstrained_value)
+        sampler.Y[addr] = constrained_value
+    end
+    return constrained_value
+end
+
+struct UniversalMeanField
+    variational_dists::Dict{Any,VariationalDistribution}
+    model::UniversalModel
+    args::Tuple
+    observations::Dict
+end
+
+function Distributions.rand(umf::UniversalMeanField)
+    X = Dict{Any,Float64}(addr => Distributions.rand(var_dist) for (addr, var_dist) in umf.variational_dists)
+    sampler = UniversalConstraintTransformer(X, :constrained)
+    umf.model(umf.args, sampler, umf.observations)
+    return sampler.Y
+end
+
+function Distributions.rand(umf::UniversalMeanField, n::Int)
+    return [Distributions.rand(umf) for _ in 1:n]
 end
 
 export advi

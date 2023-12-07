@@ -1,3 +1,4 @@
+import Distributions
 
 const Param2Ix = Dict{Any, UnitRange{Int}}
 
@@ -90,6 +91,16 @@ function rand_and_logpdf(guide::Guide)
     guide.sampler.W = 0.0
     guide.model(guide.args, guide.sampler, guide.observations)
     return guide.sampler.X, guide.sampler.W
+end
+
+function Distributions.rand(guide::Guide)
+    guide.sampler.W = 0.0
+    guide.model(guide.args, guide.sampler, guide.observations)
+    return guide.sampler.X
+end
+
+function Distributions.rand(guide::Guide, n::Int)
+    return hcat([Distributionrand(guide) for _ in 1:n]) 
 end
 
 export make_guide

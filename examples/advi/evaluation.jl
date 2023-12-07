@@ -153,7 +153,7 @@ end
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
 Random.seed!(0)
-Q = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, Dict{Any,VariationalDistribution}())
+Q = advi(LinReg, (xs,), observations,  10_000, 10, 0.01)
 mu = [Q[:intercept].base.μ, Q[:slope].base.μ]
 sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
@@ -177,3 +177,25 @@ import Tracker
 Tracker.param([1.]) isa AbstractVector{<:Float64} # true
 Tracker.param.([1.]) isa AbstractVector{<:Float64} # false
 Tracker.param.([1.]) isa AbstractVector{<:Real} # true
+
+
+@ppl function unif()
+    x ~ Uniform(-1,1)
+    y ~ Uniform(x-1,x+1)
+    z ~ Uniform(y-1,y+1)
+end
+
+Random.seed!(0)
+Q = advi(unif, (), Dict(),  10_000, 10, 0.01)
+theta = rand(Q, 1_000_000);
+
+histogram([t[:y] for t in theta], normalize=true, legend=false)
+
+
+@ppl function nunif()
+    n ~ Geometric(0.5)
+    x = 0.
+    for i in 1:n
+        x = {(:x,i)} ~ Uniform(x-1,x+1)
+    end
+end

@@ -17,6 +17,9 @@ end
 function rand_and_logpdf(q::VariationalDistribution)
     error("Not implemented.")
 end
+function Distributions.rand(q::VariationalDistribution)
+    error("Not implemented.")
+end
 function Distributions.rand(q::VariationalDistribution, n::Int)
     error("Not implemented.")
 end
@@ -49,6 +52,11 @@ function rand_and_logpdf(q::MeanFieldGaussian)
     Z = randn(K)
     value = q.sigma .* Z .+ q.mu
     return value, -Z'Z/2 - K*log(sqrt(2π)) - log(prod(q.sigma))
+end
+function Distributions.rand(q::MeanFieldGaussian)
+    K = length(q.mu)
+    Z = randn(K)
+    return q.sigma * Z + q.mu
 end
 function Distributions.rand(q::MeanFieldGaussian, n::Int)
     K = length(q.mu)
@@ -94,6 +102,9 @@ function rand_and_logpdf(q::FullRankGaussian)
     value = rand(q.base)
     return value, Distributions.logpdf(q.base, value)
 end
+function Distributions.rand(q::FullRankGaussian)
+    return rand(q.base)
+end
 function Distributions.rand(q::FullRankGaussian, n::Int)
     return rand(q.base, n)
 end
@@ -112,6 +123,9 @@ function rand_and_logpdf(q::VariationalWrappedDistribution)
     value = rand(q.base)
     return value, Distributions.logpdf(q.base, value)
 end
+function Distributions.rand(q::VariationalWrappedDistribution)
+    return rand(q.base)
+end
 function Distributions.rand(q::VariationalWrappedDistribution, n::Int)
     return rand(q.base, n)
 end
@@ -121,7 +135,7 @@ struct VariationalNormal{T} <: VariationalWrappedDistribution where T <: Real
     log_σ::T
 end
 function VariationalNormal()
-    return new{Float64}(Distributions.Normal(), 0.)
+    return VariationalNormal{Float64}(Distributions.Normal(), 0.)
 end
 function initial_params(q::VariationalNormal)::AbstractVector{<:Float64}
     return [0., 0.]
@@ -132,8 +146,8 @@ end
 function update_params(q::VariationalNormal, params::AbstractVector{<:Real})::VariationalNormal
     return VariationalNormal(Distributions.Normal(params[1], exp(params[2])), params[2])
 end
-function VariationalDistribution(base::Distributions.Normal)
-    return VariationalNormal(base, log(base.σ))
-end
+# function VariationalDistribution(base::Distributions.Normal)
+#     return VariationalNormal(base, log(base.σ))
+# end
 
 export MeanFieldGaussian, FullRankGaussian, VariationalNormal
