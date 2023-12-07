@@ -2,7 +2,7 @@ using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
 
-xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
+# xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
 xs = [-1., -0.5, 0.0, 0.5, 1.0];
 ys = [-3.2, -1.8, -0.5, -0.2, 1.5];
 
@@ -25,9 +25,10 @@ map_mu = S*(inv(S0) * m0 + Phi'ys / σ^2)
 map_mu
 map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
 
-@ppl static function LinReg(xs)
-    slope = {:slope} ~ Normal(slope_prior_mean, slope_prior_sigma)
+@ppl static function LinRegStatic(xs)
     intercept = {:intercept} ~ Normal(intercept_prior_mean, intercept_prior_sigma)
+    slope = {:slope} ~ Normal(slope_prior_mean, slope_prior_sigma)
+    # println("intercept: ", intercept, ", slope: ", slope)
 
     for i in eachindex(xs)
         {(:y, i)} ~ Normal(f(slope, intercept, xs[i]), σ)
@@ -38,7 +39,7 @@ end
 
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
-addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(LinReg, (xs,), observations);
+addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations);
 K = length(addresses_to_ix)
 
 Random.seed!(0)
@@ -51,8 +52,8 @@ maximum(abs, sigma .- map_sigma)
 
 Random.seed!(0)
 Q = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
-maximum(abs, Q.mu .- map_mu)
-maximum(abs, Q.sigma .- map_sigma)
+maximum(abs, Q.mu .- mu)
+maximum(abs, Q.sigma .- sigma)
 
 Random.seed!(0)
 Q2 = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO());
@@ -101,11 +102,11 @@ end
 # end
 
 Random.seed!(0);
-@time Q = advi(logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+@time Q = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
 
 guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2 = advi(logjoint, 10_000, 100, 0.01, guide, MonteCarloELBO())
+@time Q2 = advi(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
 mu = vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["mu_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["mu_slope"]])
 sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["omega_slope"]]))
 
@@ -135,3 +136,44 @@ Q = advi(logjoint, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
 zeta = rand(Q, 1_000_000);
 theta = transform_to_constrained!(zeta);
 histogram(theta[addresses_to_ix[:z],:], normalize=true, legend=false)
+
+
+
+@ppl function LinReg(xs)
+    intercept = {:intercept} ~ Normal(intercept_prior_mean, intercept_prior_sigma)
+    slope = {:slope} ~ Normal(slope_prior_mean, slope_prior_sigma)
+
+    for i in eachindex(xs)
+        {(:y, i)} ~ Normal(f(slope, intercept, xs[i]), σ)
+    end
+
+    return (slope, intercept)
+end
+
+observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
+
+Random.seed!(0)
+Q = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, Dict{Any,VariationalDistribution}())
+mu = [Q[:intercept].base.μ, Q[:slope].base.μ]
+sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
+maximum(abs, mu .- map_mu)
+maximum(abs, sigma .- map_sigma)
+
+Random.seed!(0)
+Q2 = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+maximum(abs, Q2.mu .- mu)
+maximum(abs, Q2.sigma .- sigma)
+
+guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
+Random.seed!(0)
+@time Q2 = advi(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+guide_mu = vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["mu_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["mu_slope"]])
+guide_sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["omega_slope"]]))
+maximum(abs, guide_mu .- mu)
+maximum(abs, guide_sigma .- sigma)
+
+
+import Tracker
+Tracker.param([1.]) isa AbstractVector{<:Float64} # true
+Tracker.param.([1.]) isa AbstractVector{<:Float64} # false
+Tracker.param.([1.]) isa AbstractVector{<:Real} # true

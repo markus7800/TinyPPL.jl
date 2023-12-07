@@ -44,7 +44,7 @@ mutable struct GuideSampler{T,V} <: StaticSampler
 end
 
 function sample(sampler::GuideSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs)
+    if !isnothing(obs) # TODO: assert no obs?
         return obs
     end
     value = rand(dist)
@@ -76,17 +76,16 @@ function make_guide(model::StaticModel, args::Tuple, observations::Dict, address
     return Guide(sampler, model, args, observations)
 end
 
+function initial_params(guide::Guide)::AbstractVector{<:Float64}
+    nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
+    return zeros(nparams)
+end
+
 function update_params(guide::Guide, params::AbstractVector{<:Float64})::VariationalDistribution
     new_sampler = GuideSampler(guide.sampler.params_to_ix, guide.sampler.addresses_to_ix, params)
     return Guide(new_sampler, guide.model, guide.args, guide.observations)
 end
 
-function nparams(guide::Guide)
-    return sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
-end
-function init_params(guide::Guide)::AbstractVector{<:Float64}
-    return zeros(nparams(guide))
-end
 function rand_and_logpdf(guide::Guide)
     guide.sampler.W = 0.0
     guide.model(guide.args, guide.sampler, guide.observations)

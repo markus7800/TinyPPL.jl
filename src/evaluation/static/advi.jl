@@ -1,9 +1,9 @@
 import Tracker
 import Distributions
 import LinearAlgebra
-import PDMats
 import Random
 
+# Fix merged to Tracker.jl
 # for f in :[rand, randn, randexp].args
 #     @eval Random.$f(rng::Random.AbstractRNG,::Type{Tracker.TrackedReal{T}}) where {T} = Tracker.param(Random.$f(rng,T))
 # end
@@ -96,116 +96,6 @@ function advi_fullrank(logjoint::Function, n_samples::Int, N::Int, learning_rate
     return mu, L
 end
 
-
-abstract type VariationalDistribution <: Distribution{Distributions.Multivariate, Distributions.Continuous} end
-
-function update_params(q::VariationalDistribution, params::AbstractVector{<:Float64})::VariationalDistribution
-    error("Not implemented.")
-end
-function nparams(q::VariationalDistribution)
-    error("Not implemented.")
-end
-function init_params(q::VariationalDistribution)::AbstractVector{<:Float64}
-    error("Not implemented.")
-end
-function rand_and_logpdf(q::VariationalDistribution)
-    error("Not implemented.")
-end
-function Base.rand(q::VariationalDistribution, n::Int)
-    error("Not implemented.")
-end
-
-function Distributions.entropy(q::VariationalDistribution)
-    error("Not implemented.")
-end
-
-struct MeanFieldGaussian <: VariationalDistribution
-    mu::AbstractVector{<:Real}
-    sigma::AbstractVector{<:Real}
-end
-
-function MeanFieldGaussian(K::Int)
-    return MeanFieldGaussian(zeros(K), ones(K))
-end
-
-function update_params(q::MeanFieldGaussian, params::AbstractVector{<:Float64})::VariationalDistribution
-    K = length(q.mu)
-    mu = params[1:K]
-    omega = params[K+1:end]
-    return MeanFieldGaussian(mu, exp.(omega))
-end
-
-function init_params(q::MeanFieldGaussian)::AbstractVector{<:Float64}
-    return zeros(nparams(q))
-end
-
-function nparams(q::MeanFieldGaussian)
-    return 2*length(q.mu)
-end
-function rand_and_logpdf(q::MeanFieldGaussian)
-    K = length(q.mu)
-    Z = randn(K)
-    value = q.sigma .* Z .+ q.mu
-    return value, -Z'Z/2 - K*log(sqrt(2π)) - log(prod(q.sigma))
-end
-function Base.rand(q::MeanFieldGaussian, n::Int)
-    K = length(q.mu)
-    Z = randn(K, n)
-    return q.sigma .* Z .+ q.mu
-end
-
-function Distributions.entropy(q::MeanFieldGaussian)
-    return sum(log, q.sigma) + length(q.mu)/2 * (log(2π) + 1)
-end
-
-struct FullRankGaussian <: VariationalDistribution
-    base::Distributions.MultivariateNormal
-end
-
-function FullRankGaussian(K::Int)
-    return FullRankGaussian(Distributions.MultivariateNormal(zeros(K), LinearAlgebra.diagm(ones(K))))
-end
-
-function update_params(q::FullRankGaussian, params::AbstractVector{<:Float64})::VariationalDistribution
-    K = length(q.base)
-    mu = params[1:K]
-    mu = convert(Vector{eltype(mu)}, mu)
-    A = reshape(params[K+1:end], K, K)
-    A = convert(Matrix{eltype(A)}, A) # Tracked K×K Matrix{Float64} -> K×K Matrix{Tracker.TrackedReal{Float64}}
-
-    L = LinearAlgebra.LowerTriangular(A) # KxK LinearAlgebra.LowerTriangular{Tracker.TrackedReal{Float64}, Matrix{Tracker.TrackedReal{Float64}}}
-    return FullRankGaussian(Distributions.MultivariateNormal(mu, PDMats.PDMat(LinearAlgebra.Cholesky(L))))
-end
-
-function nparams(q::FullRankGaussian)
-    return sum(length, Distributions.params(q.base))
-end
-
-function init_params(q::FullRankGaussian)::AbstractVector{<:Float64}
-    K = length(q.base)
-    return vcat(zeros(K), reshape(LinearAlgebra.I(K),:))
-end
-
-function rand_and_logpdf(q::FullRankGaussian)
-    # K = length(q.base)
-    # L = q.base.Σ.chol.L
-    # eta = randn(K)
-    # zeta = L*eta .+ q.base.μ
-    # value = zeta
-    # now works with fixed Tracker randn
-    value = rand(q.base)
-    return value, Distributions.logpdf(q.base, value)
-end
-function Base.rand(q::FullRankGaussian, n::Int)
-    return rand(q.base, n)
-end
-
-function Distributions.entropy(q::FullRankGaussian)
-    K = length(q.base)
-    L = q.base.Σ.chol.L
-    return K/2*(log(2π) + 1) + log(abs(prod(LinearAlgebra.diag(L))))
-end
-
 abstract type ELBOEstimator end
 struct MonteCarloELBO <: ELBOEstimator end
 function estimate_elbo(::MonteCarloELBO, logjoint::Function, q::VariationalDistribution, L::Int)
@@ -232,7 +122,7 @@ function estimate_elbo(::RelativeEntropyELBO, logjoint::Function, q::Variational
 end
 
 function advi(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
-    phi = init_params(q)
+    phi = initial_params(q)
 
     eps = 1e-8
     acc = fill(eps, size(phi))
@@ -260,4 +150,4 @@ function advi(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64
     return update_params(q, phi)
 end
 
-export advi, advi_meanfield, advi_fullrank, MeanFieldGaussian, FullRankGaussian, MonteCarloELBO, RelativeEntropyELBO
+export advi, advi_meanfield, advi_fullrank, MonteCarloELBO, RelativeEntropyELBO
