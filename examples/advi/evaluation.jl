@@ -153,7 +153,7 @@ end
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
 Random.seed!(0)
-Q = advi(LinReg, (xs,), observations,  10_000, 10, 0.01)
+Q = advi_meanfield(LinReg, (xs,), observations,  10_000, 10, 0.01)
 mu = [Q[:intercept].base.μ, Q[:slope].base.μ]
 sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
@@ -172,6 +172,12 @@ guide_sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"
 maximum(abs, guide_mu .- mu)
 maximum(abs, guide_sigma .- sigma)
 
+Random.seed!(0)
+Q = bbvi(LinReg, (xs,), observations,  10_000, 100, 0.01)
+mu = [Q[:intercept].base.μ, Q[:slope].base.μ]
+sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
+maximum(abs, mu .- map_mu)
+maximum(abs, sigma .- map_sigma)
 
 import Tracker
 Tracker.param([1.]) isa AbstractVector{<:Float64} # true
@@ -186,9 +192,9 @@ Tracker.param.([1.]) isa AbstractVector{<:Real} # true
 end
 
 Random.seed!(0)
-Q = advi(unif, (), Dict(),  10_000, 10, 0.01)
-theta = rand(Q, 1_000_000);
-
+Q = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
+zeta = rand(Q, 1_000_000);
+theta = universal_transform_to_constrained(zeta, unif, (), Dict());
 histogram([t[:y] for t in theta], normalize=true, legend=false)
 
 
@@ -199,3 +205,23 @@ histogram([t[:y] for t in theta], normalize=true, legend=false)
         x = {(:x,i)} ~ Uniform(x-1,x+1)
     end
 end
+
+
+q = VariationalNormal(Normal(2., 0.5))
+
+Evaluation.get_params(q)
+Evaluation.get_param_grads(q, 1.)
+
+import Tracker
+mu = Tracker.param(2.)
+sigma = Tracker.param(0.5)
+q = VariationalNormal()
+q = Evaluation.update_params(q, [mu, sigma])
+x = Tracker.data(rand(q))
+lp = logpdf(q, x)
+Tracker.back!(lp)
+Tracker.grad(x)
+Tracker.grad(q.base.μ)
+Tracker.grad(q.log_σ)
+
+all(Tracker.grad.([q.base.μ, q.log_σ]) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))

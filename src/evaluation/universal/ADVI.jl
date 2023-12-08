@@ -31,7 +31,7 @@ function sample(sampler::ADVI, addr::Any, dist::Distribution, obs::Union{Nothing
 end
 
 # Only Gaussian Mean Field
-function advi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples::Int, L::Int, learning_rate::Float64)
+function advi_meanfield(model::UniversalModel, args::Tuple, observations::Dict,  n_samples::Int, L::Int, learning_rate::Float64)
 
     eps = 1e-8
     acc = Dict{Any, AbstractVector{Float64}}()
@@ -58,6 +58,7 @@ function advi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
         for (addr, var_dist) in sampler.variational_dists
             params = get_params(var_dist)
             grad = Tracker.grad.(params)
+
             acc_addr = get(acc, addr, fill(eps,size(grad)))
             acc_addr = post .* acc_addr .+ pre .* grad.^2
             acc[addr] = acc_addr
@@ -71,7 +72,7 @@ function advi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
         
     end
 
-    return UniversalMeanField(sampler.variational_dists, model, args, observations)
+    return UniversalMeanField(sampler.variational_dists)
 end
 
 mutable struct UniversalConstraintTransformer <: UniversalSampler
@@ -103,20 +104,28 @@ end
 
 struct UniversalMeanField
     variational_dists::Dict{Any,VariationalDistribution}
-    model::UniversalModel
-    args::Tuple
-    observations::Dict
+end
+function Base.getindex(umf::UniversalMeanField, addr)
+    return umf.variational_dists[addr]
 end
 
 function Distributions.rand(umf::UniversalMeanField)
     X = Dict{Any,Float64}(addr => Distributions.rand(var_dist) for (addr, var_dist) in umf.variational_dists)
-    sampler = UniversalConstraintTransformer(X, :constrained)
-    umf.model(umf.args, sampler, umf.observations)
-    return sampler.Y
+    return X
 end
 
 function Distributions.rand(umf::UniversalMeanField, n::Int)
     return [Distributions.rand(umf) for _ in 1:n]
 end
 
-export advi
+function universal_transform_to_constrained(X::Dict{Any,Float64}, model::UniversalModel, args::Tuple, observations::Dict)::Dict{Any,Float64}
+    sampler = UniversalConstraintTransformer(X, :constrained)
+    model(args, sampler, observations)
+    return sampler.Y
+end
+
+function universal_transform_to_constrained(Xs::Vector{Dict{Any,Float64}}, model::UniversalModel, args::Tuple, observations::Dict)::Vector{Dict{Any,Float64}}
+    return [universal_transform_to_constrained(X, model, args, observations) for X in Xs]
+end
+
+export advi_meanfield, universal_transform_to_constrained

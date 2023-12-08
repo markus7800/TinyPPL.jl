@@ -124,12 +124,14 @@ function rand_and_logpdf(q::VariationalWrappedDistribution)
     return value, Distributions.logpdf(q.base, value)
 end
 function Distributions.rand(q::VariationalWrappedDistribution)
-    return rand(q.base)
+    return Distributions.rand(q.base)
 end
 function Distributions.rand(q::VariationalWrappedDistribution, n::Int)
-    return rand(q.base, n)
+    return Distributions.rand(q.base, n)
 end
-
+function Distributions.logpdf(q::VariationalWrappedDistribution, x::Real)
+    return Distributions.logpdf(q.base, x)
+end
 struct VariationalNormal{T} <: VariationalWrappedDistribution where T <: Real
     base::Distributions.Normal{T}
     log_σ::T
@@ -145,6 +147,12 @@ function get_params(q::VariationalNormal)::AbstractVector{<:Real}
 end
 function update_params(q::VariationalNormal, params::AbstractVector{<:Real})::VariationalNormal
     return VariationalNormal(Distributions.Normal(params[1], exp(params[2])), params[2])
+end
+function logpdf_param_grads(q::VariationalNormal, x::Real)
+    z = (x - q.base.μ) / q.base.σ
+    ∇μ = z / q.base.σ
+    ∇σ = -1. / q.base.σ + abs2(z) / q.base.σ
+    return [∇μ, ∇σ * exp(q.log_σ)]
 end
 # function VariationalDistribution(base::Distributions.Normal)
 #     return VariationalNormal(base, log(base.σ))
