@@ -23,7 +23,8 @@ function sample(sampler::ADVI, addr::Any, dist::Distribution, obs::Union{Nothing
     end
     var_dist = sampler.variational_dists[addr]
     transformed_dist = to_unconstrained(dist)
-    unconstrained_value, lpq = rand_and_logpdf(var_dist)
+    unconstrained_value = rand(var_dist)
+    lpq = logpdf(var_dist, unconstrained_value)
     sampler.ELBO += logpdf(transformed_dist, unconstrained_value) - lpq
     constrained_value = transformed_dist.T_inv(unconstrained_value)
 
@@ -89,17 +90,21 @@ function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distri
     if !isnothing(obs)
         return obs
     end
-    transformed_dist = to_unconstrained(dist)
-    if sampler.to == :unconstrained
-        constrained_value = sampler.X[addr]
-        unconstrained_value = transformed_dist.T(constrained_value)
-        sampler.Y[addr] = unconstrained_value
-    else # samper.to == :constrained
-        unconstrained_value = sampler.X[addr]
-        constrained_value = transformed_dist.T_inv(unconstrained_value)
-        sampler.Y[addr] = constrained_value
+    if dist isa Distributions.ContinuousUnivariateDistribution
+        transformed_dist = to_unconstrained(dist)
+        if sampler.to == :unconstrained
+            constrained_value = sampler.X[addr]
+            unconstrained_value = transformed_dist.T(constrained_value)
+            sampler.Y[addr] = unconstrained_value
+        else # samper.to == :constrained
+            unconstrained_value = sampler.X[addr]
+            constrained_value = transformed_dist.T_inv(unconstrained_value)
+            sampler.Y[addr] = constrained_value
+        end
+        return constrained_value
+    else
+        sampler.Y[addr] = sampler.X[addr]
     end
-    return constrained_value
 end
 
 struct UniversalMeanField

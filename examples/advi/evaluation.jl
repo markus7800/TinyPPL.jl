@@ -195,16 +195,32 @@ Random.seed!(0)
 Q = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
 zeta = rand(Q, 1_000_000);
 theta = universal_transform_to_constrained(zeta, unif, (), Dict());
+histogram([t[:x] for t in theta], normalize=true, legend=false)
+
+
+
+Random.seed!(0)
+Q = bbvi(unif, (), Dict(),  10_000, 100, 0.01)
+zeta = rand(Q, 1_000_000);
+theta = universal_transform_to_constrained(zeta, unif, (), Dict());
 histogram([t[:y] for t in theta], normalize=true, legend=false)
 
-
 @ppl function nunif()
-    n ~ Geometric(0.5)
+    n ~ Geometric(0.3)
     x = 0.
-    for i in 1:n
+    for i in 0:Int(n)
         x = {(:x,i)} ~ Uniform(x-1,x+1)
     end
 end
+
+Random.seed!(0)
+Q = bbvi(nunif, (), Dict(),  10_000, 100, 0.01)
+Q[:n]
+zeta = rand(Q, 100_000);
+theta = universal_transform_to_constrained(zeta, nunif, (), Dict());
+histogram([t[(:n)] for t in theta], normalize=true, legend=false)
+addr = (:x,1)
+histogram([t[addr] for t in theta if haskey(t,addr)], normalize=true, legend=false)
 
 
 q = VariationalNormal(Normal(2., 0.5))
@@ -223,5 +239,33 @@ Tracker.back!(lp)
 Tracker.grad(x)
 Tracker.grad(q.base.μ)
 Tracker.grad(q.log_σ)
+Tracker.grad.(Evaluation.get_params(q))
 
-all(Tracker.grad.([q.base.μ, q.log_σ]) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))
+all(Tracker.grad.(Evaluation.get_params(q)) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))
+
+
+# T = transform_to(support(Uniform(0.,1.)))
+# mu = Tracker.param(2.)
+# sigma = Tracker.param(0.5)
+# q = TransformedVariationalWrappedDistribution(VariationalNormal(), T)
+# q = Evaluation.update_params(q, [mu, sigma])
+# x = Tracker.data(rand(q))
+
+# lp = logpdf(q, x)
+# Tracker.back!(lp)
+# Tracker.grad.(Evaluation.get_params(q))
+# all(Tracker.grad.(Evaluation.get_params(q)) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))
+
+
+p = Tracker.param(0.3)
+q = VariationalGeometric()
+q = Evaluation.update_params(q, [p])
+x = 10
+lp = logpdf(q, x)
+Tracker.back!(lp)
+Tracker.grad(x)
+Tracker.grad(q.inv_sigmoid_p)
+Tracker.grad.(Evaluation.get_params(q))
+
+all(Tracker.grad.(Evaluation.get_params(q)) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))
+

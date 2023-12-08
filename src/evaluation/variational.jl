@@ -115,14 +115,12 @@ function Distributions.entropy(q::FullRankGaussian)
     return K/2*(log(2π) + 1) + log(abs(prod(LinearAlgebra.diag(L))))
 end
 
-
-
 abstract type VariationalWrappedDistribution <: VariationalDistribution end
 
-function rand_and_logpdf(q::VariationalWrappedDistribution)
-    value = rand(q.base)
-    return value, Distributions.logpdf(q.base, value)
-end
+# function rand_and_logpdf(q::VariationalWrappedDistribution)
+#     value = rand(q.base)
+#     return value, Distributions.logpdf(q.base, value)
+# end
 function Distributions.rand(q::VariationalWrappedDistribution)
     return Distributions.rand(q.base)
 end
@@ -154,8 +152,73 @@ function logpdf_param_grads(q::VariationalNormal, x::Real)
     ∇σ = -1. / q.base.σ + abs2(z) / q.base.σ
     return [∇μ, ∇σ * exp(q.log_σ)]
 end
-# function VariationalDistribution(base::Distributions.Normal)
-#     return VariationalNormal(base, log(base.σ))
+
+sigmoid(x) = 1 / (1 + exp(-x))
+function ∇sigmoid(x)
+    ex = exp(x)
+    dn = (ex + 1)^2
+    return ex/dn
+end
+invsigmoid(x) = log(x / (1-x))
+
+struct VariationalGeometric{T} <: VariationalWrappedDistribution where T <: Real
+    base::Distributions.Geometric{T}
+    inv_sigmoid_p::T
+end
+function VariationalGeometric()
+    return VariationalGeometric{Float64}(Distributions.Geometric(0.5), 0.)
+end
+function initial_params(q::VariationalGeometric)::AbstractVector{<:Float64}
+    return [0.]
+end
+function get_params(q::VariationalGeometric)::AbstractVector{<:Real}
+    return [q.inv_sigmoid_p]
+end
+function update_params(q::VariationalGeometric, params::AbstractVector{<:Real})::VariationalGeometric
+    return VariationalGeometric(Distributions.Geometric(sigmoid(params[1])), params[1])
+end
+function logpdf_param_grads(q::VariationalGeometric, x::Real)
+    p = q.base.p
+    ∇p = x >= 0 ? 1/p - (1/(1-p) * x) : 0.
+    return [∇p * ∇sigmoid(q.inv_sigmoid_p)]
+end
+
+# import ..Distributions: Transform, in_domain, log_abs_det_jacobian
+
+# struct TransformedVariationalWrappedDistribution <: VariationalDistribution
+#     base::VariationalWrappedDistribution
+#     T::Transform
+#     T_inv::Transform
+# end
+# function TransformedVariationalWrappedDistribution(base::VariationalWrappedDistribution, T::Transform)
+#     return TransformedVariationalWrappedDistribution(base, T, inv(T))
+# end
+# function Distributions.rand(q::TransformedVariationalWrappedDistribution)
+#     return q.T(Distributions.rand(q.base))
+# end
+# function Distributions.rand(q::TransformedVariationalWrappedDistribution, n::Int)
+#     return q.T.(Distributions.rand(q.base, n))
+# end
+# function Distributions.logpdf(q::TransformedVariationalWrappedDistribution, y::Real)
+#     if !in_domain(q.T_inv, y) # !(y in support(t))
+#         return -Inf
+#     end
+#     x = q.T_inv(y)
+#     return Distributions.logpdf(q.base, x) + log_abs_det_jacobian(q.T_inv, y)
+# end
+# function initial_params(q::TransformedVariationalWrappedDistribution)::AbstractVector{<:Float64}
+#     return initial_params(q.base)
+# end
+# function get_params(q::TransformedVariationalWrappedDistribution)::AbstractVector{<:Real}
+#     return get_params(q.base)
+# end
+# function update_params(q::TransformedVariationalWrappedDistribution, params::AbstractVector{<:Real})::TransformedVariationalWrappedDistribution
+#     return TransformedVariationalWrappedDistribution(update_params(q.base, params), q.T, q.T_inv)
+# end
+# function logpdf_param_grads(q::TransformedVariationalWrappedDistribution, y::Real)
+#     x = q.T_inv(y)
+#     return logpdf_param_grads(q.base, x)
 # end
 
-export MeanFieldGaussian, FullRankGaussian, VariationalNormal
+export MeanFieldGaussian, FullRankGaussian
+export VariationalNormal, VariationalGeometric

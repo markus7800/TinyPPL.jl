@@ -137,7 +137,7 @@ in_domain(t::ComposeTransform, x::Real) = in_domain(t.t1, x) && in_domain(t.t2, 
 domain(t::ComposeTransform) = domain(t.t1)
 image(t::ComposeTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(domain.ub))
 
-
+# X ~ base, Y ~ T(X)
 struct TransformedDistribution <: ContinuousUnivariateDistribution
     base::ContinuousUnivariateDistribution
     T::Transform
@@ -164,10 +164,11 @@ function support(t::TransformedDistribution)
 end
 
 
-function transform_to(supp::RealInterval)::Transform
+function transform_to_unconstrained_from(supp::RealInterval)::Transform
     if supp.lb == -Inf && supp.ub == Inf
         return IdentityTransform()
     end
+
     if supp.ub == Inf # supp.lb != -Inf
         if supp.lb == 0
             return LogTransform()
@@ -188,13 +189,19 @@ function transform_to(supp::RealInterval)::Transform
     end
 
 end
+
+function transform_to(interval::RealInterval)::Transform
+    return inv(transform_to_unconstrained_from(interval))
+end
+
+
 function to_unconstrained(base::ContinuousUnivariateDistribution)::ContinuousUnivariateDistribution
     supp = support(base)
-    transform = transform_to(supp)
+    transform = transform_to_unconstrained_from(supp)
     return TransformedDistribution(base, transform)
 end
 
-export transform_to, to_unconstrained
+export transform_to_unconstrained_from, transform_to, to_unconstrained, support
 
 
 # using Distributions
@@ -209,7 +216,6 @@ export transform_to, to_unconstrained
 # d_constrained = Beta(2,3)
 # d_unconstrained = to_unconstrained(d_constrained)
 # d_unconstrained = TransformedDistribution(d_constrained, InverseSigmoidTransform())
-
 
 # d_constrained = Uniform(2,4)
 # d_unconstrained = to_unconstrained(d_constrained)

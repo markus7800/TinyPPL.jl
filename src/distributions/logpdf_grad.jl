@@ -38,9 +38,9 @@ function logpdf_params_grad(d::Categorical, x::Int)
     return (∇p,)
 end
 
-function logpdf_params_grad(d::DiscreteUniform, x::Int)
-    return (0,0)
-end
+# function logpdf_params_grad(d::DiscreteUniform, x::Int)
+#     return (0,0)
+# end
 
 function logpdf_params_grad(d::Geometric, x::Int)
     ∇p = x >= 0 ? 1/d.p - (1/(1-d.p) * x) : 0.
