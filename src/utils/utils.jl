@@ -18,6 +18,14 @@ function logsumexp(x)
     return log(sum(exp, x .- m)) + m
 end
 
+sigmoid(x) = 1 / (1 + exp(-x))
+function ∇sigmoid(x)
+    ex = exp(x)
+    dn = (ex + 1)^2
+    return ex/dn
+end
+invsigmoid(x) = log(x / (1-x))
+
 function reverse_pair(pair::Pair)
     new_pair = pair[1]
     while pair[2] isa Pair

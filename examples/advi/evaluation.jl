@@ -92,6 +92,16 @@ L*L'
     {:slope} ~ Normal(mu2, sigma2)
 end
 
+@ppl static function LinRegGuide2()
+    mu1 = param("mu_intercept")
+    mu2 = param("mu_slope")
+    sigma1 = param("sigma_intercept", 1, :positive)
+    sigma2 = param("sigma_slope", 1, :positive)
+
+    {:intercept} ~ Normal(mu1, sigma1)
+    {:slope} ~ Normal(mu2, sigma2)
+end
+
 # @ppl static function FullRankLinRegGuide()
 #     mu = param("mu", 2)
 #     L = param("L", 4)
@@ -107,12 +117,23 @@ Random.seed!(0);
 guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
 Random.seed!(0)
 @time Q2 = advi(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
-mu = vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["mu_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["mu_slope"]])
-sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["omega_slope"]]))
+params = get_constrained_parameters(Q2)
 
+mu = vcat(params["mu_intercept"], params["mu_slope"])
+sigma = exp.(vcat(params["omega_intercept"], params["omega_slope"]))
 maximum(abs, mu .- Q.mu)
 maximum(abs, sigma .- Q.sigma)
 
+
+guide = make_guide(LinRegGuide2, (), Dict(), addresses_to_ix)
+Random.seed!(0)
+@time Q2 = advi(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+params = get_constrained_parameters(Q2)
+
+mu = vcat(params["mu_intercept"], params["mu_slope"])
+sigma = vcat(params["sigma_intercept"], params["sigma_slope"])
+maximum(abs, mu .- Q.mu)
+maximum(abs, sigma .- Q.sigma)
 
 
 using Plots
@@ -192,15 +213,13 @@ Tracker.param.([1.]) isa AbstractVector{<:Real} # true
 end
 
 Random.seed!(0)
-Q = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
+@time Q = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
 zeta = rand(Q, 1_000_000);
 theta = universal_transform_to_constrained(zeta, unif, (), Dict());
 histogram([t[:x] for t in theta], normalize=true, legend=false)
 
-
-
 Random.seed!(0)
-Q = bbvi(unif, (), Dict(),  10_000, 100, 0.01)
+@time Q = bbvi(unif, (), Dict(),  10_000, 10, 0.01)
 zeta = rand(Q, 1_000_000);
 theta = universal_transform_to_constrained(zeta, unif, (), Dict());
 histogram([t[:y] for t in theta], normalize=true, legend=false)

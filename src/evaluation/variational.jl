@@ -153,14 +153,6 @@ function logpdf_param_grads(q::VariationalNormal, x::Real)
     return [∇μ, ∇σ * exp(q.log_σ)]
 end
 
-sigmoid(x) = 1 / (1 + exp(-x))
-function ∇sigmoid(x)
-    ex = exp(x)
-    dn = (ex + 1)^2
-    return ex/dn
-end
-invsigmoid(x) = log(x / (1-x))
-
 struct VariationalGeometric{T} <: VariationalWrappedDistribution where T <: Real
     base::Distributions.Geometric{T}
     inv_sigmoid_p::T

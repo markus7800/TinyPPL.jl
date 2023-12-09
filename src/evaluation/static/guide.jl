@@ -17,7 +17,7 @@ function sample(sampler::ParametersCollector, addr::Any, dist::Distribution, obs
     return rand(dist)
 end
 
-function param(sampler::ParametersCollector, addr::Any, size::Int=1)
+function param(sampler::ParametersCollector, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)
     sampler.params_to_ix[addr] = (sampler.params_size+1):(sampler.params_size+size)
     sampler.params_size += size
     if size == 1
@@ -54,12 +54,21 @@ function sample(sampler::GuideSampler, addr::Any, dist::Distribution, obs::Union
     return value
 end
 
-function param(sampler::GuideSampler, addr::Any, size::Int=1)
+function param(sampler::GuideSampler, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)
     ix = sampler.params_to_ix[addr]
-    if size == 1
-        return sampler.phi[ix[1]]
+    if constraint == :unconstrained
+        f = identity
+    elseif constraint == :positive
+        f = exp
+    elseif constraint == :zero_to_one
+       f = sigmoid
     else
-        return sampler.phi[ix]
+        f = identity
+    end
+    if size == 1
+        return f(sampler.phi[ix[1]])
+    else
+        return f.(sampler.phi[ix])
     end
 end
 
@@ -83,6 +92,7 @@ function initial_params(guide::Guide)::AbstractVector{<:Float64}
 end
 
 function update_params(guide::Guide, params::AbstractVector{<:Float64})::VariationalDistribution
+    # since GuideSampler is generic type, we freshly instantiate
     new_sampler = GuideSampler(guide.sampler.params_to_ix, guide.sampler.addresses_to_ix, params)
     return Guide(new_sampler, guide.model, guide.args, guide.observations)
 end
@@ -103,4 +113,71 @@ function Distributions.rand(guide::Guide, n::Int)
     return hcat([Distributionrand(guide) for _ in 1:n]) 
 end
 
-export make_guide
+
+mutable struct ParameterTransformer <: StaticSampler
+    phi::AbstractVector{<:Real}
+    params_to_ix::Param2Ix
+    transformed_phi::AbstractVector{<:Real}
+    function ParameterTransformer(guide::Guide)
+        return new(guide.sampler.phi, guide.sampler.params_to_ix, similar(guide.sampler.phi))
+    end
+end
+
+function sample(sampler::ParameterTransformer, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        return obs
+    end
+    return rand(dist)
+end
+
+function param(sampler::ParameterTransformer, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)
+    ix = sampler.params_to_ix[addr]
+    if constraint == :unconstrained
+        f = identity
+    elseif constraint == :positive
+        f = exp
+    elseif constraint == :zero_to_one
+       f = sigmoid
+    else
+        f = identity
+    end
+    if size == 1
+        parameters = f(sampler.phi[ix[1]])
+    else
+        parameters = f.(sampler.phi[ix])
+    end
+    sampler.transformed_phi[ix] .= parameters
+    return parameters
+end
+
+struct Parameters
+    phi::AbstractVector{<:Real}
+    params_to_ix::Param2Ix
+end
+function Base.show(io::IO, p::Parameters)
+    print(io, "Parameters(")
+    print(io, p.phi)
+    print(io, ")")
+end
+function Base.getindex(p::Parameters, i::Int)
+    return p.phi[i]
+end
+# function Base.getindex(p::Parameters, addrs::AbstractVector{<:Any})
+#     return [p.phi[p.params_to_ix[addr]] for addr in addrs]
+# end 
+function Base.getindex(p::Parameters, addr::Any)
+    ix = p.params_to_ix[addr]
+    if length(ix) == 1
+        return p.phi[ix[1]]
+    else
+        return p.phi[ix]
+    end
+end 
+
+function get_constrained_parameters(guide::Guide)
+    sampler = ParameterTransformer(guide)
+    guide.model(guide.args, sampler, guide.observations)
+    return Parameters(sampler.transformed_phi, guide.sampler.params_to_ix)
+end
+
+export make_guide, get_constrained_parameters
