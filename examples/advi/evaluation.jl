@@ -288,3 +288,35 @@ Tracker.grad.(Evaluation.get_params(q))
 
 all(Tracker.grad.(Evaluation.get_params(q)) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))
 
+
+@ppl function LinReg(xs)
+    intercept = {:intercept} ~ Normal(intercept_prior_mean, intercept_prior_sigma)
+    slope = {:slope} ~ Normal(slope_prior_mean, slope_prior_sigma)
+
+    for i in eachindex(xs)
+        {(:y, i)} ~ Normal(f(slope, intercept, xs[i]), σ)
+    end
+
+    return (slope, intercept)
+end
+
+observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
+
+N = 1_000_000
+
+Random.seed!(0)
+traces, retvals, logprobs = rwmh(LinReg, (xs,), observations, N;
+    default_var=1., addr2var=Addr2Var(:intercept=>0.5,:slope=>0.3), gibbs=false);
+
+mean(t[:slope] for t in traces)
+mean(t[:intercept] for t in traces)
+
+Random.seed!(0)
+traces, retvals, logprobs = lmh(LinReg, (xs,), observations, N;
+    proposal=Proposal(
+        :intercept => ContinuousRandomWalkProposal(0.5),
+        :slope => ContinuousRandomWalkProposal(0.3),
+    ), gibbs=false);
+
+mean(t[:slope] for t in traces)
+mean(t[:intercept] for t in traces)

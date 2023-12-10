@@ -1,11 +1,13 @@
 
-import ..TinyPPL.Distributions: Proposal, logpdf
+import ..TinyPPL.Distributions: Proposal, logpdf, proposal_logpdf, propose_and_logpdf, StaticProposal
 import Random
 
-mutable struct LMH <: UniversalSampler
+abstract type UniverisalSingleSiteSampler <: UniversalSampler end
+
+mutable struct LMH <: UniverisalSingleSiteSampler
     W::Float64
     Q::Dict{Any, Float64}
-    Q_correction::Float64
+    Q_resample_address::Float64
     proposal::Proposal
     resample_addr::Any
     trace_current::Dict{Any, Real}
@@ -20,22 +22,28 @@ function sample(sampler::LMH, addr::Any, dist::Distribution, obs::Union{Nothing,
         sampler.W += logpdf(dist, obs)
         return obs
     end
-    proposal_dist = get(sampler.proposal, addr, dist)
+    proposal_dist = get(sampler.proposal, addr, StaticProposal(dist))
     if sampler.resample_addr == addr
-        value = rand(proposal_dist)
+        x_current = sampler.trace_current[addr]
+        x_proposed, forward_logpdf = propose_and_logpdf(proposal_dist, x_current)
+        backward_logpdf = proposal_logpdf(proposal_dist, x_current, x_proposed)
+        
         # current - proposed
-        sampler.Q_correction += logpdf(proposal_dist, sampler.trace_current[addr]) - logpdf(proposal_dist, value)
+        sampler.Q_resample_address += backward_logpdf - forward_logpdf
+        value = x_proposed
     else
-        value = get(sampler.trace_current, addr, rand(proposal_dist))
+        # if we don't have previous value to move from, sample from prior
+        value = get(sampler.trace_current, addr, rand(dist))
+        # value = get(sampler.trace_current, addr, rand(proposal_dist)) # could check if proposal dist is static
     end
     sampler.W += logpdf(dist, value)
-    sampler.Q[addr] = logpdf(proposal_dist, value)
+    sampler.Q[addr] = logpdf(dist, value)
+    # sampler.Q[addr] = logpdf(proposal_dist, value) # could check if proposal dist is static
     sampler.trace[addr] = value
-    
     return value
 end
 
-function single_site_sampler(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, sampler::Sampler, gibbs::Bool)
+function single_site_sampler(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, sampler::UniverisalSingleSiteSampler, gibbs::Bool)
     traces = Vector{Dict{Any, Real}}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
@@ -57,7 +65,7 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::D
         for addr in addresses
             sampler.W = 0.
             sampler.Q = Dict{Any, Float64}()
-            sampler.Q_correction = 0.
+            sampler.Q_resample_address = 0.
             sampler.trace_current = trace_current
             sampler.trace = Dict{Any, Real}()
 
@@ -68,9 +76,9 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::D
             Q_proposed = sampler.Q
             W_proposed = sampler.W
 
-            sampler.Q_correction += log(length(trace_current)) - log(length(trace_proposed))
+            sampler.Q_resample_address += log(length(trace_current)) - log(length(trace_proposed))
 
-            log_α = W_proposed - W_current + sampler.Q_correction
+            log_α = W_proposed - W_current + sampler.Q_resample_address
             for (addr, q) in Q_proposed
                 if !haskey(Q_current, addr) # resampled
                     log_α -= q

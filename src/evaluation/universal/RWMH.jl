@@ -2,10 +2,10 @@
 
 import ..TinyPPL.Distributions: Addr2Var, logpdf, random_walk_proposal_dist
 
-mutable struct RWMH <: UniversalSampler
+mutable struct RWMH <: UniverisalSingleSiteSampler
     W::Float64
     Q::Dict{Any, Float64}
-    Q_correction::Float64
+    Q_resample_address::Float64
     default_var::Float64
     addr2var::Addr2Var
     resample_addr::Any
@@ -27,7 +27,7 @@ function sample(sampler::RWMH, addr::Any, dist::Distribution, obs::Union{Nothing
         forward_dist = random_walk_proposal_dist(dist, value_current, var)
         value = rand(forward_dist)
         backward_dist = random_walk_proposal_dist(dist, value, var)
-        sampler.Q_correction += logpdf(backward_dist, value_current) - logpdf(forward_dist, value)
+        sampler.Q_resample_address += logpdf(backward_dist, value_current) - logpdf(forward_dist, value)
     else
         # if we don't have previous value to move from, sample from prior
         value = get(sampler.trace_current, addr, rand(dist))
