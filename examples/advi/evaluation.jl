@@ -43,6 +43,15 @@ addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained
 K = length(addresses_to_ix)
 
 Random.seed!(0)
+result = hmc(logjoint, 10_000, 10, 0.1, K)
+traces = Traces(addresses_to_ix, result)
+plot(traces[:slope]);
+plot!(traces[:intercept])
+
+maximum(abs, mean(traces[:intercept]) - map_mu[1])
+maximum(abs, mean(traces[:slope]) - map_mu[2])
+
+Random.seed!(0)
 mu, sigma = advi_meanfield(logjoint, 10_000, 10, 0.01, K)
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)

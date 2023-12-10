@@ -47,6 +47,10 @@ struct Traces
     function Traces(addesses_to_ix::Addr2Ix, k::Int, n::Int)
         return new(addesses_to_ix, Array{Real}(undef, k, n))
     end
+    
+    function Traces(addesses_to_ix::Addr2Ix, data::AbstractArray{<:Real})
+        return new(addesses_to_ix, data)
+    end
 end
 
 function Base.getindex(traces::Traces, addr::Any)::Vector{Real}
@@ -61,3 +65,5 @@ end
 function Base.getindex(traces::Traces, addrs::Vector{Any}, i::Int)::Real
     return traces.data[[traces.addesses_to_ix[addr] for addr in addrs], i]
 end
+
+export Traces
