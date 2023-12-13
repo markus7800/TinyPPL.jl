@@ -329,3 +329,50 @@ traces, retvals, logprobs = lmh(LinReg, (xs,), observations, N;
 
 mean(t[:slope] for t in traces)
 mean(t[:intercept] for t in traces)
+
+
+@ppl static function static_normal()
+    x ~ Normal(2., 0.5)
+end
+observations = Dict()
+
+addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(static_normal, (), observations);
+K = length(addresses_to_ix)
+
+Random.seed!(0)
+mu, sigma = advi_meanfield(logjoint, 10_000, 10, 0.01, K)
+
+
+#Random.seed!(0)
+#mu, sigma = advi_meanfield(logjoint, 100_000, 100, 0.001, K)
+
+Random.seed!(0)
+Q = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+
+Random.seed!(0)
+Q2 = advi(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+
+@ppl static function static_normal_guide()
+    mu = param("mu")
+    sigma = param("sigma", 1, :positive)
+    x ~ Normal(mu, sigma)
+end
+
+guide = make_guide(static_normal_guide, (), Dict(), addresses_to_ix)
+Random.seed!(0)
+@time Q2 = advi(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+params = get_constrained_parameters(Q2)
+
+
+@ppl function universal_normal()
+    x ~ Normal(2., 0.5)
+end
+observations = Dict()
+
+Random.seed!(0)
+Q = advi_meanfield(universal_normal, (), observations,  10_000, 10, 0.01)
+Q[:x].base
+
+Random.seed!(0)
+Q = bbvi(universal_normal, (), observations,  10_000, 10, 0.01)
+Q[:x].base
