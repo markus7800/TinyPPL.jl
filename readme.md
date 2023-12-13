@@ -11,15 +11,11 @@ We restrict the distributions to be univariate for the sake of simplicity, but a
 
 Currently implemented:
 
-- [trace-based approach](src/trace/readme.md)  
-  - Likelihood weighting
 - [evaluation-based approach](src/evaluation/readme.md)  
   - Likelihood weighting
 - [graph-based approach](src/graph/readme.md)  
   - Likelihood weighting
   - HMC
-- [handler-based approach](src/handler/readme.md)  
-  - Likelihood weighting
 
 ## Installation
 ```console
