@@ -86,17 +86,20 @@ function make_guide(model::StaticModel, args::Tuple, observations::Dict, address
     return Guide(sampler, model, args, observations)
 end
 
+import ..Distributions: initial_params
 function initial_params(guide::Guide)::AbstractVector{<:Float64}
     nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
     return zeros(nparams)
 end
 
+import ..Distributions: update_params
 function update_params(guide::Guide, params::AbstractVector{<:Float64})::VariationalDistribution
     # since GuideSampler is generic type, we freshly instantiate
     new_sampler = GuideSampler(guide.sampler.params_to_ix, guide.sampler.addresses_to_ix, params)
     return Guide(new_sampler, guide.model, guide.args, guide.observations)
 end
 
+import ..Distributions: rand_and_logpdf
 function rand_and_logpdf(guide::Guide)
     guide.sampler.W = 0.0
     guide.model(guide.args, guide.sampler, guide.observations)

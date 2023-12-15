@@ -1,5 +1,6 @@
 import Tracker
 import Distributions
+import ..Distributions: VariationalDistribution, VariationalNormal, get_params, update_params
 
 mutable struct ADVI <: UniversalSampler
     ELBO::Tracker.TrackedReal{Float64}

@@ -25,7 +25,7 @@ function make_logjoint(pgm::PGM)
     return logjoint
 end
 
-import TinyPPL: hmc_logjoint
+import TinyPPL.Logjoint: hmc_logjoint
 function hmc(pgm::PGM, n_samples::Int, L::Int, eps::Float64)
     logjoint = make_logjoint(pgm)
     K = sum(isnothing.(pgm.observed_values))

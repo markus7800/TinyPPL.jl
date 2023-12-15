@@ -47,7 +47,7 @@ logjoint = Graph.make_logjoint(model)
 K = sum(isnothing.(model.observed_values))
 
 
-import TinyPPL: hmc_logjoint
+import TinyPPL.Logjoint: hmc_logjoint, advi_meanfield_logjoint
 Random.seed!(0)
 result = hmc_logjoint(logjoint, K, 10_000, 10, 0.1)
 mean(result,dims=2)
@@ -55,3 +55,9 @@ mean(result,dims=2)
 Random.seed!(0)
 result = hmc(model, 10_000, 10, 0.1)
 mean(result,dims=2)
+
+
+Random.seed!(0)
+mu, sigma = advi_meanfield_logjoint(logjoint, K, 10_000, 10, 0.01)
+maximum(abs, mu .- map_mu)
+maximum(abs, sigma .- map_sigma)

@@ -1,1 +1,6 @@
-include("HMC.jl")
+module Logjoint
+
+    include("HMC.jl")
+    include("ADVI.jl")
+
+end

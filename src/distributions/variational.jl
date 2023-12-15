@@ -1,6 +1,6 @@
-import Distributions
 import PDMats
 import LinearAlgebra
+import Distributions: entropy, MultivariateNormal
 
 abstract type VariationalDistribution end # <: Distribution{Distributions.Multivariate, Distributions.Continuous} end
 export VariationalDistribution

@@ -1,5 +1,6 @@
 import Distributions
-import ..Distributions: transform_to, support, IdentityTransform, RealInterval
+import ..Distributions: transform_to, support, IdentityTransform, RealInterval, logpdf_param_grads
+import ..Distributions: VariationalNormal, VariationalGeometric
 
 mutable struct BBVI <: UniversalSampler
     ELBO::Float64 # log P(X,Y) - log Q(X; λ)

@@ -10,6 +10,7 @@ module Distributions
     include("proposal.jl")
     include("random_walk.jl")
     include("transformed.jl")
+    include("variational.jl")
 
 
     export Distribution, logpdf, params, mean
