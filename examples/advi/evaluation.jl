@@ -1,7 +1,7 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
-import TinyPPL.Logjoint: advi_meanfield_logjoint, advi_fullrank_logjoint, advi_logjoint, MonteCarloELBO, RelativeEntropyELBO
+import TinyPPL.Logjoint: hmc_logjoint, advi_meanfield_logjoint, advi_fullrank_logjoint, advi_logjoint, MonteCarloELBO, RelativeEntropyELBO, ReinforceELBO, PathDerivativeELBO
 
 # xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
 xs = [-1., -0.5, 0.0, 0.5, 1.0];
@@ -45,7 +45,6 @@ Random.seed!(0)
 addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations);
 K = length(addresses_to_ix)
 
-import TinyPPL.Logjoint: hmc_logjoint
 Random.seed!(0)
 result = hmc_logjoint(logjoint, K, 10_000, 10, 0.1)
 traces = Traces(addresses_to_ix, result)
@@ -81,6 +80,16 @@ Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloE
 maximum(abs, Q2.mu .- Q.mu)
 maximum(abs, Q2.sigma .- Q.sigma)
 
+Random.seed!(0)
+Q = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), ReinforceELBO())
+maximum(abs, map_mu .- mu)
+maximum(abs, map_sigma .- sigma)
+
+Random.seed!(0)
+Q = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
+maximum(abs, map_mu .- mu)
+maximum(abs, map_sigma .- sigma)
+
 N = 10_000
 Random.seed!(0)
 mu, L = advi_fullrank_logjoint(logjoint, K, N, 10, 0.01);
@@ -95,6 +104,15 @@ maximum(abs, L*L' .- Q.base.Σ)
 # TODO: mathematically check why these are the same
 maximum(abs, Q2.base.μ .- Q.base.μ)
 maximum(abs, Q2.base.Σ .- Q.base.Σ)
+
+Random.seed!(0)
+Q2 = advi_logjoint(logjoint, 10_000, 100, 0.01, FullRankGaussian(K), ReinforceELBO());
+maximum(abs, mu .- Q2.base.μ)
+maximum(abs, L*L' .- Q2.base.Σ)
+
+Random.seed!(0)
+Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, FullRankGaussian(K), PathDerivativeELBO());
+
 
 Random.seed!(0)
 mu, L = advi_fullrank_logjoint(logjoint, K, 10_000, 100, 0.01)
@@ -223,6 +241,32 @@ sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
+# equivalent to bbvi
+Random.seed!(0)
+Q2 = advi_logjoint(logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), ReinforceELBO())
+maximum(abs, Q2.mu .- mu)
+maximum(abs, Q2.sigma .- sigma)
+
+import Tracker
+import TinyPPL.Distributions: update_params, rand_and_logpdf, logpdf_param_grads
+q = MeanFieldGaussian(2)
+mu = Tracker.param([0.])
+omega = Tracker.param([0.])
+q = update_params(q, vcat(mu, omega))
+
+Random.seed!(0)
+zeta, lpq = rand_and_logpdf(q)
+Tracker.back!(lpq)
+
+q2 = VariationalNormal()
+logpdf_param_grads(q2, zeta[1])
+
+
+Tracker.grad(mu)
+Tracker.grad(omega)
+
+no_grad_elbo = logjoint(Tracker.data(zeta)) - Tracker.data(lpq)
+
 import Tracker
 Tracker.param([1.]) isa AbstractVector{<:Float64} # true
 Tracker.param.([1.]) isa AbstractVector{<:Float64} # false
@@ -271,6 +315,7 @@ sigma = Tracker.param(0.5)
 q = VariationalNormal()
 q = Evaluation.update_params(q, [mu, sigma])
 x = Tracker.data(rand(q))
+# x = rand(q) # does not work
 lp = logpdf(q, x)
 Tracker.back!(lp)
 Tracker.grad(x)

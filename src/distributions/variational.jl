@@ -56,12 +56,18 @@ end
 function Distributions.rand(q::MeanFieldGaussian)
     K = length(q.mu)
     Z = randn(K)
-    return q.sigma * Z + q.mu
+    return q.sigma .* Z .+ q.mu
 end
 function Distributions.rand(q::MeanFieldGaussian, n::Int)
     K = length(q.mu)
     Z = randn(K, n)
     return q.sigma .* Z .+ q.mu
+end
+
+function Distributions.logpdf(q::MeanFieldGaussian, x)
+    K = length(q.mu)
+    Z = (x .- q.mu) ./ q.sigma
+    return -Z'Z/2 - K*log(sqrt(2π)) - log(prod(q.sigma))
 end
 
 function Distributions.entropy(q::MeanFieldGaussian)
@@ -107,6 +113,9 @@ function Distributions.rand(q::FullRankGaussian)
 end
 function Distributions.rand(q::FullRankGaussian, n::Int)
     return rand(q.base, n)
+end
+function Distributions.logpdf(q::FullRankGaussian, x)
+    return Distributions.logpdf(q.base, x)
 end
 
 function Distributions.entropy(q::FullRankGaussian)
