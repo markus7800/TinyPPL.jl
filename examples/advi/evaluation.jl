@@ -248,26 +248,6 @@ maximum(abs, Q2.mu .- mu)
 maximum(abs, Q2.sigma .- sigma)
 
 import Tracker
-import TinyPPL.Distributions: update_params, rand_and_logpdf, logpdf_param_grads
-q = MeanFieldGaussian(2)
-mu = Tracker.param([0.])
-omega = Tracker.param([0.])
-q = update_params(q, vcat(mu, omega))
-
-Random.seed!(0)
-zeta, lpq = rand_and_logpdf(q)
-Tracker.back!(lpq)
-
-q2 = VariationalNormal()
-logpdf_param_grads(q2, zeta[1])
-
-
-Tracker.grad(mu)
-Tracker.grad(omega)
-
-no_grad_elbo = logjoint(Tracker.data(zeta)) - Tracker.data(lpq)
-
-import Tracker
 Tracker.param([1.]) isa AbstractVector{<:Float64} # true
 Tracker.param.([1.]) isa AbstractVector{<:Float64} # false
 Tracker.param.([1.]) isa AbstractVector{<:Real} # true

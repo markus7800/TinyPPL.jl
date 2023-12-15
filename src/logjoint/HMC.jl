@@ -3,8 +3,8 @@ import ..Distributions: Normal
 import ProgressLogging: @progress
 
 function get_grad_U(logjoint::Function)
-    function grad_U(X::AbstractVector{<:Real})
-        X = Tracker.param(Tracker.data(X))
+    function grad_U(X::Vector{Float64})
+        X = Tracker.param(X)
         log_prob = logjoint(X)
         U = -log_prob
         Tracker.back!(U)
@@ -17,7 +17,7 @@ end
 # It has the property that leapfrog(*leapfrog(R, X, L, eps), L, eps) == (R, X)
 function leapfrog(
         grad_U::Function,
-        X::AbstractVector{<:Real}, P::AbstractVector{<:Real},
+        X::Vector{Float64}, P::Vector{Float64},
         L::Int, eps::Float64
     )
 

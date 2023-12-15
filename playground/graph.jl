@@ -208,13 +208,6 @@ end
 X = Vector{Float64}(undef, model.n_variables);
 model.logpdf(X)
 
-import Tracker
-X = Tracker.param(rand(3))
-lp = model.logpdf(X)
-Tracker.back!(lp);
-Tracker.grad(X)
-X_data = Tracker.data(X)
-
 using TinyPPL.Distributions
 function compare_lp(y, x, z)
     return logpdf(Normal(0., 1.), x) + logpdf(Normal(x, 1.), y) + logpdf(Normal(y, 1.), z)
