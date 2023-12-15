@@ -39,12 +39,21 @@ end
 
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
+Random.seed!(0)
+
 addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations);
 K = length(addresses_to_ix)
 
+import TinyPPL: hmc_logjoint
 Random.seed!(0)
-result = hmc(logjoint, 10_000, 10, 0.1, K)
+result = hmc_logjoint(logjoint, K, 10_000, 10, 0.1)
 traces = Traces(addresses_to_ix, result)
+mean(traces[:slope])
+mean(traces[:intercept])
+
+Random.seed!(0)
+traces = hmc(LinRegStatic, (xs,), observations, 10_000, 10, 0.1)
+
 plot(traces[:slope]);
 plot!(traces[:intercept])
 

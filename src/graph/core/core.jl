@@ -211,8 +211,14 @@ end
 
 # sort by address
 # no nested plates, i.e (:x=>:y=>i) and (:x=>:y=>j) belong both to plate :x
-function plates_lt(variable_to_address)
+function plates_lt(symbolic_pgm::SymbolicPGM, variable_to_address)
     return function lt(sym_x, sym_y)
+        if !haskey(symbolic_pgm.Y, sym_x) && haskey(symbolic_pgm.Y, sym_y)
+            return true
+        end
+        if haskey(symbolic_pgm.Y, sym_x) && !haskey(symbolic_pgm.Y, sym_y)
+            return false
+        end
         x = variable_to_address[sym_x]
         y = variable_to_address[sym_y]
         if x isa Pair && y isa Pair
@@ -315,7 +321,7 @@ function compile_symbolic_pgm(
 
     # symbol to index, sorted by address
     sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
-        sort(collect(spgm.V), lt=plates_lt(variable_to_address), alg=InsertionSort))
+        sort(collect(spgm.V), lt=plates_lt(spgm, variable_to_address), alg=InsertionSort))
     )
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
