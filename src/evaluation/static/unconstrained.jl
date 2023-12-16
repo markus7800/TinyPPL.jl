@@ -33,6 +33,7 @@ mutable struct UnconstrainedLogJoint{T,V} <: StaticSampler
     W::T
     addresses_to_ix::Addr2Ix
     X::V
+    # TODO: handle T = Int
     function UnconstrainedLogJoint(addresses_to_ix::Addr2Ix, X::V) where {T <: Real, V <: AbstractVector{T}}
         return new{eltype(V),V}(0., addresses_to_ix, X)
     end
@@ -42,11 +43,17 @@ function sample(sampler::UnconstrainedLogJoint, addr::Any, dist::Distribution, o
         sampler.W += logpdf(dist, obs)
         return obs
     end
-    unconstrained_value = sampler.X[sampler.addresses_to_ix[addr]]
-    transformed_dist = to_unconstrained(dist)
-    sampler.W += logpdf(transformed_dist, unconstrained_value)
-    constrained_value = transformed_dist.T_inv(unconstrained_value)
-    return constrained_value
+    if dist isa Distributions.DiscreteDistribution
+        value = sampler.X[sampler.addresses_to_ix[addr]]
+        sampler.W += logpdf(dist, value)
+        return value
+    else
+        unconstrained_value = sampler.X[sampler.addresses_to_ix[addr]]
+        transformed_dist = to_unconstrained(dist)
+        sampler.W += logpdf(transformed_dist, unconstrained_value)
+        constrained_value = transformed_dist.T_inv(unconstrained_value)
+        return constrained_value
+    end
 end
 
 function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observations::Dict)

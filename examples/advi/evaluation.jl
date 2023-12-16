@@ -1,7 +1,7 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
+using TinyPPL.Logjoint
 import Random
-import TinyPPL.Logjoint: hmc_logjoint, advi_meanfield_logjoint, advi_fullrank_logjoint, advi_logjoint, MonteCarloELBO, RelativeEntropyELBO, ReinforceELBO, PathDerivativeELBO
 
 # xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
 xs = [-1., -0.5, 0.0, 0.5, 1.0];
@@ -77,6 +77,15 @@ Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloE
 # equivalent to MonteCarloELBO because ∇ log Q = ∇ entropy
 maximum(abs, Q2.mu .- Q.mu)
 maximum(abs, Q2.sigma .- Q.sigma)
+
+Random.seed!(0)
+Q3 = advi_logjoint(logjoint, 10_000, 10, 0.01, MixedMeanField([VariationalNormal(), VariationalNormal()]), MonteCarloELBO())
+Q3_mu = [d.base.μ for d in Q3.dists]
+Q3_sigma = [d.base.σ for d in Q3.dists]
+# equivalent to MeanFieldGaussian + MonteCarloELBO()
+maximum(abs, Q2.mu .- Q3_mu)
+maximum(abs, Q2.sigma .- Q3_sigma)
+
 
 Random.seed!(0)
 Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), ReinforceELBO())
@@ -258,6 +267,28 @@ Random.seed!(0)
 Q2 = advi_logjoint(logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), ReinforceELBO())
 maximum(abs, Q2.mu .- mu)
 maximum(abs, Q2.sigma .- sigma)
+
+
+
+@ppl static function geometric_normal_static()
+    n ~ Geometric(0.3)
+    #x ~ Normal(n, 0.5)
+end
+
+addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(geometric_normal_static, (), Dict());
+
+Q = get_mixed_meanfield(geometric_normal_static, (), Dict(), addresses_to_ix);
+Random.seed!(0)
+Q = advi_logjoint(logjoint, 10_000, 100, 0.01, Q, ReinforceELBO())
+
+
+@ppl function geometric_normal()
+    n ~ Geometric(0.3)
+    x ~ Normal(n, 0.5)
+end
+
+Random.seed!(0)
+Q = bbvi(geometric_normal, (), Dict(),  10_000, 100, 0.01)
 
 import Tracker
 Tracker.param([1.]) isa AbstractVector{<:Float64} # true

@@ -1,6 +1,6 @@
 import Distributions
 import ..Distributions: transform_to, support, IdentityTransform, RealInterval, logpdf_param_grads
-import ..Distributions: VariationalNormal, VariationalGeometric
+import ..Distributions: init_variational_distribution
 
 mutable struct BBVI <: UniversalSampler
     ELBO::Float64 # log P(X,Y) - log Q(X; λ)
@@ -11,9 +11,6 @@ mutable struct BBVI <: UniversalSampler
         return new(0., variational_dists, Dict{Any, AbstractVector{Float64}}())
     end
 end
-
-init_variational_distribution(::Distributions.ContinuousUnivariateDistribution) = VariationalNormal()
-init_variational_distribution(::Distributions.Geometric) = VariationalGeometric()
 
 function sample(sampler::BBVI, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)

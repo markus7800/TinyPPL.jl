@@ -28,6 +28,12 @@ end
 function Distributions.entropy(q::VariationalDistribution)
     error("Not implemented.")
 end
+function Distributions.logpdf(q::VariationalDistribution, x)
+    error("Not implemented.")
+end
+function logpdf_param_grads(q::VariationalDistribution, x)
+    error("Not implemented.")
+end
 
 struct MeanFieldGaussian <: VariationalDistribution
     mu::AbstractVector{<:Real}
@@ -238,3 +244,56 @@ end
 
 export MeanFieldGaussian, FullRankGaussian
 export VariationalNormal, VariationalGeometric
+
+init_variational_distribution(::Distributions.ContinuousUnivariateDistribution) = VariationalNormal()
+init_variational_distribution(::Distributions.Geometric) = VariationalGeometric()
+export init_variational_distribution
+
+
+struct MixedMeanField <: VariationalDistribution
+    dists::Vector{VariationalDistribution}
+    param_ixs::Vector{UnitRange{Int}}
+end
+function MixedMeanField(dists::Vector{<:VariationalDistribution})
+    param_ixs = Vector{UnitRange{Int}}(undef, length(dists))
+    ix = 1
+    for i in eachindex(dists)
+        s = length(initial_params(dists[i]))
+        param_ixs[i] = ix:(ix+s-1)
+        ix += s
+    end
+    return MixedMeanField(dists, param_ixs)
+end
+
+function initial_params(q::MixedMeanField)::AbstractVector{<:Float64}
+    return reduce(vcat, initial_params(d) for d in q.dists)
+end
+function get_params(q::MixedMeanField)::AbstractVector{<:Real}
+    return reduce(vcat, get_params(d) for d in q.dists)
+end
+function update_params(q::MixedMeanField, params::AbstractVector{<:Real})::MixedMeanField
+    q_new = MixedMeanField(similar(q.dists), q.param_ixs)
+    for i in eachindex(q.dists)
+        d = q.dists[i]
+        p = params[q.param_ixs[i]]
+        q_new.dists[i] = update_params(d, p)
+    end
+    return q_new
+end
+function rand_and_logpdf(q::MixedMeanField)
+    x = Distributions.rand(q)
+    return x, Distributions.logpdf(q, x)
+end
+function Distributions.rand(q::MixedMeanField)
+    return reduce(vcat, Distributions.rand(d) for d in q.dists; init=Float64[]) # hack to avoid Vector{Int}
+end
+# function Distributions.rand(q::MixedMeanField, n::Int)
+#     error("Not implemented.")
+# end
+
+function Distributions.logpdf(q::MixedMeanField, x)
+    @assert length(x) == length(q.dists) # only univariate
+    return sum(Distributions.logpdf(q.dists[i], x[i]) for i in eachindex(q.dists))
+end
+
+export MixedMeanField
