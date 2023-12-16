@@ -92,6 +92,11 @@ function initial_params(guide::Guide)::AbstractVector{<:Float64}
     return zeros(nparams)
 end
 
+import ..Distributions: get_params
+function get_params(q::Guide)::AbstractVector{<:Real}
+    return q.sampler.phi
+end
+
 import ..Distributions: update_params
 function update_params(guide::Guide, params::AbstractVector{<:Float64})::VariationalDistribution
     # since GuideSampler is generic type, we freshly instantiate

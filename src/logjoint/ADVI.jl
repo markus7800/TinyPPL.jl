@@ -2,7 +2,7 @@ import Tracker
 import Distributions
 import LinearAlgebra
 import Random
-import ..Distributions: VariationalDistribution, initial_params, update_params, rand_and_logpdf, logpdf
+import ..Distributions: VariationalDistribution, initial_params, update_params, get_params, rand_and_logpdf, logpdf
 
 # Fix merged to Tracker.jl
 # for f in :[rand, randn, randexp].args
@@ -132,7 +132,7 @@ function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistri
         @assert !Tracker.istracked(no_grad_elbo) zeta
         @assert Tracker.istracked(lpq)
         # inject log Q gradient
-        elbo += no_grad_elbo * lpq# + no_grad_elbo * (1 - Tracker.data(lpq))
+        elbo += no_grad_elbo * lpq + no_grad_elbo * (1 - Tracker.data(lpq))
     end
     elbo = elbo / L
     return elbo
@@ -142,9 +142,9 @@ struct PathDerivativeELBO <: ELBOEstimator end
 function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     for _ in 1:L
-        zeta, lpq = rand_and_logpdf(q)
-        # TODO: this is maybe not correct
-        elbo += logjoint(zeta) - Tracker.data(lpq)
+        zeta = rand(q)
+        q_ = update_params(q, Tracker.data.(Tracker.data(get_params(q)))) # TODO
+        elbo += logjoint(zeta) - logpdf(q_, zeta)
     end
     elbo = elbo / L
     return elbo

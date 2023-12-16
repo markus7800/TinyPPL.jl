@@ -2,6 +2,8 @@ import PDMats
 import LinearAlgebra
 import Distributions: entropy, MultivariateNormal
 
+# TODO: be more precise with Vector{Tracked} vs Tracked Vector
+
 abstract type VariationalDistribution end # <: Distribution{Distributions.Multivariate, Distributions.Continuous} end
 export VariationalDistribution
 
@@ -29,22 +31,27 @@ end
 
 struct MeanFieldGaussian <: VariationalDistribution
     mu::AbstractVector{<:Real}
+    log_sigma::AbstractVector{<:Real}
     sigma::AbstractVector{<:Real}
 end
 
 function MeanFieldGaussian(K::Int)
-    return MeanFieldGaussian(zeros(K), ones(K))
+    return MeanFieldGaussian(zeros(K), zeros(K), ones(K))
 end
 
 function initial_params(q::MeanFieldGaussian)::AbstractVector{<:Float64}
     return zeros(2*length(q.mu))
 end
 
+function get_params(q::MeanFieldGaussian)::AbstractVector{<:Real}
+    return vcat(q.mu, q.log_sigma)
+end
+
 function update_params(q::MeanFieldGaussian, params::AbstractVector{<:Real})::MeanFieldGaussian
     K = length(q.mu)
     mu = params[1:K]
     omega = params[K+1:end]
-    return MeanFieldGaussian(mu, exp.(omega))
+    return MeanFieldGaussian(mu, omega, exp.(omega))
 end
 
 function rand_and_logpdf(q::MeanFieldGaussian)
@@ -75,16 +82,24 @@ function Distributions.entropy(q::MeanFieldGaussian)
 end
 
 struct FullRankGaussian <: VariationalDistribution
+    mu::AbstractVector{<:Real}
+    L::AbstractVector{<:Real}
     base::Distributions.MultivariateNormal
 end
 
 function FullRankGaussian(K::Int)
-    return FullRankGaussian(Distributions.MultivariateNormal(zeros(K), LinearAlgebra.diagm(ones(K))))
+    mu = zeros(K)
+    L = reshape(LinearAlgebra.diagm(ones(K)), :)
+    return FullRankGaussian(mu, L, Distributions.MultivariateNormal(mu, LinearAlgebra.diagm(ones(K))))
 end
 
 function initial_params(q::FullRankGaussian)::AbstractVector{<:Float64}
     K = length(q.base)
     return vcat(zeros(K), reshape(LinearAlgebra.I(K),:))
+end
+
+function get_params(q::FullRankGaussian)::AbstractVector{<:Real}
+   return vcat(q.mu, q.L) 
 end
 
 function update_params(q::FullRankGaussian, params::AbstractVector{<:Real})::FullRankGaussian
@@ -95,7 +110,7 @@ function update_params(q::FullRankGaussian, params::AbstractVector{<:Real})::Ful
     A = convert(Matrix{eltype(A)}, A) # Tracked K×K Matrix{Float64} -> K×K Matrix{Tracker.TrackedReal{Float64}}
 
     L = LinearAlgebra.LowerTriangular(A) # KxK LinearAlgebra.LowerTriangular{Tracker.TrackedReal{Float64}, Matrix{Tracker.TrackedReal{Float64}}}
-    return FullRankGaussian(Distributions.MultivariateNormal(mu, PDMats.PDMat(LinearAlgebra.Cholesky(L))))
+    return FullRankGaussian(params[1:K], params[K+1:end], Distributions.MultivariateNormal(mu, PDMats.PDMat(LinearAlgebra.Cholesky(L))))
 end
 
 function rand_and_logpdf(q::FullRankGaussian)
