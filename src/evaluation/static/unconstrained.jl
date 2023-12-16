@@ -29,16 +29,16 @@ function sample(sampler::ConstraintTransformer, addr::Any, dist::Distribution, o
     return constrained_value
 end
 
-mutable struct UnconstrainedLogJoint{T,V} <: StaticSampler
+mutable struct UnconstrainedLogJointSampler{T,V} <: StaticSampler
     W::T
     addresses_to_ix::Addr2Ix
     X::V
     # TODO: handle T = Int
-    function UnconstrainedLogJoint(addresses_to_ix::Addr2Ix, X::V) where {T <: Real, V <: AbstractVector{T}}
+    function UnconstrainedLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where {T <: Real, V <: AbstractVector{T}}
         return new{eltype(V),V}(0., addresses_to_ix, X)
     end
 end
-function sample(sampler::UnconstrainedLogJoint, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
@@ -54,6 +54,13 @@ function sample(sampler::UnconstrainedLogJoint, addr::Any, dist::Distribution, o
         constrained_value = transformed_dist.T_inv(unconstrained_value)
         return constrained_value
     end
+end
+
+struct UnconstrainedLogJoint
+    addresses_to_ix::Addr2Ix
+    logjoint::Function
+    transform_to_constrained!::Function
+    transform_to_unconstrained!::Function
 end
 
 function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observations::Dict)
@@ -90,10 +97,10 @@ function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observatio
     end
 
     function logjoint(X::AbstractVector{<:Real})
-        sampler = UnconstrainedLogJoint(addresses_to_ix, X)
+        sampler = UnconstrainedLogJointSampler(addresses_to_ix, X)
         model(args, sampler, observations)
         return sampler.W
     end
 
-    return addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained!
+    return UnconstrainedLogJoint(addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained!)
 end

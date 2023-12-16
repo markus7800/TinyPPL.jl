@@ -40,17 +40,8 @@ map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
 end
 
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
-
-Random.seed!(0)
-
-addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations);
+addresses_to_ix = get_address_to_ix(LinRegStatic, (xs,), observations)
 K = length(addresses_to_ix)
-
-Random.seed!(0)
-result = hmc_logjoint(logjoint, K, 10_000, 10, 0.1)
-traces = Traces(addresses_to_ix, result)
-mean(traces[:slope])
-mean(traces[:intercept])
 
 Random.seed!(0)
 traces = hmc(LinRegStatic, (xs,), observations, 10_000, 10, 0.1)
@@ -62,41 +53,57 @@ maximum(abs, mean(traces[:intercept]) - map_mu[1])
 maximum(abs, mean(traces[:slope]) - map_mu[2])
 
 Random.seed!(0)
-mu, sigma = advi_meanfield_logjoint(logjoint, K, 10_000, 10, 0.01)
+(mu, sigma), ulj = advi_meanfield(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
 Random.seed!(0)
-Q = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+Q, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
 # equivalent to advi_meanfield_logjoint
 maximum(abs, Q.mu .- mu)
 maximum(abs, Q.sigma .- sigma)
 
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO());
+Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO());
 # equivalent to MonteCarloELBO because ∇ log Q = ∇ entropy
 maximum(abs, Q2.mu .- Q.mu)
 maximum(abs, Q2.sigma .- Q.sigma)
 
 Random.seed!(0)
-Q3 = advi_logjoint(logjoint, 10_000, 10, 0.01, MixedMeanField([VariationalNormal(), VariationalNormal()]), MonteCarloELBO())
+Q3, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MixedMeanField([VariationalNormal(), VariationalNormal()]), MonteCarloELBO())
 Q3_mu = [d.base.μ for d in Q3.dists]
 Q3_sigma = [d.base.σ for d in Q3.dists]
 # equivalent to MeanFieldGaussian + MonteCarloELBO()
 maximum(abs, Q2.mu .- Q3_mu)
 maximum(abs, Q2.sigma .- Q3_sigma)
 
-
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), ReinforceELBO())
+Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), ReinforceELBO())
 maximum(abs, Q2.mu .- map_mu)
 maximum(abs, Q2.sigma .- map_sigma)
 
 maximum(abs, Q2.mu .- Q.mu)
 maximum(abs, Q2.sigma .- Q.sigma)
 
+
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
+ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations)
+q = get_mixed_meanfield(LinRegStatic, (xs,), observations, ulj.addresses_to_ix)
+Q2 = advi_logjoint(ulj.logjoint, 10_000, 10, 0.01, q, ReinforceELBO());
+Q2_mu = [d.base.μ for d in Q2.dists]
+Q2_sigma = [d.base.σ for d in Q2.dists]
+
+Random.seed!(0)
+Q3, ulj = bbvi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
+Q3_mu = [d.base.μ for d in Q3.dists]
+Q3_sigma = [d.base.σ for d in Q3.dists]
+# equivalent to MixedMeanField + ReinforceELBO()
+maximum(abs, Q2_mu .- Q3_mu)
+maximum(abs, Q2_sigma .- Q3_sigma)
+
+
+Random.seed!(0)
+Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
 maximum(abs, Q2.mu .- Q.mu)
 maximum(abs, Q2.sigma .- Q.sigma)
 
@@ -105,24 +112,24 @@ maximum(abs, Q2.sigma .- Q.sigma)
 
 N = 10_000
 Random.seed!(0)
-mu, L = advi_fullrank_logjoint(logjoint, K, N, 10, 0.01);
+(mu, L), ulj = advi_fullrank(LinRegStatic, (xs,), observations, N, 10, 0.01);
 maximum(abs, map_mu .- mu)
 maximum(abs, map_Σ .- L*L')
 
 Random.seed!(0)
-Q = advi_logjoint(logjoint, N, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO());
+Q, ulj = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO());
 # equivalent to advi_fullrank_logjoint
 maximum(abs, mu .- Q.base.μ)
 maximum(abs, L*L' .- Q.base.Σ)
 
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, N, 10, 0.01, FullRankGaussian(K), MonteCarloELBO());
+Q2, ulj = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), MonteCarloELBO());
 # equivalent to RelativeEntropyELBO because ∇ log Q = ∇ entropy
 maximum(abs, Q2.base.μ .- Q.base.μ)
 maximum(abs, Q2.base.Σ .- Q.base.Σ)
 
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, N, 100, 0.01, FullRankGaussian(K), ReinforceELBO());
+Q2, ulj = advi(LinRegStatic, (xs,), observations, N, 100, 0.01, FullRankGaussian(K), ReinforceELBO());
 maximum(abs, map_mu .- Q2.base.μ)
 maximum(abs, map_Σ .- Q2.base.Σ)
 
@@ -130,7 +137,7 @@ maximum(abs, Q2.base.μ .- Q.base.μ)
 maximum(abs, Q2.base.Σ .- Q.base.Σ)
 
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, N, 10, 0.01, FullRankGaussian(K), PathDerivativeELBO());
+Q2, ulj = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), PathDerivativeELBO());
 maximum(abs, map_mu .- Q2.base.μ)
 maximum(abs, map_Σ .- Q2.base.Σ)
 
@@ -168,11 +175,11 @@ end
 # end
 
 Random.seed!(0);
-@time Q = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+@time Q, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
 
 guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+@time Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
 params = get_constrained_parameters(Q2)
 
 mu = vcat(params["mu_intercept"], params["mu_slope"])
@@ -184,7 +191,7 @@ maximum(abs, sigma .- Q.sigma)
 
 guide = make_guide(LinRegGuide2, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+@time Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
 params = get_constrained_parameters(Q2)
 
 mu = vcat(params["mu_intercept"], params["mu_slope"])
@@ -203,22 +210,21 @@ end
 
 Random.seed!(0)
 traces, retvals, lp = likelihood_weighting(unif, (), Dict(), 1_000_000);
-histogram(traces[:z], weights=exp.(lp), normalize=true, legend=false)
+histogram(traces[:y], weights=exp.(lp), normalize=true, legend=false)
 
 Random.seed!(0)
 traces = hmc(unif, (), Dict(), 100_000, 10, 0.1)
 histogram(traces[:y], normalize=true, legend=false)
 
-
-addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(unif, (), Dict());
+addresses_to_ix = get_address_to_ix(unif, (), Dict())
 K = length(addresses_to_ix)
 
 Random.seed!(0)
-Q = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
-Q = advi_logjoint(logjoint, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
+Q, ulj = advi(unif, (), Dict(), 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+Q, ulj = advi(unif, (), Dict(), 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
 zeta = rand(Q, 1_000_000);
-theta = transform_to_constrained!(zeta);
-histogram(theta[addresses_to_ix[:z],:], normalize=true, legend=false)
+theta = ulj.transform_to_constrained!(zeta);
+histogram(theta[addresses_to_ix[:y],:], normalize=true, legend=false)
 
 
 
@@ -242,14 +248,17 @@ sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
+ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations);
+K = length(ulj.addresses_to_ix)
+
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+Q2 = advi_logjoint(ulj.logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
 maximum(abs, Q2.mu .- mu)
 maximum(abs, Q2.sigma .- sigma)
 
-guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
+guide = make_guide(LinRegGuide, (), Dict(), ulj.addresses_to_ix)
 Random.seed!(0)
-@time Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+@time Q2 = advi_logjoint(ulj.logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
 guide_mu = vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["mu_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["mu_slope"]])
 guide_sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["omega_slope"]]))
 maximum(abs, guide_mu .- mu)
@@ -264,7 +273,7 @@ maximum(abs, sigma .- map_sigma)
 
 # equivalent to bbvi
 Random.seed!(0)
-Q2 = advi_logjoint(logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), ReinforceELBO())
+Q2 = advi_logjoint(ulj.logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), ReinforceELBO())
 maximum(abs, Q2.mu .- mu)
 maximum(abs, Q2.sigma .- sigma)
 
@@ -275,20 +284,19 @@ maximum(abs, Q2.sigma .- sigma)
     #x ~ Normal(n, 0.5)
 end
 
-addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(geometric_normal_static, (), Dict());
-
-Q = get_mixed_meanfield(geometric_normal_static, (), Dict(), addresses_to_ix);
 Random.seed!(0)
-Q = advi_logjoint(logjoint, 10_000, 100, 0.01, Q, ReinforceELBO())
+Q, ulj = bbvi(geometric_normal_static, (), Dict(), 10_000, 100, 0.01);
 
 
 @ppl function geometric_normal()
     n ~ Geometric(0.3)
-    x ~ Normal(n, 0.5)
+    # x ~ Normal(n, 0.5)
 end
 
 Random.seed!(0)
 Q = bbvi(geometric_normal, (), Dict(),  10_000, 100, 0.01)
+
+
 
 import Tracker
 Tracker.param([1.]) isa AbstractVector{<:Float64} # true
@@ -326,12 +334,14 @@ Random.seed!(0)
 Q = bbvi(nunif, (), Dict(),  10_000, 100, 0.01)
 Q[:n]
 zeta = rand(Q, 100_000);
+# TODO: what to do if Q implies longer trace
 theta = universal_transform_to_constrained(zeta, nunif, (), Dict());
 histogram([t[(:n)] for t in theta], normalize=true, legend=false)
 addr = (:x,1)
 histogram([t[addr] for t in theta if haskey(t,addr)], normalize=true, legend=false)
 
 
+# TODO: can be used for tests
 import Tracker
 mu = Tracker.param(2.)
 sigma = Tracker.param(0.5)
@@ -375,87 +385,7 @@ Tracker.grad.(Evaluation.get_params(q))
 all(Tracker.grad.(Evaluation.get_params(q)) .≈ Evaluation.logpdf_param_grads(q, Tracker.data(x)))
 
 
-@ppl function LinReg(xs)
-    intercept = {:intercept} ~ Normal(intercept_prior_mean, intercept_prior_sigma)
-    slope = {:slope} ~ Normal(slope_prior_mean, slope_prior_sigma)
-
-    for i in eachindex(xs)
-        {(:y, i)} ~ Normal(f(slope, intercept, xs[i]), σ)
-    end
-
-    return (slope, intercept)
-end
-
-observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
-
-N = 1_000_000
-
-Random.seed!(0)
-traces, retvals, logprobs = rwmh(LinReg, (xs,), observations, N;
-    default_var=1., addr2var=Addr2Var(:intercept=>0.5,:slope=>0.3), gibbs=false);
-
-mean(t[:slope] for t in traces)
-mean(t[:intercept] for t in traces)
-
-Random.seed!(0)
-traces, retvals, logprobs = lmh(LinReg, (xs,), observations, N;
-    proposal=Proposal(
-        :intercept => ContinuousRandomWalkProposal(0.5),
-        :slope => ContinuousRandomWalkProposal(0.3),
-    ), gibbs=false);
-
-mean(t[:slope] for t in traces)
-mean(t[:intercept] for t in traces)
-
-
-@ppl static function static_normal()
-    x ~ Normal(2., 0.5)
-end
-observations = Dict()
-
-addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained! = Evaluation.make_unconstrained_logjoint(static_normal, (), observations);
-K = length(addresses_to_ix)
-
-Random.seed!(0)
-mu, sigma = advi_meanfield_logjoint(logjoint, K, 10_000, 10, 0.01)
-
-
-#Random.seed!(0)
-#mu, sigma = advi_meanfield(logjoint, 100_000, 100, 0.001, K)
-
-Random.seed!(0)
-Q = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
-
-Random.seed!(0)
-Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
-
-@ppl static function static_normal_guide()
-    mu = param("mu")
-    sigma = param("sigma", 1, :positive)
-    x ~ Normal(mu, sigma)
-end
-
-guide = make_guide(static_normal_guide, (), Dict(), addresses_to_ix)
-Random.seed!(0)
-@time Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
-params = get_constrained_parameters(Q2)
-
-
-@ppl function universal_normal()
-    x ~ Normal(2., 0.5)
-end
-observations = Dict()
-
-Random.seed!(0)
-Q = advi_meanfield(universal_normal, (), observations,  10_000, 10, 0.01)
-Q[:x].base
-
-Random.seed!(0)
-Q = bbvi(universal_normal, (), observations,  10_000, 10, 0.01)
-Q[:x].base
-
-
-
+# PathDerivativeELBO ELBO gradient
 import Tracker
 using Distributions
 

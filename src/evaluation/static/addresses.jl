@@ -37,6 +37,13 @@ function get_address_to_ix(first::Addresses, second::Addresses=Addresses())::Add
     return addresses_to_ix
 end
 
+function get_address_to_ix(model::StaticModel, args::Tuple, observations::Dict)::Addr2Ix
+    addresses = get_addresses(model, args, observations)
+    addresses_to_ix = get_address_to_ix(addresses)
+    return addresses_to_ix
+end
+export get_address_to_ix
+
 struct Traces
     addesses_to_ix::Addr2Ix
     data::Array{Real}

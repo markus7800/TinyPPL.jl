@@ -23,6 +23,7 @@ Phi = hcat(fill(1., length(xs)), xs)
 S = inv(inv(S0) + Phi'Phi / σ^2) 
 map_mu = S*(inv(S0) * m0 + Phi'ys / σ^2)
 
+map_Σ = S
 map_mu
 map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
 
@@ -44,10 +45,10 @@ const model = @ppl LinReg begin
 end
 
 logjoint = Graph.make_logjoint(model)
-K = sum(isnothing.(model.observed_values))
+K = get_number_of_latent_variables(model)
 
 
-import TinyPPL.Logjoint: hmc_logjoint, advi_meanfield_logjoint
+using TinyPPL.Logjoint
 Random.seed!(0)
 result = hmc_logjoint(logjoint, K, 10_000, 10, 0.1)
 mean(result,dims=2)
@@ -61,3 +62,43 @@ Random.seed!(0)
 mu, sigma = advi_meanfield_logjoint(logjoint, K, 10_000, 10, 0.01)
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
+
+
+Random.seed!(0)
+mu, sigma = advi_meanfield(model, 10_000, 10, 0.01)
+maximum(abs, mu .- map_mu)
+maximum(abs, sigma .- map_sigma)
+
+
+Random.seed!(0)
+mu, L = advi_fullrank(model, 10_000, 10, 0.01)
+maximum(abs, map_mu .- mu)
+maximum(abs, map_Σ .- L*L')
+
+
+Random.seed!(0)
+# TODO: fix input type of logjoint
+Q = advi(model, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO());
+# equivalent to advi_fullrank_logjoint
+maximum(abs, mu .- Q.base.μ)
+maximum(abs, L*L' .- Q.base.Σ)
+
+
+Random.seed!(0)
+Q = bbvi(model, 10_000, 10, 0.01);
+Q_mu = [d.base.μ for d in Q.dists]
+Q_sigma = [d.base.σ for d in Q.dists]
+maximum(abs, mu .- Q_mu)
+maximum(abs, sigma .- Q_sigma)
+
+
+const unif = @ppl unif begin
+    let x ~ Uniform(-1,1),
+        y ~ Uniform(x-1,x+1),
+        z ~ Uniform(y-1,y+1)
+
+        z
+    end
+end
+
+# TODO: unconstrained logjoint
