@@ -67,7 +67,7 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Dict, 
             rho = learning_rate ./ (sqrt.(acc_addr) .+ eps)
 
             # reset gradients + update params
-            params = Tracker.data.(params)
+            params = no_grad(params)
             params += rho .* grad
             sampler.variational_dists[addr] = update_params(var_dist, params)
         end

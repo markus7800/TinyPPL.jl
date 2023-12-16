@@ -26,6 +26,15 @@ function ∇sigmoid(x)
 end
 invsigmoid(x) = log(x / (1-x))
 
+import Tracker
+no_grad(x::Float64) = x
+no_grad(x::Vector{Float64}) = x
+no_grad(x::Tracker.TrackedReal{Float64}) = Tracker.data(x)
+no_grad(x::Tracker.TrackedVector{Float64, Vector{Float64}}) = Tracker.data(x)
+no_grad(x::Tracker.TrackedMatrix{Float64, Matrix{Float64}}) = Tracker.data(x)
+no_grad(x::Vector{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
+no_grad(x::Matrix{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
+
 function reverse_pair(pair::Pair)
     new_pair = pair[1]
     while pair[2] isa Pair

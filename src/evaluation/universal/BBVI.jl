@@ -76,7 +76,7 @@ function bbvi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
             rho = learning_rate ./ (sqrt.(acc_addr) .+ eps)
 
             # reset gradients + update params
-            params = Tracker.data.(params)
+            params = no_grad(params)
             params += rho .* grad
             variational_dists[addr] = update_params(var_dist, params)
         end
