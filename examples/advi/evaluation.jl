@@ -40,6 +40,7 @@ map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
 end
 
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
+ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations)
 addresses_to_ix = get_address_to_ix(LinRegStatic, (xs,), observations)
 K = length(addresses_to_ix)
 
@@ -53,9 +54,14 @@ maximum(abs, mean(traces[:intercept]) - map_mu[1])
 maximum(abs, mean(traces[:slope]) - map_mu[2])
 
 Random.seed!(0)
-(mu, sigma), ulj = advi_meanfield(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
+(mu, sigma), _ = advi_meanfield(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
+
+Random.seed!(0)
+mu_lj, sigma_lj = advi_meanfield_logjoint(ulj.logjoint, K, 10_000, 10, 0.01)
+maximum(abs, mu .- mu_lj)
+maximum(abs, sigma .- sigma_lj)
 
 Random.seed!(0)
 Q, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
@@ -87,9 +93,8 @@ maximum(abs, Q2.sigma .- Q.sigma)
 
 
 Random.seed!(0)
-ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations)
 q = get_mixed_meanfield(LinRegStatic, (xs,), observations, ulj.addresses_to_ix)
-Q2 = advi_logjoint(ulj.logjoint, 10_000, 10, 0.01, q, ReinforceELBO());
+Q2, _ = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, q, ReinforceELBO());
 Q2_mu = [d.base.μ for d in Q2.dists]
 Q2_sigma = [d.base.σ for d in Q2.dists]
 

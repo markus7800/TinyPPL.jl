@@ -1,4 +1,5 @@
 import Distributions
+import ..Distributions: mean
 
 const Param2Ix = Dict{Any, UnitRange{Int}}
 
@@ -14,7 +15,7 @@ function sample(sampler::ParametersCollector, addr::Any, dist::Distribution, obs
     if !isnothing(obs)
         return obs
     end
-    return rand(dist)
+    return mean(dist)
 end
 
 function param(sampler::ParametersCollector, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)

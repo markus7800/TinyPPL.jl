@@ -1,4 +1,5 @@
 import TinyPPL.Logjoint: advi_meanfield_logjoint
+import ..Distributions: mean
 
 function advi_meanfield(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64)
     ulj = make_unconstrained_logjoint(model, args, observations)
@@ -36,7 +37,7 @@ function sample(sampler::MixedMeanFieldCollector, addr::Any, dist::Distribution,
     if !isnothing(obs)
         return obs
     end
-    value = rand(dist)
+    value = mean(dist)
     ix = sampler.addresses_to_ix[addr]
     sampler.dists[ix] = init_variational_distribution(dist)
     return value

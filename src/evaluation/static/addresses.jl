@@ -1,3 +1,4 @@
+import ..Distributions: mean
 
 const Addr2Ix = Dict{Any, Int}
 const Addresses = Set{Any}
@@ -14,7 +15,7 @@ function sample(sampler::AddressCollector, addr::Any, dist::Distribution, obs::U
         return obs
     end
 
-    value = rand(dist)
+    value = mean(dist)
     push!(sampler.addresses, addr)
     
     return value

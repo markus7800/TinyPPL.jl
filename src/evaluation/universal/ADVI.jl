@@ -124,14 +124,14 @@ function Distributions.rand(umf::UniversalMeanField, n::Int)
     return [Distributions.rand(umf) for _ in 1:n]
 end
 
-function universal_transform_to_constrained(X::Dict{Any,Float64}, model::UniversalModel, args::Tuple, observations::Dict)::Dict{Any,Float64}
+function transform_to_constrained(X::Dict{Any,Float64}, model::UniversalModel, args::Tuple, observations::Dict)::Dict{Any,Float64}
     sampler = UniversalConstraintTransformer(X, :constrained)
     model(args, sampler, observations)
     return sampler.Y
 end
 
-function universal_transform_to_constrained(Xs::Vector{Dict{Any,Float64}}, model::UniversalModel, args::Tuple, observations::Dict)::Vector{Dict{Any,Float64}}
-    return [universal_transform_to_constrained(X, model, args, observations) for X in Xs]
+function transform_to_constrained(Xs::Vector{Dict{Any,Float64}}, model::UniversalModel, args::Tuple, observations::Dict)::Vector{Dict{Any,Float64}}
+    return [transform_to_constrained(X, model, args, observations) for X in Xs]
 end
 
-export advi_meanfield, universal_transform_to_constrained
+export advi_meanfield, transform_to_constrained
