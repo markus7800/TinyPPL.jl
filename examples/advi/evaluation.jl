@@ -318,13 +318,13 @@ end
 Random.seed!(0)
 @time Q = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
 zeta = rand(Q, 1_000_000);
-theta = universal_transform_to_constrained(zeta, unif, (), Dict());
+theta = transform_to_constrained(zeta, unif, (), Dict());
 histogram([t[:y] for t in theta], normalize=true, legend=false)
 
 Random.seed!(0)
 @time Q = bbvi(unif, (), Dict(),  10_000, 10, 0.01)
 zeta = rand(Q, 1_000_000);
-theta = universal_transform_to_constrained(zeta, unif, (), Dict());
+theta = transform_to_constrained(zeta, unif, (), Dict());
 histogram([t[:y] for t in theta], normalize=true, legend=false)
 
 @ppl function nunif()
@@ -340,7 +340,7 @@ Q = bbvi(nunif, (), Dict(),  10_000, 100, 0.01)
 Q[:n]
 zeta = rand(Q, 100_000);
 # TODO: what to do if Q implies longer trace
-theta = universal_transform_to_constrained(zeta, nunif, (), Dict());
+theta = transform_to_constrained(zeta, nunif, (), Dict());
 histogram([t[(:n)] for t in theta], normalize=true, legend=false)
 addr = (:x,1)
 histogram([t[addr] for t in theta if haskey(t,addr)], normalize=true, legend=false)

@@ -86,26 +86,28 @@ mutable struct UniversalConstraintTransformer <: UniversalSampler
         return new(X, Dict{Any,Float64}(), to)
     end
 end 
-
-function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         return obs
     end
-    if dist isa Distributions.ContinuousUnivariateDistribution
-        transformed_dist = to_unconstrained(dist)
-        if sampler.to == :unconstrained
-            constrained_value = sampler.X[addr]
-            unconstrained_value = transformed_dist.T(constrained_value)
-            sampler.Y[addr] = unconstrained_value
-        else # samper.to == :constrained
-            unconstrained_value = sampler.X[addr]
-            constrained_value = transformed_dist.T_inv(unconstrained_value)
-            sampler.Y[addr] = constrained_value
-        end
-        return constrained_value
-    else
-        sampler.Y[addr] = sampler.X[addr]
+    sampler.Y[addr] = sampler.X[addr]
+    return sampler.X[addr]
+end
+function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        return obs
     end
+    transformed_dist = to_unconstrained(dist)
+    if sampler.to == :unconstrained
+        constrained_value = sampler.X[addr]
+        unconstrained_value = transformed_dist.T(constrained_value)
+        sampler.Y[addr] = unconstrained_value
+    else # samper.to == :constrained
+        unconstrained_value = sampler.X[addr]
+        constrained_value = transformed_dist.T_inv(unconstrained_value)
+        sampler.Y[addr] = constrained_value
+    end
+    return constrained_value
 end
 
 struct UniversalMeanField

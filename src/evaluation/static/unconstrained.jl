@@ -38,22 +38,25 @@ mutable struct UnconstrainedLogJointSampler{T,V} <: StaticSampler
         return new{eltype(V),V}(0., addresses_to_ix, X)
     end
 end
-function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
     end
-    if dist isa Distributions.DiscreteDistribution
-        value = sampler.X[sampler.addresses_to_ix[addr]]
-        sampler.W += logpdf(dist, value)
-        return value
-    else
-        unconstrained_value = sampler.X[sampler.addresses_to_ix[addr]]
-        transformed_dist = to_unconstrained(dist)
-        sampler.W += logpdf(transformed_dist, unconstrained_value)
-        constrained_value = transformed_dist.T_inv(unconstrained_value)
-        return constrained_value
+    value = sampler.X[sampler.addresses_to_ix[addr]]
+    sampler.W += logpdf(dist, value)
+    return value
+end
+function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        sampler.W += logpdf(dist, obs)
+        return obs
     end
+    unconstrained_value = sampler.X[sampler.addresses_to_ix[addr]]
+    transformed_dist = to_unconstrained(dist)
+    sampler.W += logpdf(transformed_dist, unconstrained_value)
+    constrained_value = transformed_dist.T_inv(unconstrained_value)
+    return constrained_value
 end
 
 struct UnconstrainedLogJoint

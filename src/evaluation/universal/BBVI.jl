@@ -12,7 +12,7 @@ mutable struct BBVI <: UniversalSampler
     end
 end
 
-function sample(sampler::BBVI, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::BBVI, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         sampler.ELBO += logpdf(dist, obs)
         return obs
@@ -23,22 +23,31 @@ function sample(sampler::BBVI, addr::Any, dist::Distribution, obs::Union{Nothing
         sampler.variational_dists[addr] = init_variational_distribution(dist)
     end
     var_dist = sampler.variational_dists[addr]
-    if dist isa Distributions.ContinuousUnivariateDistribution
-        transformed_dist = to_unconstrained(dist)
-        unconstrained_value = rand(var_dist)
-        lpq = logpdf(var_dist, unconstrained_value)
-        sampler.variational_param_grads[addr] = logpdf_param_grads(var_dist, unconstrained_value)
-        sampler.ELBO += logpdf(transformed_dist, unconstrained_value) - lpq
-        constrained_value = transformed_dist.T_inv(unconstrained_value)
-        return constrained_value
-    else
-        @assert dist isa Distributions.DiscreteUnivariateDistribution dist
-        value = rand(var_dist)
-        lpq = logpdf(var_dist, value)
-        sampler.variational_param_grads[addr] = logpdf_param_grads(var_dist, value)
-        sampler.ELBO += logpdf(dist, value) - lpq
-        return value
+    value = rand(var_dist)
+    lpq = logpdf(var_dist, value)
+    sampler.variational_param_grads[addr] = logpdf_param_grads(var_dist, value)
+    sampler.ELBO += logpdf(dist, value) - lpq
+    return value
+end
+
+function sample(sampler::BBVI, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        sampler.ELBO += logpdf(dist, obs)
+        return obs
     end
+
+    if !haskey(sampler.variational_dists, addr)
+        # assumes static distribution type, support of continuous distributions may be dynamic
+        sampler.variational_dists[addr] = init_variational_distribution(dist)
+    end
+    var_dist = sampler.variational_dists[addr]
+    transformed_dist = to_unconstrained(dist)
+    unconstrained_value = rand(var_dist)
+    lpq = logpdf(var_dist, unconstrained_value)
+    sampler.variational_param_grads[addr] = logpdf_param_grads(var_dist, unconstrained_value)
+    sampler.ELBO += logpdf(transformed_dist, unconstrained_value) - lpq
+    constrained_value = transformed_dist.T_inv(unconstrained_value)
+    return constrained_value
 end
 
 function bbvi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples::Int, L::Int, learning_rate::Float64, variational_dists = Dict{Any, VariationalDistribution}())
