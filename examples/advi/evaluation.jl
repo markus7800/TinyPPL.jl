@@ -163,8 +163,8 @@ end
 @ppl static function LinRegGuide2()
     mu1 = param("mu_intercept")
     mu2 = param("mu_slope")
-    sigma1 = param("sigma_intercept", 1, :positive)
-    sigma2 = param("sigma_slope", 1, :positive)
+    sigma1 = param("sigma_intercept", 1, Positive())
+    sigma2 = param("sigma_slope", 1, Positive())
 
     {:intercept} ~ Normal(mu1, sigma1)
     {:slope} ~ Normal(mu2, sigma2)
@@ -185,10 +185,10 @@ Random.seed!(0);
 guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
 Random.seed!(0)
 @time Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
-params = get_constrained_parameters(Q2)
+parameters = get_constrained_parameters(Q2)
 
-mu = vcat(params["mu_intercept"], params["mu_slope"])
-sigma = exp.(vcat(params["omega_intercept"], params["omega_slope"]))
+mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
+sigma = exp.(vcat(parameters["omega_intercept"], parameters["omega_slope"]))
 # equivalent to advi_logjoint
 maximum(abs, mu .- Q.mu)
 maximum(abs, sigma .- Q.sigma)
@@ -197,10 +197,10 @@ maximum(abs, sigma .- Q.sigma)
 guide = make_guide(LinRegGuide2, (), Dict(), addresses_to_ix)
 Random.seed!(0)
 @time Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
-params = get_constrained_parameters(Q2)
+parameters = get_constrained_parameters(Q2)
 
-mu = vcat(params["mu_intercept"], params["mu_slope"])
-sigma = vcat(params["sigma_intercept"], params["sigma_slope"])
+mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
+sigma = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
 # equivalent to advi_logjoint
 maximum(abs, mu .- Q.mu)
 maximum(abs, sigma .- Q.sigma)

@@ -18,7 +18,7 @@ function sample(sampler::ParametersCollector, addr::Any, dist::Distribution, obs
     return mean(dist)
 end
 
-function param(sampler::ParametersCollector, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)
+function param(sampler::ParametersCollector, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
     sampler.params_to_ix[addr] = (sampler.params_size+1):(sampler.params_size+size)
     sampler.params_size += size
     if size == 1
@@ -55,21 +55,12 @@ function sample(sampler::GuideSampler, addr::Any, dist::Distribution, obs::Union
     return value
 end
 
-function param(sampler::GuideSampler, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)
+function param(sampler::GuideSampler, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
     ix = sampler.params_to_ix[addr]
-    if constraint == :unconstrained
-        f = identity
-    elseif constraint == :positive
-        f = exp
-    elseif constraint == :zero_to_one
-       f = sigmoid
-    else
-        f = identity
-    end
     if size == 1
-        return f(sampler.phi[ix[1]])
+        return transform(constraint, sampler.phi[ix[1]])
     else
-        return f.(sampler.phi[ix])
+        return transform(constraint, sampler.phi[ix])
     end
 end
 
@@ -139,21 +130,12 @@ function sample(sampler::ParameterTransformer, addr::Any, dist::Distribution, ob
     return rand(dist)
 end
 
-function param(sampler::ParameterTransformer, addr::Any, size::Int=1, constraint::Symbol=:unconstrained)
+function param(sampler::ParameterTransformer, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
     ix = sampler.params_to_ix[addr]
-    if constraint == :unconstrained
-        f = identity
-    elseif constraint == :positive
-        f = exp
-    elseif constraint == :zero_to_one
-       f = sigmoid
-    else
-        f = identity
-    end
     if size == 1
-        parameters = f(sampler.phi[ix[1]])
+        parameters = transform(constraint, sampler.phi[ix[1]])
     else
-        parameters = f.(sampler.phi[ix])
+        parameters = transform(constraint, sampler.phi[ix])
     end
     sampler.transformed_phi[ix] .= parameters
     return parameters
