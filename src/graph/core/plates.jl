@@ -170,7 +170,16 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
     for plate in plates
         block_args = []
         lp = gensym(:lp)
-        push!(block_args, :($lp = 0.0))
+        
+        if kind != :sample
+            push!(block_args, :($lp = 0.0))
+        end
+
+        all_observed = all(!isnothing(symbolic_observes[child]) for child in plate.nodes)
+        no_observed = all(isnothing(symbolic_observes[child]) for child in plate.nodes)
+        @assert all_observed || no_observed
+        
+        # println("Plate:", plate, ", static_observes: ", static_observes, ", all_observed: ", all_observed, ", no_observed: ", no_observed)
 
         if !static_observes || kind == :sample
             for child in plate.nodes
@@ -180,7 +189,7 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                 end
             end
         end
-        if kind == :lp || all(isnothing(symbolic_observes[child]) for child in plate.nodes)
+        if kind != :sample || (kind == :sample && no_observed) # don't "sample" observes
             is_iid = length(plate.nodes) > 1 && allequal([symbolic_dists[child] for child in plate.nodes])
             interplate_edges = [edge for edge in plated_edges if edge isa InterPlateEdge && edge.to == plate]
             all_identity_edges = length(interplate_edges) > 0 && all(edge.is_identity for edge in interplate_edges)
@@ -188,10 +197,20 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
             if is_iid
                 # we can compute distribution once and loop
                 iid_d_sym = gensym("iid_dist")
-                push!(block_args, :($iid_d_sym = $(symbolic_dists[first(plate.nodes)])))
+                d = symbolic_dists[first(plate.nodes)]
+                push!(block_args, :($iid_d_sym = $d))
+                should_transform = no_observed && should_transform_to_unconstrained(d)
+                if kind == :lp_unconstrained && should_transform
+                    push!(block_args, :($iid_d_sym = to_unconstrained($iid_d_sym)))
+                end
                 
                 loop_var = gensym("i")
-                loop_body = if kind == :lp
+                loop_body = if kind == :lp_unconstrained && should_transform
+                    :(begin
+                        $lp += logpdf($iid_d_sym, $X[$loop_var]) # unconstrained value
+                        $X[$loop_var] = $iid_d_sym.T_inv($X[$loop_var]) # to constrained value
+                    end)
+                elseif kind == :lp || kind == :lp_unconstrained
                     :($lp += logpdf($iid_d_sym, $X[$loop_var]))
                 else
                     :($X[$loop_var] = rand($iid_d_sym))
@@ -222,7 +241,13 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                 @assert allequal(plate_symbolic_dists) unique(plate_symbolic_dists)
                 loop_d_sym = gensym("loop_dist")
                 low = first(plate.nodes)-1
-                loop_body = if kind == :lp
+                loop_body = if kind == :lp_unconstrained && no_observed && should_transform_to_unconstrained(plate_symbolic_dists[1])
+                    :(begin
+                        $loop_d_sym = to_unconstrained($loop_d_sym)
+                        $lp += logpdf($loop_d_sym, $X[$low + $loop_var]) # unconstrained value
+                        $X[$low + $loop_var] = $loop_d_sym.T_inv($X[$low + $loop_var]) # to constrained value
+                    end)
+                elseif kind == :lp || kind == :lp_unconstrained
                     :($lp += logpdf($loop_d_sym, $X[$low + $loop_var]))
                 else
                     :($X[$low + $loop_var] = rand($loop_d_sym))
@@ -238,7 +263,11 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                 for child in plate.nodes
                     child_d_sym = gensym("child_dist_$child")
                     push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
-                    if kind == :lp
+                    if kind == :lp_unconstrained && no_observed && should_transform_to_unconstrained(symbolic_dists[child])
+                        push!(block_args, :($child_d_sym = to_unconstrained($child_d_sym)))
+                        push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))  # unconstrained value
+                        push!(block_args, :($X[$child] = $child_d_sym.T_inv($X[$child])))
+                    elseif kind == :lp || kind == :lp_unconstrained
                         push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))   
                     else
                         push!(block_args, :($X[$child] = rand($child_d_sym)))   
@@ -246,7 +275,7 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                 end
             end
         end
-        if kind == :lp
+        if kind != :sample
             push!(block_args, :($lp))
         end
     
@@ -268,6 +297,7 @@ struct PlateInfo
     plates::Vector{Plate}
     plated_edges::Set{PlatedEdge}
     plate_lp_fs::Vector{Function}
+    plate_lp_unconstrained_fs::Vector{Function}
     plate_sample_fs::Vector{Function}
 end
 

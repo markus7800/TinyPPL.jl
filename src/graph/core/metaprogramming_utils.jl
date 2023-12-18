@@ -209,7 +209,6 @@ function simplify_if(expr)
     end
 end
 
-
 function repeatf_symbolic(n, f, x)
     v = gensym(:v)
     block_args = [:($v = $f($x))]
@@ -217,4 +216,25 @@ function repeatf_symbolic(n, f, x)
         push!(block_args, :($v = $f($v)))
     end
     return unwrap_let(Expr(:let, Expr(:block, block_args...), Expr(:block, v)))
+end
+
+#=
+    extracts names of function calls
+=#
+function get_call_names(expr, names=Symbol[])
+    if expr isa Expr
+        if expr.head == :call
+            name = expr.args[1]
+            if name isa Symbol
+                push!(names, name)
+            elseif name isa Expr && name.head == :.
+                @assert name.args[2] isa QuoteNode && name.args[2].value isa Symbol (name.args[2], typeof(name.args[2]))
+                push!(names, name.args[2].value)
+            end
+        end
+        for arg in expr.args
+            get_call_names(arg, names)
+        end
+    end
+    return names
 end

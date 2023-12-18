@@ -20,7 +20,7 @@ function make_logjoint(pgm::PGM)
 
     function logjoint(X::AbstractVector{Float64})
         Z = vcat(X,Y)
-        return pgm.logpdf(Z)
+        return pgm.unconstrained_logpdf!(Z)
     end
     return logjoint
 end

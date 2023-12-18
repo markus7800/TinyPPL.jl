@@ -29,8 +29,9 @@ struct PGM
     return_expr::Function
 
     plate_info::Union{Nothing, PlateInfo}
-    sample::Function
+    sample!::Function # stores samples (incl. observers) in input
     logpdf::Function
+    unconstrained_logpdf!::Function # transforms input to constrained
 
     sym_to_ix::Dict{Symbol, Int}
     symbolic_pgm::SymbolicPGM
@@ -235,7 +236,27 @@ function plates_lt(symbolic_pgm::SymbolicPGM, variable_to_address)
     end
 end
 
-function get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, X)
+const ALL_DISTRIBUTIONS = Set([
+    :Bernoulli, :Binomial, :Categorical, :DiscreteUniform, :Geometric, :Poisson,
+    :Beta, :Cauchy, :Exponential, :Gamma, :InverseGamma, :Laplace, :LogNormal, :Normal, :TDist, :Uniform,
+    :Dirac
+])
+const UNCONSTRAINED_DISTRIBUTIONS = Set([
+    # discrete cannot be transformed to unconstrained
+    :Bernoulli, :Binomial, :Categorical, :DiscreteUniform, :Geometric, :Poisson,
+    :Dirac,
+    :Cauchy, :Laplace, :LogNormal, :Normal, :TDist
+])
+const CONSTRAINED_DISTRIBUTIONS = Set([
+    :Beta, :Exponential, :Gamma, :InverseGamma, :Uniform
+])
+
+function should_transform_to_unconstrained(symbolic_dist)
+    dist_names = get_call_names(symbolic_dist) ∩ ALL_DISTRIBUTIONS
+    return !isempty(dist_names ∩ CONSTRAINED_DISTRIBUTIONS)
+end
+
+function get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X; unconstrained=false)
     lp = gensym(:lp)
     lp_block_args = []
 
@@ -249,27 +270,43 @@ function get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, X)
     d_sym = gensym("dist")
     for node in ordered_nodes
         if node isa Plate
-            plate_f_name = plate_function_name(name, :lp, node)
+            plate_f_name = plate_function_name(name, unconstrained ? :lp_unconstrained : :lp, node)
             push!(lp_block_args, :($lp += $plate_f_name($X)))
         else
             d = symbolic_dists[node]
-            push!(lp_block_args, :($d_sym = $d))
-            push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node])))
+            
+            if !isnothing(symbolic_observes[node])
+                push!(lp_block_args, :($d_sym = $d))
+                push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node])))
+            else
+                if unconstrained && should_transform_to_unconstrained(d)
+                    push!(lp_block_args, :($d_sym = $d))
+                    push!(lp_block_args, :($d_sym = to_unconstrained($d_sym)))
+                    push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node]))) # unconstrained value
+                    push!(lp_block_args, :($X[$node] = $d_sym.T_inv($X[$node]))) # to constrained value
+                else
+                    push!(lp_block_args, :($d_sym = $d))
+                    push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node])))
+                end
+            end
         end
     end
 
     push!(lp_block_args, :($lp))
 
-    f_name = Symbol("$(name)_logpdf")
+    
+    f_name = !unconstrained ? Symbol("$(name)_logpdf") : Symbol("$(name)_logpdf_unconstrained")
+
     f = rmlines(:(
         function $f_name($X::AbstractVector{Float64})
             $(Expr(:block, lp_block_args...))
         end
     ))
-    # display(f)
+    display(f)    
     logpdf = eval(f)
     return logpdf
 end
+
 
 function get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X)
     sample_block_args = []
@@ -367,7 +404,7 @@ function compile_symbolic_pgm(
 
     # wrap return expression in function
     f_name = Symbol("$(name)_return")
-    new_E =  subtitute_for_syms(var_to_expr, deepcopy(E), X)
+    new_E = subtitute_for_syms(var_to_expr, deepcopy(E), X)
     f = rmlines(:(
         function $f_name($X::AbstractVector{Float64})
             $new_E
@@ -376,26 +413,30 @@ function compile_symbolic_pgm(
     # display(f)
     return_expr = eval(f)
 
-    if  :plated in annotations
+    if :plated in annotations
         plate_symbols = unique([addr[1] for addr in addresses if addr isa Pair])
-        println("plate_symbols: ", plate_symbols)
+        println("plate_symbols: ", plate_symbols, ", static_observes: ", static_observes)
         plates, plated_edges = get_plates(n_variables, edges, addresses, plate_symbols)
         plate_lp_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, symbolic_observes, X, static_observes, :lp)
+        plate_lp_unconstrained_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, symbolic_observes, X, static_observes, :lp_unconstrained)
         plate_sample_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, symbolic_observes, X, static_observes, :sample)
-        plate_info = PlateInfo(plate_symbols, plates, plated_edges, plate_lp_fs, plate_sample_fs)
+        plate_info = PlateInfo(plate_symbols, plates, plated_edges, plate_lp_fs, plate_lp_unconstrained_fs, plate_sample_fs)
     else
         plate_info = nothing
     end
 
-    sample = get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X)
-    logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, X)
+    sample! = get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X)
+    logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X; unconstrained=false)
+    unconstrained_logpdf! = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, symbolic_observes, X; unconstrained=true)
 
     if !(:uninvoked in annotations)
         # force compilation
         X = Vector{Float64}(undef, n_variables)
-        Base.invokelatest(sample, X)
-        Base.invokelatest(return_expr, X)
+        # invokes plate functions as well
+        Base.invokelatest(sample!, X)
         Base.invokelatest(logpdf, X)
+        # Base.invokelatest(unconstrained_logpdf!, X) TODO: how to do this?
+        Base.invokelatest(return_expr, X)
         for i in 1:n_variables
             Base.invokelatest(distributions[i], X)
             if !isnothing(observed_values[i])
@@ -415,8 +456,9 @@ function compile_symbolic_pgm(
         return_expr,
 
         plate_info,
-        sample,
+        sample!,
         logpdf,
+        unconstrained_logpdf!,
 
         sym_to_ix,
         spgm,

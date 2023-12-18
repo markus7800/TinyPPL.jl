@@ -27,8 +27,7 @@ map_Σ = S
 map_mu
 map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
 
-
-const model = @ppl LinReg begin
+model = @ppl LinReg begin
     function f(slope, intercept, x)
         intercept + slope * x
     end
@@ -42,7 +41,14 @@ const model = @ppl LinReg begin
         
         (slope, intercept)
     end
-end
+end;
+
+X = Vector{Float64}(undef, model.n_variables)
+model.sample!(X)
+
+model.logpdf(X)
+model.unconstrained_logpdf!(X)
+
 
 logjoint = Graph.make_logjoint(model)
 K = get_number_of_latent_variables(model)
@@ -92,13 +98,43 @@ maximum(abs, mu .- Q_mu)
 maximum(abs, sigma .- Q_sigma)
 
 
-const unif = @ppl unif begin
+unif = @ppl unif begin
     let x ~ Uniform(-1,1),
         y ~ Uniform(x-1,x+1),
-        z ~ Uniform(y-1,y+1)
+        z ~ Uniform(y-1,y+1),
+        a ~ Normal(0.,1)
 
         z
     end
 end
+model = unif
 
 # TODO: unconstrained logjoint
+
+X = Vector{Float64}(undef, model.n_variables)
+model.sample!(X)
+X
+
+model.logpdf(X)
+
+model.logpdf([0., 2., 4., 0.])
+model.unconstrained_logpdf!([0., 2., 4., 0.])
+
+model = @ppl (plated) plate_model begin
+    let N = 3,
+        x = [{:x => i} ~ Normal(0.,1.) for i in 1:N],
+        a = [{:a => i} ~ Uniform(0., 1.) for i in 1:N],
+        b = [{:b => i} ~ Uniform(x[i]-1,x[i]+1) for i in 1:N],
+        z = [{:z => i} ~ Uniform(0.,1.) ↦ 0.5 for i in 1:N]
+
+        N
+    end
+end;
+
+X = Vector{Float64}(undef, model.n_variables)
+model.sample!(X)
+X
+
+model.logpdf(X)
+
+model.unconstrained_logpdf!(vcat(fill(3., 9), fill(0.5, 3)))

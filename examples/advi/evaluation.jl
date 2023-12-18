@@ -339,7 +339,6 @@ Random.seed!(0)
 Q = bbvi(nunif, (), Dict(),  10_000, 100, 0.01)
 Q[:n]
 zeta = rand(Q, 100_000);
-# TODO: what to do if Q implies longer trace
 theta = transform_to_constrained(zeta, nunif, (), Dict());
 histogram([t[(:n)] for t in theta], normalize=true, legend=false)
 addr = (:x,1)
