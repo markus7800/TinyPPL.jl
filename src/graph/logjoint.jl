@@ -1,4 +1,5 @@
 import Tracker
+import ..Distributions: mean
 
 function make_logjoint(pgm::PGM)
     sample_mask = isnothing.(pgm.observed_values)
@@ -13,12 +14,13 @@ function make_logjoint(pgm::PGM)
         if !isnothing(pgm.observed_values[node])
             Z[node] = pgm.observed_values[node](Z) # observed values cannot depend on sampled values
         else
-            Z[node] = rand(d) # sample from prior
+            Z[node] = mean(d)
         end
     end
     Y = Z[n_sample+1:end]
 
     function logjoint(X::AbstractVector{Float64})
+        X = convert(Vector{eltype(X)}, X) # tracked Vector -> Vector{Tracked}
         Z = vcat(X,Y)
         return pgm.unconstrained_logpdf!(Z)
     end

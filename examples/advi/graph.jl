@@ -102,14 +102,11 @@ unif = @ppl unif begin
     let x ~ Uniform(-1,1),
         y ~ Uniform(x-1,x+1),
         z ~ Uniform(y-1,y+1),
-        a ~ Normal(0.,1)
-
+        a ~ Normal(0., 1)
         z
     end
 end
 model = unif
-
-# TODO: unconstrained logjoint
 
 X = Vector{Float64}(undef, model.n_variables)
 model.sample!(X)
@@ -120,19 +117,31 @@ model.logpdf(X)
 model.logpdf([0., 2., 4., 0.])
 model.unconstrained_logpdf!([0., 2., 4., 0.])
 
+
+Random.seed!(0)
+result = hmc(model, 10_000, 10, 0.1)
+
+
 model = @ppl (plated) plate_model begin
     let N = 3,
         x = [{:x => i} ~ Normal(0.,1.) for i in 1:N],
         a = [{:a => i} ~ Uniform(0., 1.) for i in 1:N],
         b = [{:b => i} ~ Uniform(x[i]-1,x[i]+1) for i in 1:N],
-        z = [{:z => i} ~ Uniform(0.,1.) ↦ 0.5 for i in 1:N]
+        c = [{:c => i} ~ Normal(x[i],1) for i in 1:N],
+        z = [{:z => i} ~ Uniform(0.,1.) ↦ 0.1 for i in 1:N]
 
         N
     end
 end;
 
-X = Vector{Float64}(undef, model.n_variables)
-model.sample!(X)
+X = Vector{Float64}(undef, model.n_variables);
+model.sample!(X); X
+Y = Vector{Float64}(undef, model.n_variables);
+model.transform_to_unconstrained!(X, Y)
+Z = Vector{Float64}(undef, model.n_variables);
+model.transform_to_constrained!(Z, Y)
+@assert all(X .≈ Z) (X,Z)
+
 X
 
 model.logpdf(X)
