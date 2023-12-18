@@ -90,8 +90,8 @@ function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distri
     if !isnothing(obs)
         return obs
     end
-    sampler.Y[addr] = sampler.X[addr]
-    return sampler.X[addr]
+    sampler.Y[addr] = get(sampler.X, addr, mean(dist))
+    return sampler.Y[addr]
 end
 function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
@@ -99,11 +99,11 @@ function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distri
     end
     transformed_dist = to_unconstrained(dist)
     if sampler.to == :unconstrained
-        constrained_value = sampler.X[addr]
+        constrained_value = get(sampler.X, addr, mean(dist))
         unconstrained_value = transformed_dist.T(constrained_value)
         sampler.Y[addr] = unconstrained_value
     else # samper.to == :constrained
-        unconstrained_value = sampler.X[addr]
+        unconstrained_value = get(sampler.X, addr, 0.0)
         constrained_value = transformed_dist.T_inv(unconstrained_value)
         sampler.Y[addr] = constrained_value
     end
