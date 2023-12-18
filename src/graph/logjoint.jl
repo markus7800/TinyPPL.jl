@@ -19,7 +19,7 @@ function make_logjoint(pgm::PGM)
     end
     Y = Z[n_sample+1:end]
 
-    function logjoint(X::AbstractVector{Float64})
+    function logjoint(X::AbstractVector{<:Real})
         X = convert(Vector{eltype(X)}, X) # tracked Vector -> Vector{Tracked}
         Z = vcat(X,Y)
         return pgm.unconstrained_logpdf!(Z)

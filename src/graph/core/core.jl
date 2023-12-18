@@ -2,6 +2,14 @@ import MacroTools
 import ..TinyPPL.Distributions: logpdf
 using ..TinyPPL.Distributions
 
+import Tracker
+const INPUT_VECTOR_TYPE = Union{
+    Vector{Float64},
+    AbstractVector{Float64},
+    Vector{Tracker.TrackedReal{Float64}}
+    #Tracker.TrackedVector{Float64,Vector{Float64}}}
+}
+
 include("metaprogramming_utils.jl")
 include("symbolic_pgm.jl")
 include("plates.jl")
@@ -302,7 +310,7 @@ function get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, symbol
     f_name = !unconstrained ? Symbol("$(name)_logpdf") : Symbol("$(name)_logpdf_unconstrained!")
 
     f = rmlines(:(
-        function $f_name($X::AbstractVector{Float64})
+        function $f_name($X::INPUT_VECTOR_TYPE)
             $(Expr(:block, lp_block_args...))
         end
     ))
@@ -364,7 +372,7 @@ function get_transform(name, n_variables, edges, plate_info, symbolic_dists, sym
     f_name = Symbol("$(name)_transform_to_$(to)!")
 
     f = rmlines(:(
-        function $f_name($X::AbstractVector{Float64}, $Y::AbstractVector{Float64})
+        function $f_name($X::INPUT_VECTOR_TYPE, $Y::INPUT_VECTOR_TYPE)
             $(Expr(:block, block_args...))
         end
     ))
@@ -403,7 +411,7 @@ function get_sample(name, n_variables, edges, plate_info, symbolic_dists, symbol
     push!(sample_block_args, :($nothing))
     f_name = Symbol("$(name)_sample")
     f = rmlines(:(
-        function $f_name($X::AbstractVector{Float64})
+        function $f_name($X::INPUT_VECTOR_TYPE)
             $(Expr(:block, sample_block_args...))
         end
     ))
@@ -447,7 +455,7 @@ function compile_symbolic_pgm(
 
         f_name = Symbol("$(name)_dist_$i")
         f = rmlines(:(
-            function $f_name($X::AbstractVector{Float64})
+            function $f_name($X::INPUT_VECTOR_TYPE)
                 $(symbolic_dists[i])
             end
         ))
@@ -458,7 +466,7 @@ function compile_symbolic_pgm(
         else
             f_name = Symbol("$(name)_obs_$i")
             f = rmlines(:(
-                function $f_name($X::AbstractVector{Float64})
+                function $f_name($X::INPUT_VECTOR_TYPE)
                     $(symbolic_observes[i])
                 end
             ))
@@ -471,7 +479,7 @@ function compile_symbolic_pgm(
     f_name = Symbol("$(name)_return")
     new_E = subtitute_for_syms(var_to_expr, deepcopy(E), X)
     f = rmlines(:(
-        function $f_name($X::AbstractVector{Float64})
+        function $f_name($X::INPUT_VECTOR_TYPE)
             $new_E
         end
     ))

@@ -1,5 +1,6 @@
 using TinyPPL.Distributions
 using TinyPPL.Graph
+using TinyPPL.Logjoint
 import Random
 
 # xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
@@ -54,7 +55,6 @@ logjoint = Graph.make_logjoint(model)
 K = get_number_of_latent_variables(model)
 
 
-using TinyPPL.Logjoint
 Random.seed!(0)
 result = hmc_logjoint(logjoint, K, 10_000, 10, 0.1)
 mean(result,dims=2)
@@ -101,8 +101,9 @@ maximum(abs, sigma .- Q_sigma)
 unif = @ppl unif begin
     let x ~ Uniform(-1,1),
         y ~ Uniform(x-1,x+1),
-        z ~ Uniform(y-1,y+1),
-        a ~ Normal(0., 1)
+        z ~ Uniform(y-1,y+1)
+
+        {:a} ~ Normal(0., 1) ↦ 1
         z
     end
 end
@@ -120,7 +121,7 @@ model.unconstrained_logpdf!([0., 2., 4., 0.])
 
 Random.seed!(0)
 result = hmc(model, 10_000, 10, 0.1)
-
+histogram(result[4,:], normalize=true, legend=false)
 
 model = @ppl (plated) plate_model begin
     let N = 3,
@@ -147,3 +148,15 @@ X
 model.logpdf(X)
 
 model.unconstrained_logpdf!(vcat(fill(3., 9), fill(0.5, 3)))
+
+
+A = zeros(5)
+B = zeros(2)
+
+C = vcat(view(A,:),B)
+C .= 1
+A
+
+result = zeros(10,100)
+vcat(result, reshape(ones(2), :, 1))
+
