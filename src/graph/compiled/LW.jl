@@ -76,7 +76,7 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
     trace = Array{Float64,2}(undef, static_observes ? sum(mask) : pgm.n_variables, n_samples)
 
     if static_observes
-        pgm.sample(X)
+        pgm.sample!(X)
     end
 
     @progress for i in 1:n_samples

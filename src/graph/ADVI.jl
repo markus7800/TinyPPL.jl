@@ -38,7 +38,7 @@ import ..Distributions: MixedMeanField, init_variational_distribution
 # assumes static distributions
 function get_mixed_meanfield(pgm::PGM)::MixedMeanField
     X = Vector{Float64}(undef, pgm.n_variables)
-    pgm.sample(X)
+    pgm.sample!(X)
     sample_mask = isnothing.(pgm.observed_values)
     K = sum(sample_mask)
     @assert all(sample_mask[1:K])

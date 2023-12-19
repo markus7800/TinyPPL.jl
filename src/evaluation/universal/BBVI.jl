@@ -1,6 +1,5 @@
 import Distributions
-import ..Distributions: transform_to, support, IdentityTransform, RealInterval, logpdf_param_grads
-import ..Distributions: init_variational_distribution
+import ..Distributions: init_variational_distribution, logpdf_param_grads
 
 mutable struct BBVI <: UniversalSampler
     ELBO::Float64 # log P(X,Y) - log Q(X; λ)
@@ -41,10 +40,10 @@ function sample(sampler::BBVI, addr::Any, dist::Distributions.ContinuousDistribu
         sampler.variational_dists[addr] = init_variational_distribution(dist)
     end
     var_dist = sampler.variational_dists[addr]
-    transformed_dist = to_unconstrained(dist)
     unconstrained_value = rand(var_dist)
     lpq = logpdf(var_dist, unconstrained_value)
     sampler.variational_param_grads[addr] = logpdf_param_grads(var_dist, unconstrained_value)
+    transformed_dist = to_unconstrained(dist)
     sampler.ELBO += logpdf(transformed_dist, unconstrained_value) - lpq
     constrained_value = transformed_dist.T_inv(unconstrained_value)
     return constrained_value
@@ -84,14 +83,15 @@ function bbvi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
             acc[addr] = acc_addr
             rho = learning_rate ./ (sqrt.(acc_addr) .+ eps)
 
-            # reset gradients + update params
-            params = no_grad(params)
+            # update params
+            # params = no_grad(params)
             params += rho .* grad
             variational_dists[addr] = update_params(var_dist, params)
         end
         
     end
 
+    # TODO: replace with MixedMeanField?
     return UniversalMeanField(variational_dists)
 end
 

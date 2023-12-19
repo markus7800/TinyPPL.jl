@@ -46,7 +46,7 @@ function single_site(pgm::PGM, n_samples::Int, kernel::Function)
     nodes = [n => [child for (x,child) in pgm.edges if x == n] for n in pgm.topological_order if !observed[n]]
 
     X = Vector{Float64}(undef, pgm.n_variables)
-    pgm.sample(X) # initialise
+    pgm.sample!(X) # initialise
     r = pgm.return_expr(X)
 
     n_accepted = 0 

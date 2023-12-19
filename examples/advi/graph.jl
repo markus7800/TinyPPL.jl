@@ -83,7 +83,6 @@ maximum(abs, map_Σ .- L*L')
 
 
 Random.seed!(0)
-# TODO: fix input type of logjoint
 Q = advi(model, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO());
 # equivalent to advi_fullrank_logjoint
 maximum(abs, mu .- Q.base.μ)
@@ -91,11 +90,65 @@ maximum(abs, L*L' .- Q.base.Σ)
 
 
 Random.seed!(0)
-Q = bbvi(model, 10_000, 10, 0.01);
+@time Q = bbvi(model, 10_000, 100, 0.01);
 Q_mu = [d.base.μ for d in Q.dists]
 Q_sigma = [d.base.σ for d in Q.dists]
-maximum(abs, mu .- Q_mu)
-maximum(abs, sigma .- Q_sigma)
+maximum(abs, map_mu .- Q_mu)
+maximum(abs, map_sigma .- Q_sigma)
+
+
+Random.seed!(0)
+@time Q = bbvi_naive(model, 10_000, 100, 0.01);
+Q_mu = [d.base.μ for d in Q.dists]
+Q_sigma = [d.base.σ for d in Q.dists]
+maximum(abs, map_mu .- Q_mu)
+maximum(abs, map_sigma .- Q_sigma)
+
+Random.seed!(0)
+@time Q = bbvi_rao(model, 10_000, 100, 0.01);
+Q_mu = [d.base.μ for d in Q.dists]
+Q_sigma = [d.base.σ for d in Q.dists]
+maximum(abs, map_mu .- Q_mu)
+maximum(abs, map_sigma .- Q_sigma)
+
+
+
+model = @ppl normal_chain begin
+    let a ~ Normal(0,1),
+        b ~ Normal(a+1,1),
+        c ~ Normal(b+1,1),
+        d ~ Normal(c+1,1),
+        e ~ Normal(d+1,1),
+        f ~ Normal(e+1,1),
+        g ~ Normal(f+1,1),
+        h ~ Normal(g+1,1)
+
+        h
+    end
+end
+map_mu = collect(0:7.)
+map_sigma = collect(1:8.)
+
+Random.seed!(0)
+mu, sigma = advi_meanfield(model, 10_000, 10, 0.1);
+maximum(abs, mu .- map_mu)
+
+Random.seed!(0)
+@time Q = bbvi_naive(model, 10_000, 100, 0.1);
+Q_mu = [d.base.μ for d in Q.dists]
+maximum(abs, map_mu .- Q_mu)
+
+Random.seed!(0)
+@time Q = bbvi_rao(model, 10_000, 100, 0.01);
+Q_mu = [d.base.μ for d in Q.dists]
+maximum(abs, map_mu .- Q_mu)
+
+import LinearAlgebra, diag
+Random.seed!(0)
+mu, L = advi_fullrank(model, 100_000, 10, 0.01)
+maximum(abs, mu .- map_mu)
+maximum(abs, diag(L*L') .- map_sigma)
+
 
 
 unif = @ppl unif begin

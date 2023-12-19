@@ -2,7 +2,7 @@
 function compiled_single_site(pgm::PGM, kernels::Vector{Function}, n_samples::Int; static_observes::Bool=false)
 
     X = Vector{Float64}(undef, pgm.n_variables)
-    pgm.sample(X) # initialise
+    pgm.sample!(X) # initialise
     r = pgm.return_expr(X)
 
     mask = isnothing.(pgm.observed_values)
@@ -196,7 +196,7 @@ function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
     end
 
     X = Vector{Float64}(undef, pgm.n_variables);
-    pgm.sample(X) # initialise
+    pgm.sample!(X) # initialise
     for f in lmh_functions
         # println(f)
         Base.invokelatest(f, X)

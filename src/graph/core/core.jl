@@ -5,7 +5,7 @@ using ..TinyPPL.Distributions
 import Tracker
 const INPUT_VECTOR_TYPE = Union{
     Vector{Float64},
-    AbstractVector{Float64},
+    AbstractVector{Float64}, # includes Tracker.TrackedVector
     Vector{Tracker.TrackedReal{Float64}}
     #Tracker.TrackedVector{Float64,Vector{Float64}}}
 }
