@@ -19,7 +19,7 @@ function sample(sampler::ADVI, addr::Any, dist::Distribution, obs::Union{Nothing
 
     if !haskey(sampler.variational_dists, addr)
         q = VariationalNormal()
-        params = Tracker.param.(initial_params(q)) # no vector params
+        params = Tracker.param.(get_params(q)) # no vector params
         sampler.variational_dists[addr] = update_params(q, params)
     end
     var_dist = sampler.variational_dists[addr]

@@ -78,11 +78,11 @@ function make_guide(model::StaticModel, args::Tuple, observations::Dict, address
     return Guide(sampler, model, args, observations)
 end
 
-import ..Distributions: initial_params
-function initial_params(guide::Guide)::AbstractVector{<:Float64}
-    nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
-    return zeros(nparams)
-end
+# import ..Distributions: initial_params
+# function initial_params(guide::Guide)::AbstractVector{<:Float64}
+#     nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
+#     return zeros(nparams)
+# end
 
 import ..Distributions: get_params
 function get_params(q::Guide)::AbstractVector{<:Real}

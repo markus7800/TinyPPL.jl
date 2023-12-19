@@ -7,9 +7,9 @@ import Distributions: entropy, MultivariateNormal
 abstract type VariationalDistribution end # <: Distribution{Distributions.Multivariate, Distributions.Continuous} end
 export VariationalDistribution
 
-function initial_params(q::VariationalDistribution)::AbstractVector{<:Float64}
-    error("Not implemented.")
-end
+# function initial_params(q::VariationalDistribution)::AbstractVector{<:Float64}
+#     error("Not implemented.")
+# end
 function get_params(q::VariationalDistribution)::AbstractVector{<:Real}
     error("Not implemented.")
 end
@@ -45,9 +45,9 @@ function MeanFieldGaussian(K::Int)
     return MeanFieldGaussian(zeros(K), zeros(K), ones(K))
 end
 
-function initial_params(q::MeanFieldGaussian)::AbstractVector{<:Float64}
-    return zeros(2*length(q.mu))
-end
+# function initial_params(q::MeanFieldGaussian)::AbstractVector{<:Float64}
+#     return zeros(2*length(q.mu))
+# end
 
 function get_params(q::MeanFieldGaussian)::AbstractVector{<:Real}
     return vcat(q.mu, q.log_sigma)
@@ -99,10 +99,10 @@ function FullRankGaussian(K::Int)
     return FullRankGaussian(mu, L, Distributions.MultivariateNormal(mu, LinearAlgebra.diagm(ones(K))))
 end
 
-function initial_params(q::FullRankGaussian)::AbstractVector{<:Float64}
-    K = length(q.base)
-    return vcat(zeros(K), reshape(LinearAlgebra.I(K),:))
-end
+# function initial_params(q::FullRankGaussian)::AbstractVector{<:Float64}
+#     K = length(q.base)
+#     return vcat(zeros(K), reshape(LinearAlgebra.I(K),:))
+# end
 
 function get_params(q::FullRankGaussian)::AbstractVector{<:Real}
    return vcat(q.mu, q.L) 
@@ -167,9 +167,9 @@ end
 function VariationalNormal()
     return VariationalNormal{Float64}(Distributions.Normal(), 0.)
 end
-function initial_params(q::VariationalNormal)::AbstractVector{<:Float64}
-    return [0., 0.]
-end
+# function initial_params(q::VariationalNormal)::AbstractVector{<:Float64}
+#     return [0., 0.]
+# end
 function get_params(q::VariationalNormal)::AbstractVector{<:Real}
     return [q.base.μ, q.log_σ]
 end
@@ -190,9 +190,9 @@ end
 function VariationalGeometric()
     return VariationalGeometric{Float64}(Distributions.Geometric(0.5), 0.)
 end
-function initial_params(q::VariationalGeometric)::AbstractVector{<:Float64}
-    return [0.]
-end
+# function initial_params(q::VariationalGeometric)::AbstractVector{<:Float64}
+#     return [0.]
+# end
 function get_params(q::VariationalGeometric)::AbstractVector{<:Real}
     return [q.inv_sigmoid_p]
 end
@@ -204,43 +204,6 @@ function logpdf_param_grads(q::VariationalGeometric, x::Real)
     ∇p = x >= 0 ? 1/p - (1/(1-p) * x) : 0.
     return [∇p * ∇sigmoid(q.inv_sigmoid_p)]
 end
-
-# import ..Distributions: Transform, in_domain, log_abs_det_jacobian
-
-# struct TransformedVariationalWrappedDistribution <: VariationalDistribution
-#     base::VariationalWrappedDistribution
-#     T::Transform
-#     T_inv::Transform
-# end
-# function TransformedVariationalWrappedDistribution(base::VariationalWrappedDistribution, T::Transform)
-#     return TransformedVariationalWrappedDistribution(base, T, inv(T))
-# end
-# function Distributions.rand(q::TransformedVariationalWrappedDistribution)
-#     return q.T(Distributions.rand(q.base))
-# end
-# function Distributions.rand(q::TransformedVariationalWrappedDistribution, n::Int)
-#     return q.T.(Distributions.rand(q.base, n))
-# end
-# function Distributions.logpdf(q::TransformedVariationalWrappedDistribution, y::Real)
-#     if !in_domain(q.T_inv, y) # !(y in support(t))
-#         return -Inf
-#     end
-#     x = q.T_inv(y)
-#     return Distributions.logpdf(q.base, x) + log_abs_det_jacobian(q.T_inv, y)
-# end
-# function initial_params(q::TransformedVariationalWrappedDistribution)::AbstractVector{<:Float64}
-#     return initial_params(q.base)
-# end
-# function get_params(q::TransformedVariationalWrappedDistribution)::AbstractVector{<:Real}
-#     return get_params(q.base)
-# end
-# function update_params(q::TransformedVariationalWrappedDistribution, params::AbstractVector{<:Real})::TransformedVariationalWrappedDistribution
-#     return TransformedVariationalWrappedDistribution(update_params(q.base, params), q.T, q.T_inv)
-# end
-# function logpdf_param_grads(q::TransformedVariationalWrappedDistribution, y::Real)
-#     x = q.T_inv(y)
-#     return logpdf_param_grads(q.base, x)
-# end
 
 export MeanFieldGaussian, FullRankGaussian
 export VariationalNormal, VariationalGeometric
@@ -258,16 +221,16 @@ function MixedMeanField(dists::Vector{<:VariationalDistribution})
     param_ixs = Vector{UnitRange{Int}}(undef, length(dists))
     ix = 1
     for i in eachindex(dists)
-        s = length(initial_params(dists[i]))
+        s = length(get_params(dists[i]))
         param_ixs[i] = ix:(ix+s-1)
         ix += s
     end
     return MixedMeanField(dists, param_ixs)
 end
 
-function initial_params(q::MixedMeanField)::AbstractVector{<:Float64}
-    return reduce(vcat, initial_params(d) for d in q.dists)
-end
+# function initial_params(q::MixedMeanField)::AbstractVector{<:Float64}
+#     return reduce(vcat, initial_params(d) for d in q.dists)
+# end
 function get_params(q::MixedMeanField)::AbstractVector{<:Real}
     return reduce(vcat, get_params(d) for d in q.dists)
 end

@@ -2,7 +2,7 @@ import Tracker
 import Distributions
 import LinearAlgebra
 import Random
-import ..Distributions: VariationalDistribution, initial_params, update_params, get_params, rand_and_logpdf, logpdf
+import ..Distributions: VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf
 
 # Fix merged to Tracker.jl
 # for f in :[rand, randn, randexp].args
@@ -152,7 +152,7 @@ function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalD
 end
 
 function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
-    phi = initial_params(q)
+    phi = no_grad(get_params(q))
 
     eps = 1e-8
     acc = fill(eps, size(phi))
