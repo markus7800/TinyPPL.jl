@@ -2,7 +2,7 @@ import Tracker
 import Distributions
 import LinearAlgebra
 import Random
-import ..Distributions: VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf
+import ..Distributions: ELBOEstimator, estimate_elbo, VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf
 
 # Fix merged to Tracker.jl
 # for f in :[rand, randn, randexp].args
@@ -97,60 +97,6 @@ function advi_fullrank_logjoint(logjoint::Function, K::Int, n_samples::Int, N::I
     return mu, L
 end
 
-abstract type ELBOEstimator end
-struct MonteCarloELBO <: ELBOEstimator end
-function estimate_elbo(::MonteCarloELBO, logjoint::Function, q::VariationalDistribution, L::Int)
-    elbo = 0.
-    for _ in 1:L
-        # implicit reparametrisation trick (if we get gradients)
-        zeta, lpq = rand_and_logpdf(q)
-        elbo += logjoint(zeta) - lpq
-    end
-    elbo = elbo / L
-    return elbo
-end
-
-struct RelativeEntropyELBO <: ELBOEstimator end
-function estimate_elbo(::RelativeEntropyELBO, logjoint::Function, q::VariationalDistribution, L::Int)
-    elbo = 0.
-    for _ in 1:L
-        # implicit reparametrisation trick (if we get gradients)
-        zeta, _ = rand_and_logpdf(q)
-        elbo += logjoint(zeta)
-    end
-    elbo = elbo / L + Distributions.entropy(q)
-    return elbo
-end
-
-struct ReinforceELBO <: ELBOEstimator end
-function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistribution, L::Int)
-    elbo = 0.
-    q_ = update_params(q, no_grad(get_params(q)))
-    for _ in 1:L
-        zeta = rand(q_)
-        lpq = logpdf(q, zeta)
-        no_grad_elbo = logjoint(zeta) - no_grad(lpq)
-        @assert !Tracker.istracked(no_grad_elbo) zeta
-        @assert Tracker.istracked(lpq)
-        # inject log Q gradient
-        elbo += no_grad_elbo * lpq + no_grad_elbo * (1 - no_grad(lpq))
-    end
-    elbo = elbo / L
-    return elbo
-end
-
-struct PathDerivativeELBO <: ELBOEstimator end
-function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalDistribution, L::Int)
-    elbo = 0.
-    q_ = update_params(q, no_grad(get_params(q)))
-    for _ in 1:L
-        zeta = rand(q)
-        elbo += logjoint(zeta) - logpdf(q_, zeta)
-    end
-    elbo = elbo / L
-    return elbo
-end
-
 function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
     phi = no_grad(get_params(q))
 
@@ -180,4 +126,4 @@ function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate
     return update_params(q, phi)
 end
 
-export advi_logjoint, advi_meanfield_logjoint, advi_fullrank_logjoint, MonteCarloELBO, RelativeEntropyELBO, ReinforceELBO, PathDerivativeELBO
+export advi_logjoint, advi_meanfield_logjoint, advi_fullrank_logjoint

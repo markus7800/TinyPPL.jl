@@ -17,12 +17,20 @@ function advi_fullrank(model::StaticModel, args::Tuple, observations::Dict, n_sa
     return result, ulj
 end
 
-import TinyPPL.Logjoint: advi_logjoint, ELBOEstimator, ReinforceELBO
+import TinyPPL.Logjoint: advi_logjoint
+import TinyPPL.Distributions: ELBOEstimator, ReinforceELBO
 
 function advi(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
     ulj = make_unconstrained_logjoint(model, args, observations)
     result = advi_logjoint(ulj.logjoint, n_samples, L, learning_rate, q, estimator)
     return result, ulj
+end
+
+function advi(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64, guide::StaticModel, guide_args::Tuple, estimator::ELBOEstimator)
+    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+    q = make_guide(guide, guide_args, Dict(), addresses_to_ix)
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    return result, (logjoint, addresses_to_ix)
 end
 
 export advi_meanfield, advi_fullrank, advi

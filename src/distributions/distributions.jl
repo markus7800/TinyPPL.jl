@@ -11,6 +11,7 @@ module Distributions
     include("random_walk.jl")
     include("transformed.jl")
     include("variational.jl")
+    include("elbo.jl")
 
 
     export Distribution, logpdf, params, mean

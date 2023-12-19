@@ -150,7 +150,7 @@ maximum(abs, Q2.base.μ .- Q.base.μ)
 maximum(abs, Q2.base.Σ .- Q.base.Σ)
 
 
-@ppl static function LinRegGuide()
+@ppl static function LinRegGuideStatic()
     mu1 = param("mu_intercept")
     mu2 = param("mu_slope")
     sigma1 = exp(param("omega_intercept"))
@@ -160,7 +160,7 @@ maximum(abs, Q2.base.Σ .- Q.base.Σ)
     {:slope} ~ Normal(mu2, sigma2)
 end
 
-@ppl static function LinRegGuide2()
+@ppl static function LinRegGuideStatic2()
     mu1 = param("mu_intercept")
     mu2 = param("mu_slope")
     sigma1 = param("sigma_intercept", 1, Positive())
@@ -180,13 +180,22 @@ end
 # end
 
 Random.seed!(0);
-@time Q, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+@time Q, ulj = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
 
 guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
-parameters = get_constrained_parameters(Q2)
+@time Q2, ulj = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
 
+Random.seed!(0)
+@time Q2, _ = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO())
+
+Random.seed!(0)
+logjoint, addresses_to_ix = Evaluation.make_logjoint(LinRegGuideStatic, (xs,), observations)
+guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
+@time Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+
+
+parameters = get_constrained_parameters(Q2)
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
 sigma = exp.(vcat(parameters["omega_intercept"], parameters["omega_slope"]))
 # equivalent to advi_logjoint
@@ -194,9 +203,10 @@ maximum(abs, mu .- Q.mu)
 maximum(abs, sigma .- Q.sigma)
 
 
-guide = make_guide(LinRegGuide2, (), Dict(), addresses_to_ix)
+
+guide = make_guide(LinRegGuideStatic2, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
+@time Q2, ulj = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
 parameters = get_constrained_parameters(Q2)
 
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
@@ -244,6 +254,16 @@ histogram(theta[addresses_to_ix[:y],:], normalize=true, legend=false)
     return (slope, intercept)
 end
 
+@ppl function LinRegGuide()
+    mu1 = param("mu_intercept")
+    mu2 = param("mu_slope")
+    sigma1 = param("sigma_intercept", 1, Positive())
+    sigma2 = param("sigma_slope", 1, Positive())
+
+    {:intercept} ~ Normal(mu1, sigma1)
+    {:slope} ~ Normal(mu2, sigma2)
+end
+
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
 Random.seed!(0)
@@ -253,21 +273,15 @@ sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
-ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations);
-K = length(ulj.addresses_to_ix)
-
 Random.seed!(0)
-Q2 = advi_logjoint(ulj.logjoint, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
-maximum(abs, Q2.mu .- mu)
-maximum(abs, Q2.sigma .- sigma)
+Q2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO())
+parameters = get_constrained_parameters(Q2)
 
-guide = make_guide(LinRegGuide, (), Dict(), ulj.addresses_to_ix)
-Random.seed!(0)
-@time Q2 = advi_logjoint(ulj.logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
-guide_mu = vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["mu_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["mu_slope"]])
-guide_sigma = exp.(vcat(Q2.sampler.phi[Q2.sampler.params_to_ix["omega_intercept"]], Q2.sampler.phi[Q2.sampler.params_to_ix["omega_slope"]]))
-maximum(abs, guide_mu .- mu)
-maximum(abs, guide_sigma .- sigma)
+mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
+sigma = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
+# equivalent to advi_logjoint
+maximum(abs, mu .- map_mu)
+maximum(abs, sigma .- map_sigma)
 
 Random.seed!(0)
 Q = bbvi(LinReg, (xs,), observations,  10_000, 100, 0.01)

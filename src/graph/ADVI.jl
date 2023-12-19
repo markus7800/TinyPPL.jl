@@ -22,7 +22,8 @@ function advi_fullrank(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
     return result
 end
 
-import TinyPPL.Logjoint: advi_logjoint, ELBOEstimator, ReinforceELBO
+import TinyPPL.Logjoint: advi_logjoint
+import TinyPPL.Distributions: ELBOEstimator, ReinforceELBO
 
 function advi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
     logjoint = make_logjoint(pgm)
