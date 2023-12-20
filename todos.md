@@ -6,11 +6,12 @@ TODOS:
 - reduce compile time in graph by batching distributions, observed_values functions similar to plated
 
 - AQUA inference for graphsample
+- 
 - document everyting
 
-- bbvi rao graph
 - universal advi guide
 - rjmcmc
 - smc (graph ok / universial with channels?)
 - logjoint -> logdensity
 - graph -> enfore static observes
+- variational inference result type, rand -> auto transform to constrained

@@ -101,7 +101,7 @@ function Distributions.logpdf(guide::Guide, X::Dict{Any,Real})
 end
 
 function Distributions.rand(guide::Guide, n::Int)
-    return [Distributionrand(guide) for _ in 1:n]
+    return [Distribution.rand(guide) for _ in 1:n]
 end
 
 
@@ -130,10 +130,10 @@ function Base.getindex(p::Parameters, addr::Any)
 end 
 
 function get_constrained_parameters(guide::Guide)
-    transformed_phi = reduce(vcat, 
-        transform(guide.sampler.constraints[addr], guide.sampler.phi[ix])
-        for (addr, ix) in guide.sampler.params_to_ix
-    )
+    transformed_phi = similar(guide.sampler.phi)
+    for (addr, ix) in guide.sampler.params_to_ix
+        transformed_phi[ix] = transform(guide.sampler.constraints[addr], guide.sampler.phi[ix])
+    end
     return Parameters(transformed_phi, guide.sampler.params_to_ix)
 end
 

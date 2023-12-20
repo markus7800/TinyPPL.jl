@@ -274,14 +274,24 @@ maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
 Random.seed!(0)
-Q2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO())
+Q2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO());
 parameters = get_constrained_parameters(Q2)
 
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
 sigma = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
-# equivalent to advi_logjoint
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
+
+logjoint, addresses_to_ix = Evaluation.make_logjoint(LinRegStatic, (xs,), observations)
+guide = make_guide(LinRegGuideStatic2, (), Dict(), addresses_to_ix)
+
+Random.seed!(0)
+Q3 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO());
+parameters = get_constrained_parameters(Q3)
+mu_3 = vcat(parameters["mu_intercept"], parameters["mu_slope"])
+sigma_3 = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
+maximum(abs, mu .- mu_3)
+maximum(abs, sigma .- sigma_3)
 
 Random.seed!(0)
 Q = bbvi(LinReg, (xs,), observations,  10_000, 100, 0.01)
