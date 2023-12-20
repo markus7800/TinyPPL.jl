@@ -1,11 +1,6 @@
 import TinyPPL.Logjoint: advi_meanfield_logjoint
 import ..Distributions: mean, MeanFieldGaussian, FullRankGaussian
 
-abstract type VIResult end
-function sample_posterior(::VIResult, n::Int)
-    error("Not implemented.")
-end
-
 struct StaticVIResult
     Q::VariationalDistribution
     addresses_to_ix::Addr2Ix
@@ -49,6 +44,8 @@ function advi(model::StaticModel, args::Tuple, observations::Dict, n_samples::In
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
     q = make_guide(guide, guide_args, Dict(), addresses_to_ix)
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    # guide has to propose in correct support
+    # if you want to fit guide to unconstrained model you have to do it manually and transform to constrained
     return StaticVIResult(result, addresses_to_ix, identity)
 end
 

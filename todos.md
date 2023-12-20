@@ -14,4 +14,3 @@ TODOS:
 - smc (graph ok / universial with channels?)
 - logjoint -> logdensity
 - graph -> enfore static observes
-- variational inference result type, rand -> auto transform to constrained

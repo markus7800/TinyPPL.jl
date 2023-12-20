@@ -2,6 +2,89 @@ import Tracker
 import Distributions
 import ..Distributions: VariationalDistribution, VariationalNormal, get_params, update_params
 
+
+mutable struct UniversalConstraintTransformer <: UniversalSampler
+    X::Dict{Any,Float64}
+    Y::Dict{Any,Float64}
+    to::Symbol
+    function UniversalConstraintTransformer(X::Dict{Any,Float64}, to::Symbol)
+        @assert to in (:constrained, :unconstrained)
+        return new(X, Dict{Any,Float64}(), to)
+    end
+end 
+function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        return obs
+    end
+    sampler.Y[addr] = get(sampler.X, addr, mean(dist))
+    return sampler.Y[addr]
+end
+function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
+    if !isnothing(obs)
+        return obs
+    end
+    transformed_dist = to_unconstrained(dist)
+    if sampler.to == :unconstrained
+        constrained_value = get(sampler.X, addr, mean(dist))
+        unconstrained_value = transformed_dist.T(constrained_value)
+        sampler.Y[addr] = unconstrained_value
+    else # samper.to == :constrained
+        unconstrained_value = get(sampler.X, addr, 0.0)
+        constrained_value = transformed_dist.T_inv(unconstrained_value)
+        sampler.Y[addr] = constrained_value
+    end
+    return constrained_value
+end
+
+struct UniversalMeanField
+    variational_dists::Dict{Any,VariationalDistribution}
+end
+function Base.getindex(umf::UniversalMeanField, addr)
+    return umf.variational_dists[addr]
+end
+
+function Distributions.rand(umf::UniversalMeanField)
+    X = Dict{Any,Float64}(addr => Distributions.rand(var_dist) for (addr, var_dist) in umf.variational_dists)
+    return X
+end
+
+function Distributions.rand(umf::UniversalMeanField, n::Int)
+    return [Distributions.rand(umf) for _ in 1:n]
+end
+
+function transform_to_constrained(X::Dict{Any,Float64}, model::UniversalModel, args::Tuple, observations::Dict)::Dict{Any,Float64}
+    sampler = UniversalConstraintTransformer(X, :constrained)
+    model(args, sampler, observations)
+    return sampler.Y
+end
+
+function transform_to_constrained(Xs::Vector{Dict{Any,Float64}}, model::UniversalModel, args::Tuple, observations::Dict)::Vector{Dict{Any,Float64}}
+    return [transform_to_constrained(X, model, args, observations) for X in Xs]
+end
+
+export transform_to_constrained
+
+
+struct UniversalTraces
+    data::Vector{Dict{Any,Real}}
+end
+function Base.getindex(traces::UniversalTraces, addr::Any)
+    return [get(t, addr, missing) for t in traces.data]
+end
+export UniversalTraces
+
+struct UniversalVIResult <: VIResult
+    Q::Union{UniversalMeanField, Guide}
+    transform_to_constrained::Function
+end
+function sample_posterior(res::UniversalVIResult, n::Int)
+    samples = rand(res.Q, n)
+    @assert samples isa Vector{Dict{Any,T}} where T <: Real
+    samples = res.transform_to_constrained.(samples)
+    return UniversalTraces(samples)
+end
+export sample_posterior
+
 mutable struct ADVI <: UniversalSampler
     ELBO::Tracker.TrackedReal{Float64}
     variational_dists::Dict{Any, VariationalDistribution}
@@ -74,69 +157,14 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Dict, 
         
     end
 
-    return UniversalMeanField(sampler.variational_dists)
-end
-
-mutable struct UniversalConstraintTransformer <: UniversalSampler
-    X::Dict{Any,Float64}
-    Y::Dict{Any,Float64}
-    to::Symbol
-    function UniversalConstraintTransformer(X::Dict{Any,Float64}, to::Symbol)
-        @assert to in (:constrained, :unconstrained)
-        return new(X, Dict{Any,Float64}(), to)
+    function _transform_to_constrained(X::Dict{Any,Float64})
+        sampler = UniversalConstraintTransformer(X, :constrained)
+        model(args, sampler, observations)
+        return sampler.Y
     end
-end 
-function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs)
-        return obs
-    end
-    sampler.Y[addr] = get(sampler.X, addr, mean(dist))
-    return sampler.Y[addr]
+    return UniversalVIResult(UniversalMeanField(sampler.variational_dists), _transform_to_constrained)
 end
-function sample(sampler::UniversalConstraintTransformer, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs)
-        return obs
-    end
-    transformed_dist = to_unconstrained(dist)
-    if sampler.to == :unconstrained
-        constrained_value = get(sampler.X, addr, mean(dist))
-        unconstrained_value = transformed_dist.T(constrained_value)
-        sampler.Y[addr] = unconstrained_value
-    else # samper.to == :constrained
-        unconstrained_value = get(sampler.X, addr, 0.0)
-        constrained_value = transformed_dist.T_inv(unconstrained_value)
-        sampler.Y[addr] = constrained_value
-    end
-    return constrained_value
-end
-
-struct UniversalMeanField
-    variational_dists::Dict{Any,VariationalDistribution}
-end
-function Base.getindex(umf::UniversalMeanField, addr)
-    return umf.variational_dists[addr]
-end
-
-function Distributions.rand(umf::UniversalMeanField)
-    X = Dict{Any,Float64}(addr => Distributions.rand(var_dist) for (addr, var_dist) in umf.variational_dists)
-    return X
-end
-
-function Distributions.rand(umf::UniversalMeanField, n::Int)
-    return [Distributions.rand(umf) for _ in 1:n]
-end
-
-function transform_to_constrained(X::Dict{Any,Float64}, model::UniversalModel, args::Tuple, observations::Dict)::Dict{Any,Float64}
-    sampler = UniversalConstraintTransformer(X, :constrained)
-    model(args, sampler, observations)
-    return sampler.Y
-end
-
-function transform_to_constrained(Xs::Vector{Dict{Any,Float64}}, model::UniversalModel, args::Tuple, observations::Dict)::Vector{Dict{Any,Float64}}
-    return [transform_to_constrained(X, model, args, observations) for X in Xs]
-end
-
-export advi_meanfield, transform_to_constrained
+export advi_meanfield
 
 import ..Distributions: ELBOEstimator, estimate_elbo
 
@@ -156,7 +184,7 @@ function advi(model::UniversalModel, args::Tuple, observations::Dict,
     pre = 1.1
     post = 0.9
 
-    @progress for i in 1:n_samples
+    @progress for _ in 1:n_samples
         # setup for gradient computation
         phi_tracked = Tracker.param(phi)
         q = update_params(q, phi_tracked)
@@ -178,7 +206,9 @@ function advi(model::UniversalModel, args::Tuple, observations::Dict,
         phi += @. rho * grad
     end
 
-    return update_params(q, phi)
+    # guide has to propose in correct support,
+    # if you want to fit guide to unconstrained model you have to do it manually and transform to constrained
+    return UniversalVIResult(update_params(q, phi), identity)
 end
 
 export advi

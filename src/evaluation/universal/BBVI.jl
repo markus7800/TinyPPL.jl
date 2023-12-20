@@ -91,8 +91,12 @@ function bbvi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
         
     end
 
-    # TODO: replace with MeanField?
-    return UniversalMeanField(variational_dists)
+    function _transform_to_constrained(X::Dict{Any,Float64})
+        sampler = UniversalConstraintTransformer(X, :constrained)
+        model(args, sampler, observations)
+        return sampler.Y
+    end
+    return UniversalVIResult(UniversalMeanField(variational_dists), _transform_to_constrained)
 end
 
 export bbvi

@@ -101,7 +101,7 @@ function Distributions.logpdf(guide::Guide, X::Dict{Any,Real})
 end
 
 function Distributions.rand(guide::Guide, n::Int)
-    return [Distribution.rand(guide) for _ in 1:n]
+    return [Distributions.rand(guide) for _ in 1:n]
 end
 
 

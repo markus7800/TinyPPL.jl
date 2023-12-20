@@ -267,44 +267,43 @@ end
 observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
 
 Random.seed!(0)
-Q = advi_meanfield(LinReg, (xs,), observations,  10_000, 10, 0.01)
-mu = [Q[:intercept].base.μ, Q[:slope].base.μ]
-sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
+vi_result = advi_meanfield(LinReg, (xs,), observations,  10_000, 10, 0.01)
+mu = [vi_result.Q[:intercept].base.μ, vi_result.Q[:slope].base.μ]
+sigma = [vi_result.Q[:intercept].base.σ, vi_result.Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
 Random.seed!(0)
-Q2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO());
-parameters = get_constrained_parameters(Q2)
+vi_result_2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO());
+parameters = get_constrained_parameters(vi_result_2.Q)
+
+# TODO
+Random.seed!(0)
+vi_result_2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), PathDerivativeELBO());
+parameters = get_constrained_parameters(vi_result_2.Q)
+
 
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
 sigma = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
-logjoint, addresses_to_ix = Evaluation.make_logjoint(LinRegStatic, (xs,), observations)
-guide = make_guide(LinRegGuideStatic2, (), Dict(), addresses_to_ix)
+
 
 Random.seed!(0)
-Q3 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO());
-parameters = get_constrained_parameters(Q3)
-mu_3 = vcat(parameters["mu_intercept"], parameters["mu_slope"])
-sigma_3 = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
-maximum(abs, mu .- mu_3)
-maximum(abs, sigma .- sigma_3)
-
-Random.seed!(0)
-Q = bbvi(LinReg, (xs,), observations,  10_000, 100, 0.01)
-mu = [Q[:intercept].base.μ, Q[:slope].base.μ]
-sigma = [Q[:intercept].base.σ, Q[:slope].base.σ]
+vi_result = bbvi(LinReg, (xs,), observations,  10_000, 100, 0.01)
+mu = [vi_result.Q[:intercept].base.μ, vi_result.Q[:slope].base.μ]
+sigma = [vi_result.Q[:intercept].base.σ, vi_result.Q[:slope].base.σ]
 maximum(abs, mu .- map_mu)
 maximum(abs, sigma .- map_sigma)
 
 # equivalent to bbvi
+ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations)
+K = length(ulj.addresses_to_ix)
 Random.seed!(0)
-Q2 = advi_logjoint(ulj.logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), ReinforceELBO())
-maximum(abs, Q2.mu .- mu)
-maximum(abs, Q2.sigma .- sigma)
+vi_result_2 = advi_logjoint(ulj.logjoint, 10_000, 100, 0.01, MeanFieldGaussian(K), ReinforceELBO())
+maximum(abs, vi_result_2.mu .- mu)
+maximum(abs, vi_result_2.sigma .- sigma)
 
 
 
@@ -314,7 +313,7 @@ maximum(abs, Q2.sigma .- sigma)
 end
 
 Random.seed!(0)
-Q, ulj = bbvi(geometric_normal_static, (), Dict(), 10_000, 100, 0.01);
+vi_result = bbvi(geometric_normal_static, (), Dict(), 10_000, 100, 0.01)
 
 
 @ppl function geometric_normal()
@@ -323,7 +322,7 @@ Q, ulj = bbvi(geometric_normal_static, (), Dict(), 10_000, 100, 0.01);
 end
 
 Random.seed!(0)
-Q = bbvi(geometric_normal, (), Dict(),  10_000, 100, 0.01)
+vi_result = bbvi(geometric_normal, (), Dict(),  10_000, 100, 0.01)
 
 
 
@@ -340,16 +339,38 @@ Tracker.param.([1.]) isa AbstractVector{<:Real} # true
 end
 
 Random.seed!(0)
-@time Q = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
-zeta = rand(Q, 1_000_000);
-theta = transform_to_constrained(zeta, unif, (), Dict());
-histogram([t[:y] for t in theta], normalize=true, legend=false)
+@time vi_result = advi_meanfield(unif, (), Dict(),  10_000, 10, 0.01)
+posterior = sample_posterior(vi_result, 1_000_000);
+histogram(posterior[:y], normalize=true, legend=false)
 
 Random.seed!(0)
-@time Q = bbvi(unif, (), Dict(),  10_000, 10, 0.01)
-zeta = rand(Q, 1_000_000);
-theta = transform_to_constrained(zeta, unif, (), Dict());
-histogram([t[:y] for t in theta], normalize=true, legend=false)
+@time vi_result = bbvi(unif, (), Dict(),  10_000, 10, 0.01)
+posterior = sample_posterior(vi_result, 1_000_000);
+histogram(posterior[:y], normalize=true, legend=false)
+
+
+import TinyPPL.Distributions: transform_to, TransformedDistribution, RealInterval
+@ppl function unif_guide()
+    x_mu = param("x_mu")
+    x_sigma = param("x_sigma", 1, Positive())
+    y_mu = param("y_mu")
+    y_sigma = param("y_sigma", 1, Positive())
+    z_mu = param("z_mu")
+    z_sigma = param("z_sigma", 1, Positive())
+
+    x ~ TransformedDistribution(Normal(x_mu, x_sigma), transform_to(RealInterval(-1,1)))
+
+    y ~ TransformedDistribution(Normal(y_mu, y_sigma), transform_to(RealInterval(x-1,x+1)))
+
+    z ~ TransformedDistribution(Normal(z_mu, z_sigma), transform_to(RealInterval(y-1,y+1)))
+end
+
+
+Random.seed!(0)
+@time vi_result = advi(unif, (), Dict(),  10_000, 10, 0.01, unif_guide, (), MonteCarloELBO())
+posterior = sample_posterior(vi_result, 1_000_000);
+histogram(posterior[:y], normalize=true, legend=false)
+
 
 @ppl function nunif()
     n ~ Geometric(0.3)
@@ -360,13 +381,14 @@ histogram([t[:y] for t in theta], normalize=true, legend=false)
 end
 
 Random.seed!(0)
-Q = bbvi(nunif, (), Dict(),  10_000, 100, 0.01)
-Q[:n]
-zeta = rand(Q, 100_000);
+vi_result = bbvi(nunif, (), Dict(),  10_000, 100, 0.01)
+vi_result.Q[:n]
+theta = sample_posterior(vi_result, 100_000);
 theta = transform_to_constrained(zeta, nunif, (), Dict());
-histogram([t[(:n)] for t in theta], normalize=true, legend=false)
-addr = (:x,1)
-histogram([t[addr] for t in theta if haskey(t,addr)], normalize=true, legend=false)
+histogram(theta[:n], normalize=true, legend=false)
+addr = (:x,10)
+histogram(theta[addr], normalize=true, legend=false)
+# histogram(theta[addr][.!ismissing.(theta[addr])], normalize=true, legend=false)
 
 
 # TODO: can be used for tests
