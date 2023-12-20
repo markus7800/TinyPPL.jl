@@ -1,4 +1,4 @@
-import ..Distributions: init_variational_distribution, logpdf_param_grads, get_params, update_params, to_unconstrained, MixedMeanField
+import ..Distributions: init_variational_distribution, logpdf_param_grads, get_params, update_params, to_unconstrained, MeanField
 import Distributions
 
 function bbvi_naive(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
@@ -62,7 +62,7 @@ function bbvi_naive(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
         end
     end
 
-    return MixedMeanField(var_dists)
+    return MeanField(var_dists)
 end
 export bbvi_naive
 
@@ -134,7 +134,7 @@ function bbvi_rao(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
         end
     end
     
-    return MixedMeanField(var_dists)
+    return MeanField(var_dists)
 end
 
 export bbvi_rao

@@ -98,6 +98,12 @@ function FullRankGaussian(K::Int)
     L = reshape(LinearAlgebra.diagm(ones(K)), :)
     return FullRankGaussian(mu, L, Distributions.MultivariateNormal(mu, LinearAlgebra.diagm(ones(K))))
 end
+function FullRankGaussian(mu::AbstractVector{<:Real}, L::AbstractVector{<:Real})
+    K = length(mu)
+    L_matrix = LinearAlgebra.LowerTriangular(reshape(L, K, K))
+    chol = PDMats.PDMat(LinearAlgebra.Cholesky(L_matrix))
+    return FullRankGaussian(mu, L, Distributions.MultivariateNormal(mu, chol))
+end
 
 # function initial_params(q::FullRankGaussian)::AbstractVector{<:Float64}
 #     K = length(q.base)
@@ -205,6 +211,8 @@ function logpdf_param_grads(q::VariationalGeometric, x::Real)
     return [∇p * ∇sigmoid(q.inv_sigmoid_p)]
 end
 
+# TODO: add variational wrapped distributions
+
 export MeanFieldGaussian, FullRankGaussian
 export VariationalNormal, VariationalGeometric
 
@@ -213,11 +221,11 @@ init_variational_distribution(::Distributions.Geometric) = VariationalGeometric(
 export init_variational_distribution
 
 
-struct MixedMeanField <: VariationalDistribution
+struct MeanField <: VariationalDistribution
     dists::Vector{VariationalDistribution}
     param_ixs::Vector{UnitRange{Int}}
 end
-function MixedMeanField(dists::Vector{<:VariationalDistribution})
+function MeanField(dists::Vector{<:VariationalDistribution})
     param_ixs = Vector{UnitRange{Int}}(undef, length(dists))
     ix = 1
     for i in eachindex(dists)
@@ -225,17 +233,17 @@ function MixedMeanField(dists::Vector{<:VariationalDistribution})
         param_ixs[i] = ix:(ix+s-1)
         ix += s
     end
-    return MixedMeanField(dists, param_ixs)
+    return MeanField(dists, param_ixs)
 end
 
-# function initial_params(q::MixedMeanField)::AbstractVector{<:Float64}
+# function initial_params(q::MeanField)::AbstractVector{<:Float64}
 #     return reduce(vcat, initial_params(d) for d in q.dists)
 # end
-function get_params(q::MixedMeanField)::AbstractVector{<:Real}
+function get_params(q::MeanField)::AbstractVector{<:Real}
     return reduce(vcat, get_params(d) for d in q.dists)
 end
-function update_params(q::MixedMeanField, params::AbstractVector{<:Real})::MixedMeanField
-    q_new = MixedMeanField(similar(q.dists), q.param_ixs)
+function update_params(q::MeanField, params::AbstractVector{<:Real})::MeanField
+    q_new = MeanField(similar(q.dists), q.param_ixs)
     for i in eachindex(q.dists)
         d = q.dists[i]
         p = params[q.param_ixs[i]]
@@ -243,20 +251,22 @@ function update_params(q::MixedMeanField, params::AbstractVector{<:Real})::Mixed
     end
     return q_new
 end
-function rand_and_logpdf(q::MixedMeanField)
+function rand_and_logpdf(q::MeanField)
     x = Distributions.rand(q)
     return x, Distributions.logpdf(q, x)
 end
-function Distributions.rand(q::MixedMeanField)
-    return reduce(vcat, Distributions.rand(d) for d in q.dists; init=Float64[]) # hack to avoid Vector{Int}
+function Distributions.rand(q::MeanField)
+    # assume univariate q.dists
+    return vcat(Distributions.rand.(q.dists), Float64[]) # hack to avoid Vector{Int}
+    # return reduce(vcat, Distributions.rand(d) for d in q.dists; init=Float64[]) # hack to avoid Vector{Int}
 end
-# function Distributions.rand(q::MixedMeanField, n::Int)
-#     error("Not implemented.")
-# end
+function Distributions.rand(q::MeanField, n::Int)
+    return reduce(hcat, Distribution.rand(q) for _ in 1:n)
+end
 
-function Distributions.logpdf(q::MixedMeanField, x)
+function Distributions.logpdf(q::MeanField, x)
     @assert length(x) == length(q.dists) # only univariate
     return sum(Distributions.logpdf(q.dists[i], x[i]) for i in eachindex(q.dists))
 end
 
-export MixedMeanField
+export MeanField

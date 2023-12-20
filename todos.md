@@ -9,7 +9,7 @@ TODOS:
 - 
 - document everyting
 
-- universal advi guide
+
 - rjmcmc
 - smc (graph ok / universial with channels?)
 - logjoint -> logdensity

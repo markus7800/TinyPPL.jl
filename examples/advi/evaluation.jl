@@ -54,100 +54,107 @@ maximum(abs, mean(traces[:intercept]) - map_mu[1])
 maximum(abs, mean(traces[:slope]) - map_mu[2])
 
 Random.seed!(0)
-(mu, sigma), _ = advi_meanfield(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
-maximum(abs, mu .- map_mu)
-maximum(abs, sigma .- map_sigma)
+vi_result = advi_meanfield(LinRegStatic, (xs,), observations, 10_000, 10, 0.01);
+maximum(abs, vi_result.Q.mu .- map_mu)
+maximum(abs, vi_result.Q.sigma .- map_sigma)
 
 Random.seed!(0)
 mu_lj, sigma_lj = advi_meanfield_logjoint(ulj.logjoint, K, 10_000, 10, 0.01)
-maximum(abs, mu .- mu_lj)
-maximum(abs, sigma .- sigma_lj)
+maximum(abs, vi_result.Q.mu .- mu_lj)
+maximum(abs, vi_result.Q.sigma .- sigma_lj)
 
 Random.seed!(0)
-Q, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
 # equivalent to advi_meanfield_logjoint
-maximum(abs, Q.mu .- mu)
-maximum(abs, Q.sigma .- sigma)
+maximum(abs, vi_result_2.Q.mu .- mu_lj)
+maximum(abs, vi_result_2.Q.sigma .- sigma_lj)
 
 Random.seed!(0)
-Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO());
+vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO());
 # equivalent to MonteCarloELBO because ∇ log Q = ∇ entropy
-maximum(abs, Q2.mu .- Q.mu)
-maximum(abs, Q2.sigma .- Q.sigma)
+maximum(abs, vi_result_2.Q.mu .- vi_result.Q.mu)
+maximum(abs, vi_result_2.Q.sigma .- vi_result.Q.sigma)
 
 Random.seed!(0)
-Q3, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MixedMeanField([VariationalNormal(), VariationalNormal()]), MonteCarloELBO())
-Q3_mu = [d.base.μ for d in Q3.dists]
-Q3_sigma = [d.base.σ for d in Q3.dists]
+vi_result_3 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanField([VariationalNormal(), VariationalNormal()]), MonteCarloELBO())
+Q3_mu = [d.base.μ for d in vi_result_3.Q.dists]
+Q3_sigma = [d.base.σ for d in vi_result_3.Q.dists]
 # equivalent to MeanFieldGaussian + MonteCarloELBO()
-maximum(abs, Q2.mu .- Q3_mu)
-maximum(abs, Q2.sigma .- Q3_sigma)
+maximum(abs, vi_result_2.Q.mu .- Q3_mu)
+maximum(abs, vi_result_2.Q.sigma .- Q3_sigma)
 
 Random.seed!(0)
-Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), ReinforceELBO())
-maximum(abs, Q2.mu .- map_mu)
-maximum(abs, Q2.sigma .- map_sigma)
+vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), ReinforceELBO())
+maximum(abs, vi_result_2.Q.mu .- map_mu)
+maximum(abs, vi_result_2.Q.sigma .- map_sigma)
 
-maximum(abs, Q2.mu .- Q.mu)
-maximum(abs, Q2.sigma .- Q.sigma)
+# bbvi is different to advi
+maximum(abs, vi_result_2.Q.mu .- vi_result.Q.mu)
+maximum(abs, vi_result_2.Q.sigma .- vi_result.Q.sigma)
 
 
 Random.seed!(0)
 q = get_mixed_meanfield(LinRegStatic, (xs,), observations, ulj.addresses_to_ix)
-Q2, _ = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, q, ReinforceELBO());
-Q2_mu = [d.base.μ for d in Q2.dists]
-Q2_sigma = [d.base.σ for d in Q2.dists]
+vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, q, ReinforceELBO());
+Q2_mu = [d.base.μ for d in vi_result_2.Q.dists]
+Q2_sigma = [d.base.σ for d in vi_result_2.Q.dists]
 
 Random.seed!(0)
-Q3, ulj = bbvi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
-Q3_mu = [d.base.μ for d in Q3.dists]
-Q3_sigma = [d.base.σ for d in Q3.dists]
-# equivalent to MixedMeanField + ReinforceELBO()
+vi_result_3 = bbvi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
+Q3_mu = [d.base.μ for d in vi_result_3.Q.dists]
+Q3_sigma = [d.base.σ for d in vi_result_3.Q.dists]
+# equivalent to MeanField + ReinforceELBO()
 maximum(abs, Q2_mu .- Q3_mu)
 maximum(abs, Q2_sigma .- Q3_sigma)
 
 
 Random.seed!(0)
-Q2, ulj = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
-maximum(abs, Q2.mu .- Q.mu)
-maximum(abs, Q2.sigma .- Q.sigma)
+vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
+# PathDerivativeELBO is best
+maximum(abs, vi_result_2.Q.mu .- map_mu)
+maximum(abs, vi_result_2.Q.sigma .- map_sigma)
 
-maximum(abs, Q2.mu .- Q.mu)
-maximum(abs, Q2.sigma .- Q.sigma)
+# pd elbo is different to advi
+maximum(abs, vi_result_2.Q.mu .- vi_result.Q.mu)
+maximum(abs, vi_result_2.Q.sigma .- vi_result.Q.sigma)
+
 
 N = 10_000
 Random.seed!(0)
-(mu, L), ulj = advi_fullrank(LinRegStatic, (xs,), observations, N, 10, 0.01);
-maximum(abs, map_mu .- mu)
-maximum(abs, map_Σ .- L*L')
+vi_result = advi_fullrank(LinRegStatic, (xs,), observations, N, 10, 0.01);
+maximum(abs, map_mu .- vi_result.Q.base.μ)
+maximum(abs, map_Σ .- vi_result.Q.base.Σ)
 
 Random.seed!(0)
-Q, ulj = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO());
+vi_result_2 = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO());
 # equivalent to advi_fullrank_logjoint
-maximum(abs, mu .- Q.base.μ)
-maximum(abs, L*L' .- Q.base.Σ)
+maximum(abs, vi_result.Q.base.μ .- vi_result_2.Q.base.μ)
+maximum(abs, vi_result.Q.base.Σ .- vi_result_2.Q.base.Σ)
 
 Random.seed!(0)
-Q2, ulj = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), MonteCarloELBO());
+vi_result_2 = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), MonteCarloELBO());
 # equivalent to RelativeEntropyELBO because ∇ log Q = ∇ entropy
-maximum(abs, Q2.base.μ .- Q.base.μ)
-maximum(abs, Q2.base.Σ .- Q.base.Σ)
+maximum(abs, vi_result.Q.base.μ .- vi_result_2.Q.base.μ)
+maximum(abs, vi_result.Q.base.Σ .- vi_result_2.Q.base.Σ)
 
 Random.seed!(0)
-Q2, ulj = advi(LinRegStatic, (xs,), observations, N, 100, 0.01, FullRankGaussian(K), ReinforceELBO());
-maximum(abs, map_mu .- Q2.base.μ)
-maximum(abs, map_Σ .- Q2.base.Σ)
+vi_result_2 = advi(LinRegStatic, (xs,), observations, N, 100, 0.01, FullRankGaussian(K), ReinforceELBO());
+maximum(abs, map_mu .- vi_result_2.Q.base.μ)
+maximum(abs, map_Σ .- vi_result_2.Q.base.Σ)
 
-maximum(abs, Q2.base.μ .- Q.base.μ)
-maximum(abs, Q2.base.Σ .- Q.base.Σ)
+# bbvi is differnt to advi
+maximum(abs, vi_result_2.Q.base.μ .- vi_result.Q.base.μ)
+maximum(abs, vi_result_2.Q.base.Σ .- vi_result.Q.base.Σ)
 
 Random.seed!(0)
-Q2, ulj = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), PathDerivativeELBO());
-maximum(abs, map_mu .- Q2.base.μ)
-maximum(abs, map_Σ .- Q2.base.Σ)
+vi_result_2 = advi(LinRegStatic, (xs,), observations, N, 10, 0.01, FullRankGaussian(K), PathDerivativeELBO());
+# PathDerivativeELBO is best
+maximum(abs, map_mu .- vi_result_2.Q.base.μ)
+maximum(abs, map_Σ .- vi_result_2.Q.base.Σ)
 
-maximum(abs, Q2.base.μ .- Q.base.μ)
-maximum(abs, Q2.base.Σ .- Q.base.Σ)
+# but different
+maximum(abs, vi_result_2.Q.base.μ .- vi_result.Q.base.μ)
+maximum(abs, vi_result_2.Q.base.Σ .- vi_result.Q.base.Σ)
 
 
 @ppl static function LinRegGuideStatic()
@@ -180,40 +187,33 @@ end
 # end
 
 Random.seed!(0);
-@time Q, ulj = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
+@time vi_result = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), MonteCarloELBO())
 
-guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
+guide = make_guide(LinRegGuideStatic, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2, ulj = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
-
-Random.seed!(0)
-@time Q2, _ = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO())
+@time vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
 
 Random.seed!(0)
-logjoint, addresses_to_ix = Evaluation.make_logjoint(LinRegGuideStatic, (xs,), observations)
-guide = make_guide(LinRegGuide, (), Dict(), addresses_to_ix)
-@time Q2 = advi_logjoint(logjoint, 10_000, 10, 0.01, guide, MonteCarloELBO())
+@time vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), MonteCarloELBO())
 
-
-parameters = get_constrained_parameters(Q2)
+parameters = get_constrained_parameters(vi_result_2.Q)
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
 sigma = exp.(vcat(parameters["omega_intercept"], parameters["omega_slope"]))
 # equivalent to advi_logjoint
-maximum(abs, mu .- Q.mu)
-maximum(abs, sigma .- Q.sigma)
+maximum(abs, mu .- vi_result.Q.mu)
+maximum(abs, sigma .- vi_result.Q.sigma)
 
 
 
-guide = make_guide(LinRegGuideStatic2, (), Dict(), addresses_to_ix)
 Random.seed!(0)
-@time Q2, ulj = advi(LinRegGuideStatic, (xs,), observations, 10_000, 10, 0.01, guide, MonteCarloELBO())
-parameters = get_constrained_parameters(Q2)
+@time vi_result_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic2, (), MonteCarloELBO())
+parameters = get_constrained_parameters(vi_result_2.Q)
 
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
 sigma = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
 # equivalent to advi_logjoint
-maximum(abs, mu .- Q.mu)
-maximum(abs, sigma .- Q.sigma)
+maximum(abs, mu .- vi_result.Q.mu)
+maximum(abs, sigma .- vi_result.Q.sigma)
 
 
 using Plots
@@ -235,11 +235,11 @@ addresses_to_ix = get_address_to_ix(unif, (), Dict())
 K = length(addresses_to_ix)
 
 Random.seed!(0)
-Q, ulj = advi(unif, (), Dict(), 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
-Q, ulj = advi(unif, (), Dict(), 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
-zeta = rand(Q, 1_000_000);
-theta = ulj.transform_to_constrained!(zeta);
-histogram(theta[addresses_to_ix[:y],:], normalize=true, legend=false)
+vi_result = advi(unif, (), Dict(), 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+vi_result = advi(unif, (), Dict(), 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
+posterior = sample_posterior(vi_result, 1_000_000)
+histogram(posterior[:y], normalize=true, legend=false)
+
 
 
 

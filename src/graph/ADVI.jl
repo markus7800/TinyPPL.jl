@@ -34,10 +34,10 @@ end
 export advi_meanfield, advi_fullrank, advi
 
 
-import ..Distributions: MixedMeanField, init_variational_distribution
+import ..Distributions: MeanField, init_variational_distribution
 
 # assumes static distributions
-function get_mixed_meanfield(pgm::PGM)::MixedMeanField
+function get_mixed_meanfield(pgm::PGM)::MeanField
     X = Vector{Float64}(undef, pgm.n_variables)
     pgm.sample!(X)
     sample_mask = isnothing.(pgm.observed_values)
@@ -45,7 +45,7 @@ function get_mixed_meanfield(pgm::PGM)::MixedMeanField
     @assert all(sample_mask[1:K])
 
     dists = [init_variational_distribution(pgm.distributions[i](X)) for i in 1:K]
-    return MixedMeanField(dists)
+    return MeanField(dists)
 end
 export get_mixed_meanfield
 

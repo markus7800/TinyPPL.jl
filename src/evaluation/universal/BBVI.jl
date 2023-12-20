@@ -91,7 +91,7 @@ function bbvi(model::UniversalModel, args::Tuple, observations::Dict,  n_samples
         
     end
 
-    # TODO: replace with MixedMeanField?
+    # TODO: replace with MeanField?
     return UniversalMeanField(variational_dists)
 end
 

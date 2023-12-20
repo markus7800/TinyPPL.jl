@@ -1,11 +1,30 @@
 import TinyPPL.Logjoint: advi_meanfield_logjoint
-import ..Distributions: mean
+import ..Distributions: mean, MeanFieldGaussian, FullRankGaussian
+
+abstract type VIResult end
+function sample_posterior(::VIResult, n::Int)
+    error("Not implemented.")
+end
+
+struct StaticVIResult
+    Q::VariationalDistribution
+    addresses_to_ix::Addr2Ix
+    transform_to_constrained!::Function
+end
+
+function sample_posterior(res::StaticVIResult, n::Int)
+    samples = rand(res.Q, n)
+    @assert samples isa AbstractMatrix
+    res.transform_to_constrained!(samples)
+    return Traces(res.addresses_to_ix, samples)
+end
+export sample_posterior
 
 function advi_meanfield(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64)
     ulj = make_unconstrained_logjoint(model, args, observations)
     K = length(ulj.addresses_to_ix)
     result = advi_meanfield_logjoint(ulj.logjoint, K, n_samples, L, learning_rate)
-    return result, ulj # TODO: maybe variational return type
+    return StaticVIResult(result, ulj.addresses_to_ix, ulj.transform_to_constrained!)
 end
 
 import TinyPPL.Logjoint: advi_fullrank_logjoint
@@ -14,7 +33,7 @@ function advi_fullrank(model::StaticModel, args::Tuple, observations::Dict, n_sa
     ulj = make_unconstrained_logjoint(model, args, observations)
     K = length(ulj.addresses_to_ix)
     result = advi_fullrank_logjoint(ulj.logjoint, K, n_samples, L, learning_rate)
-    return result, ulj
+    return StaticVIResult(result, ulj.addresses_to_ix, ulj.transform_to_constrained!)
 end
 
 import TinyPPL.Logjoint: advi_logjoint
@@ -23,25 +42,25 @@ import TinyPPL.Distributions: ELBOEstimator, ReinforceELBO
 function advi(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
     ulj = make_unconstrained_logjoint(model, args, observations)
     result = advi_logjoint(ulj.logjoint, n_samples, L, learning_rate, q, estimator)
-    return result, ulj
+    return StaticVIResult(result, ulj.addresses_to_ix, ulj.transform_to_constrained!)
 end
 
 function advi(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64, guide::StaticModel, guide_args::Tuple, estimator::ELBOEstimator)
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
     q = make_guide(guide, guide_args, Dict(), addresses_to_ix)
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
-    return result, (logjoint, addresses_to_ix)
+    return StaticVIResult(result, addresses_to_ix, identity)
 end
 
 export advi_meanfield, advi_fullrank, advi
 
-import ..Distributions: MixedMeanField, init_variational_distribution
+import ..Distributions: MeanField, init_variational_distribution
 
-struct MixedMeanFieldCollector <: StaticSampler
+struct MeanFieldCollector <: StaticSampler
     dists::Vector{VariationalDistribution}
     addresses_to_ix::Addr2Ix
 end
-function sample(sampler::MixedMeanFieldCollector, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::MeanFieldCollector, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         return obs
     end
@@ -50,10 +69,10 @@ function sample(sampler::MixedMeanFieldCollector, addr::Any, dist::Distribution,
     sampler.dists[ix] = init_variational_distribution(dist)
     return value
 end
-function get_mixed_meanfield(model::StaticModel, args::Tuple, observations::Dict, addresses_to_ix::Addr2Ix)::MixedMeanField
-    sampler = MixedMeanFieldCollector(Vector{VariationalDistribution}(undef, length(addresses_to_ix)), addresses_to_ix)
+function get_mixed_meanfield(model::StaticModel, args::Tuple, observations::Dict, addresses_to_ix::Addr2Ix)::MeanField
+    sampler = MeanFieldCollector(Vector{VariationalDistribution}(undef, length(addresses_to_ix)), addresses_to_ix)
     model(args, sampler, observations)
-    return MixedMeanField(sampler.dists)
+    return MeanField(sampler.dists)
 end
 export get_mixed_meanfield
 
@@ -61,7 +80,7 @@ function bbvi(model::StaticModel, args::Tuple, observations::Dict, n_samples::In
     ulj = make_unconstrained_logjoint(model, args, observations)
     q = get_mixed_meanfield(model, args, observations, ulj.addresses_to_ix)
     result = advi_logjoint(ulj.logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
-    return result, ulj
+    return StaticVIResult(result, ulj.addresses_to_ix, ulj.transform_to_constrained!)
 end
 export bbvi
 

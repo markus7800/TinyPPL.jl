@@ -117,7 +117,7 @@ end
 # end
 
 function Distributions.rand(guide::StaticGuide, n::Int)
-    return hcat([Distributionrand(guide) for _ in 1:n]) 
+    return reduce(hcat, Distribution.rand(guide) for _ in 1:n)
 end
 
 

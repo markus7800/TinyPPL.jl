@@ -1,8 +1,9 @@
 import Tracker
+import PDMats
 import Distributions
 import LinearAlgebra
 import Random
-import ..Distributions: ELBOEstimator, estimate_elbo, VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf
+import ..Distributions: ELBOEstimator, estimate_elbo, VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf, MeanFieldGaussian, FullRankGaussian
 
 # Fix merged to Tracker.jl
 # for f in :[rand, randn, randexp].args
@@ -45,7 +46,7 @@ function advi_meanfield_logjoint(logjoint::Function, K::Int, n_samples::Int, L::
 
     mu = phi[1:K]
     omega = phi[K+1:end]
-    return mu, exp.(omega)
+    return MeanFieldGaussian(mu, omega, exp.(omega))
 end
 
 import LinearAlgebra: transpose, inv, LowerTriangular, Diagonal
@@ -93,8 +94,9 @@ function advi_fullrank_logjoint(logjoint::Function, K::Int, n_samples::Int, N::I
     end
 
     mu = phi[1:K]
-    L = reshape(phi[K+1:end],K,K)
-    return mu, L
+    # L = reshape(phi[K+1:end],K,K)
+    L = phi[K+1:end]
+    return FullRankGaussian(mu, L)
 end
 
 function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
