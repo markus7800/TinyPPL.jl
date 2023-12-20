@@ -2,14 +2,14 @@ import Tracker
 
 const Param2Ix = Dict{Any, UnitRange{Int}}
 
-mutable struct GuideSampler{T,V} <: UniversalSampler
-    W::T # depends on the eltype of phi
+mutable struct GuideSampler{V} <: UniversalSampler
+    W::Real # depends on the eltype of phi and X
     params_to_ix::Param2Ix
     phi::V # Vector{Float64} or TrackedVector
     X::Dict{Any,Real}
     constraints::Dict{Any,ParamConstraint}
-    function GuideSampler(params_to_ix::Param2Ix, phi::V, constraints=Dict{Any,ParamConstraint}()) where {T <: Real, V <: AbstractVector{T}}
-        return new{eltype(V),V}(0., params_to_ix, phi, Dict{Any,Real}(), constraints)
+    function GuideSampler(params_to_ix::Param2Ix, phi::V, constraints=Dict{Any,ParamConstraint}()) where {V <: AbstractVector{<:Real}}
+        return new{V}(0., params_to_ix, phi, Dict{Any,Real}(), constraints)
     end
 end
 
@@ -73,7 +73,10 @@ end
 import ..Distributions: update_params
 function update_params(guide::Guide, params::AbstractVector{<:Float64})::VariationalDistribution
     # since GuideSampler is generic type, we freshly instantiate
-    new_sampler = GuideSampler(guide.sampler.params_to_ix, params, guide.sampler.constraints)
+    # q_ = update_params(q, no_grad(get_params(q))) before rand(q_) or rand(q)
+    # can lead to descrepancies between the size of phi of q_ and q if params_to_ix are the same
+    # -> copy params_to_ix
+    new_sampler = GuideSampler(copy(guide.sampler.params_to_ix), params, copy(guide.sampler.constraints))
     return Guide(new_sampler, guide.model, guide.args, guide.observations)
 end
 
@@ -103,7 +106,6 @@ end
 function Distributions.rand(guide::Guide, n::Int)
     return [Distributions.rand(guide) for _ in 1:n]
 end
-
 
 struct Parameters
     phi::AbstractVector{<:Real}

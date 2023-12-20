@@ -277,12 +277,16 @@ Random.seed!(0)
 vi_result_2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), MonteCarloELBO());
 parameters = get_constrained_parameters(vi_result_2.Q)
 
-# TODO
+
 Random.seed!(0)
 vi_result_2 = advi(LinReg, (xs,), observations,  10_000, 10, 0.01, LinRegGuide, (), PathDerivativeELBO());
+
+Random.seed!(0)
+vi_result_2 = advi(LinReg, (xs,), observations,  10_000, 100, 0.01, LinRegGuide, (), ReinforceELBO());
+
+
+
 parameters = get_constrained_parameters(vi_result_2.Q)
-
-
 mu = vcat(parameters["mu_intercept"], parameters["mu_slope"])
 sigma = vcat(parameters["sigma_intercept"], parameters["sigma_slope"])
 maximum(abs, mu .- map_mu)

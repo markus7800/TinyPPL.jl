@@ -7,7 +7,6 @@ function estimate_elbo(::MonteCarloELBO, logjoint::Function, q::VariationalDistr
         # implicit reparametrisation trick (if we get gradients)
         zeta, lpq = rand_and_logpdf(q)
         lpp = logjoint(zeta)
-        # println("zeta: ", zeta, ", lpq: ", lpq, ", lpp: ", lpp)
         elbo +=  lpp - lpq
     end
     elbo = elbo / L
