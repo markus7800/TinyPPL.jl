@@ -13,7 +13,7 @@ function walk_ppl_sytnax(expr, sampler, constraints)
             end
         end
     elseif MacroTools.@capture(expr, {symbol_} ~ dist_(args__))
-        println("Am I redundant?")
+        println("Am I redundant?") # TODO
         return quote
             let distribution = $(dist)($(args...)),
                 obs = haskey($constraints, $symbol) ? $constraints[$symbol] : nothing,

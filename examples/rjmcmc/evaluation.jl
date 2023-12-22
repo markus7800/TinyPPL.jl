@@ -1,5 +1,6 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
+using TinyPPL.Logjoint
 import Random
 
 import LinearAlgebra: logabsdet, det, inv
@@ -64,9 +65,96 @@ new_q = sampler.W
 
 new_p + new_q - old_p - new_q + logabsdet(J)[1]
 
-function hmc_transformation!(tt::TraceTransformation)
-    ... = leapfrog(...)
+
+import ForwardDiff
+function get_grad_U_fwd_diff(logjoint::Function)
+    function grad_U(X::AbstractVector{<:Real})
+        grad = ForwardDiff.gradient(logjoint, X)
+        return -grad # U = -logjoint
+    end
+    return grad_U
 end
+
+@ppl function aux_static_hmc(tr::Dict{Any,Real})
+    for i in 1:length(tr)
+        {(:P, i)} ~ Normal(0.,1)
+    end
+end
+
+ulj = Evaluation.make_unconstrained_logjoint(model, (), Dict())
+ulj(old_model_trace)
+
+grad_U = get_grad_U_fwd_diff(X -> ulj(Dict{Any,Real}(:X=>X[1], :Y=>X[2])))
+grad_U([old_model_trace[:X], old_model_trace[:Y]])
+
+
+function leapfrog(
+    grad_U::Function,
+    X::AbstractVector{<:Real}, P::AbstractVector{<:Real},
+    L::Int, eps::Float64
+    )
+
+    P = P - eps/2 * grad_U(X)
+    for _ in 1:(L-1)
+        X = X + eps * P
+        P = P - eps * grad_U(X)
+    end
+    X = X + eps * P
+    P = P - eps/2 * grad_U(X)
+
+    return X, -P
+end
+
+function hmc_transformation!(tt::TraceTransformation,
+    old_model_trace::Dict{Any,Real}, old_proposal_trace::Dict{Any,Real},
+    new_model_trace::Dict{Any,Real}, new_proposal_trace::Dict{Any,Real})
+
+    P = [read_continuous(tt, old_proposal_trace, (:P, i)) for i in 1:length(old_model_trace)]
+    X = [read_continuous(tt, old_model_trace, addr) for addr in keys(old_model_trace)]
+
+    X_new, P_new = leapfrog(grad_U, X, P, 10, 0.1)
+
+    for i in 1:length(old_model_trace)
+        write_continuous(tt, new_proposal_trace, (:P, i), P_new[i])
+    end
+    for (i, addr) in enumerate(keys(old_model_trace))
+        write_continuous(tt, new_model_trace, addr, X_new[i])
+    end
+end
+
+
+
+transformation = TraceTransformation(hmc_transformation!)
+
+sampler = Evaluation.TraceSampler()
+model((), sampler, observations)
+old_model_trace = sampler.X
+old_p = sampler.W
+
+sampler = Evaluation.TraceSampler()
+aux_static_hmc((old_model_trace,), sampler, Dict())
+old_proposal_trace = sampler.X
+old_q = sampler.W
+
+new_model_trace, new_proposal_trace = apply(transformation, old_model_trace, old_proposal_trace)
+J = Evaluation.jacobian_fwd_diff(transformation, old_model_trace, old_proposal_trace, new_model_trace, new_proposal_trace)
+det(J)
+old_model_trace_2, old_proposal_trace_2 = apply(transformation, new_model_trace, new_proposal_trace)
+all(old_model_trace[addr] ≈ old_model_trace_2[addr] for addr in keys(old_model_trace)) && all(old_proposal_trace[addr] ≈ old_proposal_trace[addr] for addr in keys(old_proposal_trace))
+
+sampler = Evaluation.TraceSampler(X = new_model_trace)
+model((), sampler, observations)
+new_p = sampler.W
+
+sampler = Evaluation.TraceSampler(X = new_proposal_trace)
+aux_static_lmh((new_model_trace, q), sampler, Dict())
+new_q = sampler.W
+
+new_p + new_q
+old_p + new_q
+
+new_p + new_q - old_p - new_q + logabsdet(J)[1]
+
 
 
 

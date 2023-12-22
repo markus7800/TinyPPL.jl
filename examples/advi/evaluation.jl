@@ -228,7 +228,10 @@ traces, retvals, lp = likelihood_weighting(unif, (), Dict(), 1_000_000);
 histogram(traces[:y], weights=exp.(lp), normalize=true, legend=false)
 
 Random.seed!(0)
-traces = hmc(unif, (), Dict(), 100_000, 10, 0.1)
+@time traces = hmc(unif, (), Dict(), 100_000, 10, 0.1; ad_backend=:reversediff);
+# tracker: 25.944568 seconds (653.12 M allocations: 20.248 GiB, 18.38% gc time)
+# forwarddiff: 9.522213 seconds (205.32 M allocations: 8.314 GiB, 17.19% gc time)
+# reversediff: 27.276258 seconds (553.02 M allocations: 20.625 GiB, 14.25% gc time)
 histogram(traces[:y], normalize=true, legend=false)
 
 addresses_to_ix = get_address_to_ix(unif, (), Dict())

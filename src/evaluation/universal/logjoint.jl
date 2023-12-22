@@ -18,7 +18,7 @@ function sample(sampler::LogJointSampler, addr::Any, dist::Distribution, obs::Un
 end
 
 function make_logjoint(model::UniversalModel, args::Tuple, observations::Dict)
-    return function logjoint(X)
+    return function logjoint(X::Dict{Any,Real})
         sampler = LogJointSampler(X)
         model(args, sampler, observations)
         return sampler.W
@@ -56,8 +56,8 @@ function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distribu
 end
 
 function make_unconstrained_logjoint(model::UniversalModel, args::Tuple, observations::Dict)
-    return function unconstrained_logjoint(X)
-        sampler = UnconstrainedLogjointSampler(X)
+    return function unconstrained_logjoint(X::Dict{Any,Real})
+        sampler = UnconstrainedLogJointSampler(X)
         model(args, sampler, observations)
         return sampler.W
     end

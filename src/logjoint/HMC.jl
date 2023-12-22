@@ -1,14 +1,32 @@
-import Tracker
 import ..Distributions: Normal
 import ProgressLogging: @progress
 
-function get_grad_U(logjoint::Function)
+import Tracker
+function get_grad_U_tracker(logjoint::Function)
     function grad_U(X::Vector{Float64})
         X = Tracker.param(X)
         log_prob = logjoint(X)
         U = -log_prob
         Tracker.back!(U)
         return Tracker.grad(X)
+    end
+    return grad_U
+end
+
+import ForwardDiff
+function get_grad_U_fwd_diff(logjoint::Function)
+    function grad_U(X::Vector{Float64})
+        grad = ForwardDiff.gradient(logjoint, X)
+        return -grad # U = -logjoint
+    end
+    return grad_U
+end
+
+import ReverseDiff
+function get_grad_U_rev_diff(logjoint::Function)
+    function grad_U(X::Vector{Float64})
+        grad = ReverseDiff.gradient(logjoint, X)
+        return -grad # U = -logjoint
     end
     return grad_U
 end
@@ -32,8 +50,16 @@ function leapfrog(
     return X, -P
 end
 
-function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::Float64)
-    grad_U = get_grad_U(logjoint)
+function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::Float64; ad_backend::Symbol=:tracker)
+    if ad_backend == :tracker
+        grad_U = get_grad_U_tracker(logjoint)
+    elseif ad_backend == :forwarddiff
+        grad_U = get_grad_U_fwd_diff(logjoint)
+    elseif ad_backend == :reversediff
+        grad_U = get_grad_U_rev_diff(logjoint)
+    else
+        error("Unkown ad backend $ad_backend.")
+    end
     
     # initialise x0
     X_current = zeros(K)
