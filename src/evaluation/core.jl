@@ -4,7 +4,16 @@ import MacroTools
 macro subppl(expr) return expr end # just a place holder
 
 function walk_ppl_sytnax(expr, sampler, constraints)
-    if MacroTools.@capture(expr, {symbol_} ~ dist_(args__))
+    if MacroTools.@capture(expr, {symbol_} ~ dist_)
+        return quote
+            let distribution = $dist,
+                obs = haskey($constraints, $symbol) ? $constraints[$symbol] : nothing,
+                value = sample($sampler, $symbol, distribution, obs)
+                value
+            end
+        end
+    elseif MacroTools.@capture(expr, {symbol_} ~ dist_(args__))
+        println("Am I redundant?")
         return quote
             let distribution = $(dist)($(args...)),
                 obs = haskey($constraints, $symbol) ? $constraints[$symbol] : nothing,
