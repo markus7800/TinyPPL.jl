@@ -2,6 +2,8 @@ using TinyPPL.Distributions
 using TinyPPL.Evaluation
 using TinyPPL.Logjoint
 import Random
+import ForwardDiff
+using Plots
 
 import LinearAlgebra: logabsdet, det, inv
 
@@ -14,7 +16,7 @@ observations = Dict()
 @ppl function aux_static_lmh(tr::Dict{Any,Real}, q::Dict{Any,Distribution})
     n = length(tr)
     chosen_ix ~ DiscreteUniform(1,n)
-    chosen_addr = collect(keys(tr))[chosen_ix]
+    chosen_addr = sort(collect(keys(tr)))[chosen_ix]
 
     proposal = q[chosen_addr]
     new_value ~ proposal
@@ -26,7 +28,7 @@ function static_lmh_transformation!(tt::TraceTransformation,
     
     copy_at_address(tt, old_proposal_trace, new_proposal_trace, :chosen_ix)
     chosen_ix = read_discrete(tt, old_proposal_trace, :chosen_ix)
-    chosen_addr = collect(keys(old_model_trace))[chosen_ix]
+    chosen_addr = sort(collect(keys(old_model_trace)))[chosen_ix]
 
     for (addr, _) in old_model_trace
         if addr != chosen_addr
@@ -38,6 +40,19 @@ function static_lmh_transformation!(tt::TraceTransformation,
     write_continuous(tt, new_model_trace, chosen_addr, new_value)
     write_continuous(tt, new_proposal_trace, :new_value, old_value)
 end
+
+q = Dict{Any,Distribution}(:X=>Normal(),:Y=>Normal())
+
+Random.seed!(0)
+result = imcmc(
+    model, (), Dict(),
+    aux_static_lmh, (q,),
+    static_lmh_transformation!,
+    100_000;
+    check_involution=true
+);
+histogram(result[:X], normalize=true)
+plot!(x -> exp(logpdf(Normal(),x)))
 
 transformation = TraceTransformation(static_lmh_transformation!)
 
@@ -54,6 +69,7 @@ old_q = sampler.W
 
 new_model_trace, new_proposal_trace = apply(transformation, old_model_trace, old_proposal_trace)
 J = jacobian(transformation, old_model_trace, old_proposal_trace, new_model_trace, new_proposal_trace) # at old_trace
+old_model_trace_2, old_proposal_trace_2 = apply(transformation, new_model_trace, new_proposal_trace)
 
 sampler = Evaluation.TraceSampler(X = new_model_trace)
 model((), sampler, observations)
@@ -66,7 +82,6 @@ new_q = sampler.W
 new_p + new_q - old_p - new_q + logabsdet(J)[1]
 
 
-import ForwardDiff
 function get_grad_U_fwd_diff(logjoint::Function)
     function grad_U(X::AbstractVector{<:Real})
         grad = ForwardDiff.gradient(logjoint, X)
@@ -80,6 +95,12 @@ end
         {(:P, i)} ~ Normal(0.,1)
     end
 end
+
+
+sampler = Evaluation.TraceSampler()
+model((), sampler, observations)
+old_model_trace = sampler.X
+old_p = sampler.W
 
 ulj = Evaluation.make_unconstrained_logjoint(model, (), Dict())
 ulj(old_model_trace)
@@ -118,10 +139,22 @@ function hmc_transformation!(tt::TraceTransformation,
         write_continuous(tt, new_proposal_trace, (:P, i), P_new[i])
     end
     for (i, addr) in enumerate(keys(old_model_trace))
+        # transform to here
         write_continuous(tt, new_model_trace, addr, X_new[i])
     end
 end
 
+
+Random.seed!(0)
+result = imcmc(
+    model, (), Dict(),
+    aux_static_hmc, (),
+    hmc_transformation!,
+    100_000;
+    check_involution=true
+);
+histogram(result[:X], normalize=true)
+plot!(x -> exp(logpdf(Normal(),x)))
 
 
 transformation = TraceTransformation(hmc_transformation!)

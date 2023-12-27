@@ -1,13 +1,13 @@
 
-# == almost Guide sampler
+# == almost Guide sampler # TODO: replace GuideSampler?
 mutable struct TraceSampler <: UniversalSampler
     W::Real # depends on the eltype of phi and X
-    params_to_ix::Param2Ix
-    phi::AbstractVector{<:Real}
+    # params_to_ix::Param2Ix
+    # phi::AbstractVector{<:Real}
     X::Dict{Any,Real}
-    constraints::Dict{Any,ParamConstraint}
-    function TraceSampler(; X::Dict{Any,Real}=Dict{Any,Real}(), params_to_ix::Param2Ix=Param2Ix(), phi::AbstractVector{<:Real}=Float64[], constraints=Dict{Any,ParamConstraint}())
-        return new(0., params_to_ix, phi, X, constraints)
+    # constraints::Dict{Any,ParamConstraint}
+    function TraceSampler(; X::Dict{Any,Real}=Dict{Any,Real}())#, params_to_ix::Param2Ix=Param2Ix(), phi::AbstractVector{<:Real}=Float64[], constraints=Dict{Any,ParamConstraint}())
+        return new(0., X)
     end
 end
 
@@ -23,27 +23,28 @@ function sample(sampler::TraceSampler, addr::Any, dist::Distribution, obs::Union
     return value
 end
 
-function param(sampler::TraceSampler, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
-    # keeps track of all parameters and tracks them if initial sampler.phi is tracked
-    if !haskey(sampler.params_to_ix, addr)
-        n = length(sampler.phi)
-        ix = (n+1):(n+size)
-        sampler.params_to_ix[addr] = ix
-        sampler.constraints[addr] = constraint
-        # all parameters are initialised to 0
-        if Tracker.istracked(sampler.phi)
-            sampler.phi = vcat(sampler.phi, Tracker.param(zeros(size)))
-        else
-            sampler.phi = vcat(sampler.phi, zeros(eltype(sampler.phi), size))
-        end
-    end
-    ix = sampler.params_to_ix[addr]
-    if size == 1
-        return transform(constraint, sampler.phi[ix[1]])
-    else
-        return transform(constraint, sampler.phi[ix])
-    end
-end
+# currently not used
+# function param(sampler::TraceSampler, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
+#     # keeps track of all parameters and tracks them if initial sampler.phi is tracked
+#     if !haskey(sampler.params_to_ix, addr)
+#         n = length(sampler.phi)
+#         ix = (n+1):(n+size)
+#         sampler.params_to_ix[addr] = ix
+#         sampler.constraints[addr] = constraint
+#         # all parameters are initialised to 0
+#         if Tracker.istracked(sampler.phi)
+#             sampler.phi = vcat(sampler.phi, Tracker.param(zeros(size)))
+#         else
+#             sampler.phi = vcat(sampler.phi, zeros(eltype(sampler.phi), size))
+#         end
+#     end
+#     ix = sampler.params_to_ix[addr]
+#     if size == 1
+#         return transform(constraint, sampler.phi[ix[1]])
+#     else
+#         return transform(constraint, sampler.phi[ix])
+#     end
+# end
 
 struct TraceTransformation
     f!::Function
@@ -53,16 +54,6 @@ struct TraceTransformation
         return new(f, Set{Any}(), Set{Any}())
     end
 end
-
-# struct StaticTraceTransformation
-#     f!::Function
-#     continuous_reads::Set{Any}
-#     continuous_writes::Set{Any}
-#     address_to_ix::Addr2Ix
-#     function TraceTransformation(f::Function)
-#         return new(f, Set{Any}(), Set{Any}())
-#     end
-# end TODO? skip dict and use arrays directly
 
 function read_discrete(tt::TraceTransformation, old_trace::Dict{Any,Real}, addr::Any)
     return old_trace[addr]

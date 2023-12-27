@@ -2,9 +2,9 @@
 import ..TinyPPL.Distributions: Proposal, logpdf, proposal_logpdf, propose_and_logpdf, StaticProposal
 import Random
 
-abstract type UniverisalSingleSiteSampler <: UniversalSampler end
+abstract type UniversalSingleSiteSampler <: UniversalSampler end
 
-mutable struct LMH <: UniverisalSingleSiteSampler
+mutable struct LMH <: UniversalSingleSiteSampler
     W::Float64
     Q::Dict{Any, Float64}
     Q_resample_address::Float64
@@ -43,7 +43,7 @@ function sample(sampler::LMH, addr::Any, dist::Distribution, obs::Union{Nothing,
     return value
 end
 
-function single_site_sampler(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, sampler::UniverisalSingleSiteSampler, gibbs::Bool)
+function single_site_sampler(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, sampler::UniversalSingleSiteSampler, gibbs::Bool)
     traces = Vector{Dict{Any, Real}}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)

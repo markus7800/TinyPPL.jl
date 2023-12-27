@@ -14,3 +14,18 @@ TODOS:
 - smc (graph ok / universial with channels?)
 - logjoint -> logdensity
 - graph -> enfore static observes
+
+
+TinyGen:
+- one sampler:
+  - sample / or logpdf:
+    - get!(sampler.trace, addr, rand(dist))
+    - get!(sampler.trace, addr, Tracker.param(rand(dist)))
+  - param: 
+    - get!(sampler.params, addr, Tracker.param(zero(size)))
+
+- assess
+- simulate
+- propose
+- gradients
+- etc...

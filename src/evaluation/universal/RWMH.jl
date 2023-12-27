@@ -2,7 +2,7 @@
 
 import ..TinyPPL.Distributions: Addr2Var, logpdf, random_walk_proposal_dist
 
-mutable struct RWMH <: UniverisalSingleSiteSampler
+mutable struct RWMH <: UniversalSingleSiteSampler
     W::Float64
     Q::Dict{Any, Float64}
     Q_resample_address::Float64
