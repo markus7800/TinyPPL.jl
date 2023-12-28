@@ -55,6 +55,8 @@ struct TraceTransformation
     end
 end
 
+# bijective transformation of discrete variables does not need jacobian
+# P(f(X) = x) = P(X = f^{-1}(x))
 function read_discrete(tt::TraceTransformation, old_trace::Dict{Any,Real}, addr::Any)
     return old_trace[addr]
 end
@@ -77,6 +79,10 @@ function copy_at_address(tt::TraceTransformation, old_trace::Dict{Any,Real}, new
     new_trace[addr] = old_trace[addr]
 end
 
+function copy_at_addresses(tt::TraceTransformation, old_trace::Dict{Any,Real}, old_addr::Any, new_trace::Dict{Any,Real}, new_addr::Any)
+    new_trace[new_addr] = old_trace[old_addr]
+end
+
 function apply(tt::TraceTransformation, old_trace::Dict{Any,Real}, new_trace = Dict{Any,Real}())
     empty!(tt.continuous_reads)
     empty!(tt.continuous_writes)
@@ -95,6 +101,8 @@ end
 
 function get_wrapped_f(tt::TraceTransformation, old_trace::Dict{Any,Real})
     function wrapped_f(X::AbstractVector{<:Real})
+        # could be replace by directly reading from X at correct index ala JacobianPassState,
+        # but is maybe not faster since we need to setup address_to_ix
         tracked_old_tr = Dict{Any,Real}()
         tracked_new_tr = Dict{Any,Real}()
         i = 0
@@ -117,6 +125,8 @@ end
 
 function get_wrapped_f(tt::TraceTransformation, old_model_trace::Dict{Any,Real}, old_proposal_trace::Dict{Any,Real})
     function wrapped_f(X::AbstractVector{<:Real})
+        # could be replace by directly reading from X at correct index ala JacobianPassState
+        # but is maybe not faster since we need to setup address_to_ix
         tracked_old_model_tr = Dict{Any,Real}()
         tracked_old_proposal_tr = Dict{Any,Real}()
         tracked_new_model_tr = Dict{Any,Real}()
@@ -201,6 +211,6 @@ end
 export TraceTransformation
 export read_discrete, write_discrete
 export read_continuous, write_continuous
-export copy_at_address
+export copy_at_address, copy_at_addresses
 export apply
 export jacobian
