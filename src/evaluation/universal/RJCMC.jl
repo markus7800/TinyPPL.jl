@@ -14,6 +14,7 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Dict,
     W_current = sampler.W
 
     traces = Vector{Dict{Any, Real}}(undef, n_samples)
+    lp = Vector{Float64}(undef, n_samples)
     n_accepted = 0
     @progress for i in 1:n_samples
         sampler.W = 0.; sampler.X = Dict{Any,Real}()
@@ -48,11 +49,12 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Dict,
         end
 
         traces[i] = trace_current
+        lp[i] = W_current
     end
     
     @info "RJMCMC" n_accepted/n_samples
 
-    return UniversalTraces(traces)
+    return UniversalTraces(traces), lp
 end
 
 export imcmc

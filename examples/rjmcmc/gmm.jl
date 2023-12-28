@@ -47,6 +47,7 @@ const κ = 0.01
 const α = 2.0
 const β = 10.0
 
+# does work, because no bijection from gamma to dirichlet
 # @ppl function dirichlet(δ, k)
 #     w = [{:w=>j} ~ Gamma(δ, 1) for j in 1:k]
 #     return w / sum(w)
@@ -381,6 +382,11 @@ function involution!(tt::TraceTransformation,
         write_discrete(tt, new_proposal_trace, :r2, r2)
         write_discrete(tt, new_proposal_trace, :j_star, j_star)
 
+        # reads 4 + k-1:
+        # :μ => j1, :μ => j2, :σ² => j1, :σ² => j2, :phi => j j=1...(k-1), 
+        # writes 5 + k-2
+        # :u1, :u2, :u3, :μ => j_star, :μ => j_star, :σ² => j1, :phi => j j=1...(k-2)
+
     elseif move == 6
         # split
         r1 = read_discrete(tt, old_proposal_trace, :r1) # 1..K+1
@@ -452,17 +458,81 @@ function involution!(tt::TraceTransformation,
         write_discrete(tt, new_proposal_trace, :r1, r1)
         write_discrete(tt, new_proposal_trace, :r2, r2)
         write_discrete(tt, new_proposal_trace, :j_star, j_star)
+
+        # reads 5 + k-1
+        # :u1, :u2, :u3, :μ => j_star, :μ => j_star, :σ² => j1, :phi => j j=1...(k-1)
+        # writes 4 + k:
+        # :μ => j1, :μ => j2, :σ² => j1, :σ² => j2, :phi => j j=1...k, 
     end
 end
 
 Random.seed!(0)
-@time result = imcmc(
+@time traces, lp = imcmc(
     gmm, (n,), observations,
     aux_model, (n,),
     involution!,
-    50000;
+    5000 * 6;
     check_involution=true
 );
+sum(traces[:k,i] != traces[:k,i+1] for i in 1:(length(traces)-1))
+maximum(lp)
+best_trace = traces.data[argmax(lp)]
+
+
+import PyPlot
+function visualize_trace(tr; color_shift=0, raw=false, path="plot.pdf")
+    gaussian_pdf(μ, σ², w) = x -> w * exp(logpdf(Normal(μ, sqrt(σ²)), x));
+
+    n, k = length(gt_ys), tr[:k]
+    phi = [tr[:phi=>j] for j in 1:(k-1)]
+    w_arr = get_w(phi)
+
+    cmap = PyPlot.get_cmap("Paired")
+    p = PyPlot.figure()
+    
+    for j=1:k
+        y_js = [gt_ys[i] for i=1:n if tr[:z=>i] == j]
+        μ, σ² = tr[:μ=>j], tr[:σ²=>j]
+        w = w_arr[j]
+        PyPlot.hist(y_js, density=true, bins=6, color=cmap(2j-2 + 2color_shift), alpha=0.5)
+        
+        dom = (μ - 3sqrt(σ²)):1e-1:μ + 3sqrt(σ²)
+        PyPlot.plot(dom, gaussian_pdf(μ, σ², w).(dom), color=cmap(2j-1+ 2color_shift))
+        
+        if j <= gt_k
+            dom = (gt_μs[j] - 3sqrt(gt_σ²s[j])):1e-1:gt_μs[j] + 3sqrt(gt_σ²s[j])
+            PyPlot.plot(dom, gaussian_pdf(gt_μs[j], gt_σ²s[j], gt_ws[j]).(dom), color="gray")
+        end
+        PyPlot.plot(y_js, 5e-3 .+ zeros(length(y_js)), ".", color=cmap(2j-1 + 2color_shift))
+        PyPlot.xlabel("x"); PyPlot.ylabel("density");
+    end
+    if raw
+        PyPlot.plot(gt_ys, 0.25 .+ zeros(n), "o", color="black", alpha=0.5)
+    end
+    # PyPlot.savefig(path)
+end
+
+for k in unique(traces[:k])
+    mask = traces[:k] .== k
+    amax = argmax(lp[mask])
+    println("k=$k, lp=$(lp[mask][amax])")
+    best_trace_k = traces.data[mask][amax]
+    visualize_trace(best_trace_k)
+    display(PyPlot.gcf())
+end
+
+function plot_lps(lps;path="plot.pdf")
+    p = PyPlot.figure()
+    PyPlot.plot(lps)
+    PyPlot.ylabel("Log Probability")
+    # PyPlot.savefig(path)
+end
+
+plot_lps(lp[10:end])
+PyPlot.gcf()
+
+
+
 
 transformation = TraceTransformation(involution!)
 

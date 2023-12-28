@@ -71,6 +71,10 @@ end
 function Base.getindex(traces::UniversalTraces, addr::Any)
     return [get(t, addr, missing) for t in traces.data]
 end
+function Base.getindex(traces::UniversalTraces, addr::Any, i::Int)
+    return get(traces.data[i], addr, missing)
+end
+Base.length(traces::UniversalTraces) = length(traces.data)
 export UniversalTraces
 
 struct UniversalVIResult <: VIResult
