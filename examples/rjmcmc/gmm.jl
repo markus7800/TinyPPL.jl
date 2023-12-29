@@ -48,15 +48,15 @@ const α = 2.0
 const β = 10.0
 
 # does work, because no bijection from gamma to dirichlet
-# @ppl function dirichlet(δ, k)
-#     w = [{:w=>j} ~ Gamma(δ, 1) for j in 1:k]
-#     return w / sum(w)
-# end
+@ppl function dirichlet_gamma(δ, k)
+    w = [{:w=>j} ~ Gamma(δ, 1) for j in 1:k]
+    return w / sum(w)
+end
 
-# function get_w(tr::Dict{Any,Real})
-#     w = [tr[:w => j] for j in 1:tr[:k]]
-#     return w / sum(w)
-# end
+function get_w_gamma(tr::Dict{Any,Real})
+    w = [tr[:w => j] for j in 1:tr[:k]]
+    return w / sum(w)
+end
 
 @ppl function dirichlet(δ, k)
     w = zeros(k)
@@ -555,53 +555,6 @@ all(old_model_trace[addr] ≈ old_model_trace_2[addr] for addr in keys(old_model
 
 import Distributions
 
-d = Distributions.Dirichlet([2., 3.])
-x = rand(d)
-logpdf(d, x)
-
-logpdf(Gamma(2., 1.), x[1]) + logpdf(Gamma(3., 1.), x[2])
-
-
-c = [1, 2, 4, 8]
-cat_obs = Dict{Any,Real}()
-begin
-    i = 0
-    for (k, ck) in enumerate(c)
-        for _ in 1:ck
-            i += 1
-            cat_obs[:x => i] = k
-        end
-    end
-end
-
-@ppl function cat(k, n)
-    w = @subppl dirichlet(1., k)
-    for i = 1:n
-        {:x => i} ~ Categorical(w)
-    end
-end
-posterior = Distributions.Dirichlet(1. .+ c)
-
-
-Random.seed!(0)
-@time result = likelihood_weighting(cat, (length(c), length(cat_obs)), cat_obs, 1_000_000);
-traces = Evaluation.UniversalTraces(result[1])
-W = exp.(result[3])
-
-for i in 1:length(c)
-    println(i, ": ", traces[:w => i]'W)
-end
-
-i = 3
-post_mean = traces[:w => i]'W
-gamma = Distributions.Gamma(1. + c[i], post_mean / (1. + c[i]))
-mean(gamma)
-
-g = rand(gamma, 1_000_000)
-histogram(g, normalize=true, linewidth=0, alpha=0.5, xlims=(0.,5))
-histogram!(traces[:w => i], weights=W, normalize=true, linewidth=0, alpha=0.5)
-
-
 function rand_gamma(α, N)
     K = length(α)
     V = Array{Float64}(undef, K, N)
@@ -624,16 +577,13 @@ end
 
 function beta_to_dir_jacobian(phi, x)
     K = length(phi)
-    J = zeros(K+1, K)
     # J[j,k] = ∂x[j] / ∂phi[k]
-    # for j in 1:K
-    #     J[j,j] = (1 - sum(x[i] for i in 1:(j-1); init=0.))
-    # end
-    for k in 1:K, j in (k+1):K
-        J[j,k] = -sum(J[i,k] for i in 1:k; init=0.) * phi[j]
-    end
+    J = zeros(K, K)
     for k in 1:K
-        J[K+1,k] = -sum(J[i,k] for i in 1:k; init=0.)
+        J[k,k] = (1 - sum(x[i] for i in 1:(k-1); init=0.))
+    end
+    for k in 1:K, j in k+1:K
+        J[j,k] = -sum(J[i,k] for i in 1:j-1; init=0.) * phi[j]
     end
     return J
 end
@@ -651,24 +601,29 @@ end
 
 
 import Tracker, ForwardDiff
-import LinearAlgebra: det, inv
+import LinearAlgebra: det, inv, logabsdet
 begin
+    c = [1,2,4,8,16,32]
     α = 1. .+ c
     α0 = sum(α)
     K = length(α)
     phi = Array{Float64}(undef, K-1)
     x = Array{Float64}(undef, K)
-
+    lp = 0.0
     for j in 1:K-1
         α0 -= α[j]
-        phi[j] = rand(Distributions.Beta(α[j], α0))
+        d = Distributions.Beta(α[j], α0)
+        phi[j] = rand(d)
+        lp += Distributions.logpdf(d, phi[j])
     end
     beta_to_dir!(phi, x)
-    phi, x
+    phi, x, lp
 end
 dir_to_beta!(copy(phi), copy(x))
+Distributions.logpdf(Distributions.Dirichlet(α), x)
 
-J = ForwardDiff.jacobian(phi -> beta_to_dir!(phi, Array{Real}(undef, K)), phi)
+J = ForwardDiff.jacobian(phi -> beta_to_dir!(phi, Array{Real}(undef, K))[1:end-1], phi)
+lp - logabsdet(J)[1]
 
 beta_to_dir_jacobian(phi, x)
 
@@ -701,8 +656,22 @@ begin
     histogram!(B[i,:], normalize=true, linewidth=0, alpha=0.5, legend=false)
 end
 
+
+
 using Turing
 using Plots
+
+c = [1, 2, 4, 8]
+cat_obs = Dict{Any,Real}()
+begin
+    i = 0
+    for (k, ck) in enumerate(c)
+        for _ in 1:ck
+            i += 1
+            cat_obs[:x => i] = k
+        end
+    end
+end
 
 @model function cat_turing(k, x)
     w ~ Dirichlet(ones(k))
@@ -717,11 +686,39 @@ posterior = Dirichlet(1. .+ c)
 Turing.Random.seed!(0)
 result = sample(m, MH(:w => posterior), 1_000_000);
 
-i = 1
-histogram(result["w[$i]"], normalize=true, linewidth=0, alpha=0.5)
-
 post = rand(posterior, 1_000_000)
+
+i = 3
+histogram(result["w[$i]"], normalize=true, linewidth=0, alpha=0.5, legend=false)
 histogram!(post[i,:], normalize=true, linewidth=0, alpha=0.5)
+
+
+@model function cat_gamma_turing(k, x)
+    α = ones(k)
+    V = Vector{Float64}(undef, k)
+    for j in 1:k
+        V[j] ~ Gamma(α[j],1.)
+    end
+    w = V / sum(V)
+    for i in eachindex(x)
+        x[i] ~ Categorical(w)
+    end
+end
+
+x = collect(values(cat_obs))
+m = cat_gamma_turing(length(c), x)
+α_post = 1. .+ c
+posterior = Dirichlet(α_post)
+
+Turing.Random.seed!(0)
+result = sample(m, IS(), 1_000_000);
+W = vec(exp.(result[:lp]))
+W = W / sum(W)
+
+i = 3
+histogram(result["V[$i]"], weights=W, normalize=true, linewidth=0, alpha=0.5, legend=false)
+gamma_mean = vec(result["V[$i]"])'W
+histogram!(rand(Gamma(α_post[i],gamma_mean/α_post[i]), 1_000_000), normalize=true, linewidth=0, alpha=0.5)
 
 @model function cat_beta_turing(k, x)
     α = ones(k)
@@ -747,8 +744,6 @@ posterior = Dirichlet(α_post)
 Turing.Random.seed!(0)
 result = sample(m, IS(), 1_000_000);
 
-
-
 post = rand(posterior, 1_000_000)
 post_transformed = zeros(size(post,1)-1, size(post,2))
 for i in 1:1_000_000
@@ -759,14 +754,14 @@ begin
     post_beta = zeros(size(post,1)-1, size(post,2))
     α0 = sum(α_post)
     for j in 1:length(α_post) -1
-        α0 -= α_post[j] # sum_{i=j+1}^K α[i]
+        α0 -= α_post[j]
         post_beta[j,:] = rand(Beta(α_post[j], α0), 1_000_000)
     end
     post_beta
 end
 
 
-i = 2
-histogram(result["phi[$i]"], weights=exp.(result[:lp]), normalize=true, linewidth=0, alpha=0.5)
+i = 3
+histogram(result["phi[$i]"], weights=exp.(result[:lp]), normalize=true, linewidth=0, alpha=0.5, legend=false)
 histogram!(post_transformed[i,:], normalize=true, linewidth=0, alpha=0.5)
 histogram!(post_beta[i,:], normalize=true, linewidth=0, alpha=0.5)
