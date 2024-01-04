@@ -15,6 +15,9 @@ TODOS:
 - logjoint -> logdensity
 - graph -> enfore static observes
 
+- universal
+- IS Proposal and Guide
+- MH with Guide
 
 TinyGen:
 - one sampler:
@@ -23,6 +26,7 @@ TinyGen:
     - get!(sampler.trace, addr, Tracker.param(rand(dist)))
   - param: 
     - get!(sampler.params, addr, Tracker.param(zero(size)))
+- ForwardDiff Dictionaries.jl jacobian
 
 - assess
 - simulate

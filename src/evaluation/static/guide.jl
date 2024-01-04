@@ -56,9 +56,9 @@ end
 function param(sampler::StaticGuideSampler, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
     ix = sampler.params_to_ix[addr]
     if size == 1
-        return transform(constraint, sampler.phi[ix[1]])
+        return constrain_param(constraint, sampler.phi[ix[1]])
     else
-        return transform(constraint, sampler.phi[ix])
+        return constrain_param(constraint, sampler.phi[ix])
     end
 end
 
@@ -140,9 +140,9 @@ end
 function param(sampler::ParameterTransformer, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
     ix = sampler.params_to_ix[addr]
     if size == 1
-        parameters = transform(constraint, sampler.phi[ix[1]])
+        parameters = constrain_param(constraint, sampler.phi[ix[1]])
     else
-        parameters = transform(constraint, sampler.phi[ix])
+        parameters = constrain_param(constraint, sampler.phi[ix])
     end
     sampler.transformed_phi[ix] .= parameters
     return parameters

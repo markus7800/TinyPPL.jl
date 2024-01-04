@@ -13,7 +13,7 @@ function walk_ppl_sytnax(expr, sampler, constraints)
             end
         end
     elseif MacroTools.@capture(expr, {symbol_} ~ dist_(args__))
-        println("Am I redundant?") # TODO
+        error("Am I redundant?") # TODO
         return quote
             let distribution = $(dist)($(args...)),
                 obs = haskey($constraints, $symbol) ? $constraints[$symbol] : nothing,
@@ -51,23 +51,41 @@ macro ppl(func)
 end
 
 abstract type Model end
-struct UniversalModel
+
+# no assumptions about program
+struct UniversalModel <: Model
     f::Function
 end
-function (model::UniversalModel)(args::Tuple, sampler::UniversalSampler, constraints::Dict)
+function (model::UniversalModel)(args::Tuple, sampler::UniversalSampler, constraints::Observations)
     return model.f(args..., sampler, constraints)
 end
 
-# for all executions, the same (finite number of) random variables
-# with same distribution + support
-struct StaticModel
+# for all executions, the same (finite number of) random variables will be instantiated
+struct StaticModel <: Model
     f::Function
 end
-function (model::StaticModel)(args::Tuple, sampler::StaticSampler, constraints::Dict)
+function (model::StaticModel)(args::Tuple, sampler::StaticSampler, constraints::Observations)
     return model.f(args..., sampler, constraints)
 end
 
+"""
+@ppl function model_name(args...)
+    body with sample or parameter statements
+end
 
+sample syntax: `{address} ~ distribution`
+sugar: `address ~ distribution` is equivalent to `address = {:address} ~ distribution`
+
+parameter syntax: p = param(name, size=1, constraint=NoConstraint())
+submodel syntax: @subppl submodel(args...)
+
+returns an UniversalModel model_name which is callable with
+    model_name(args::Tuple, sampler::UniversalSampler, constraints::Observations)
+if the funtion is annotated with @ppl static function model_name(...
+then the macro generates a StaticModel which is callable with
+    model_name(args::Tuple, sampler::StaticSampler, constraints::Observations)
+where we assume that for all executions, the same (finite number of) random variables will be instantiated
+"""
 function ppl_macro(annotations::Set{Symbol}, func)
     @assert MacroTools.@capture(func, (function f_(func_args__) body_ end))
     sampler = gensym(:sampler)
