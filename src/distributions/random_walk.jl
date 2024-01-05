@@ -157,6 +157,16 @@ const rw_proposal_dist = random_walk_proposal_dist
 
 export random_walk_proposal_dist, rw_proposal_dist, ContinuousRWProposer, DiscreteRWProposer, ncategories
 
+# mapping of address to variance
+
+const Addr2Var = MostSpecificDict{Float64}
+function Addr2Var(args...)
+    return MostSpecificDict(Dict{Any, Float64}(args...))
+end
+export Addr2Var
+
+export Addr2Proposal
+
 # using Plots
 # d = continuous_interval(-1, 3, 1.5, 0.5)
 # Distributions.mean(d)

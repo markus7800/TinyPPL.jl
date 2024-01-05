@@ -1,7 +1,7 @@
 
-import ..TinyPPL.Distributions: Proposal, Addr2Var, logpdf, random_walk_proposal_dist
+import ..TinyPPL.Distributions: Addr2Proposal, Addr2Var, logpdf, random_walk_proposal_dist
 
-function lmh(pgm::PGM, n_samples::Int; proposal=Proposal())
+function lmh(pgm::PGM, n_samples::Int; proposal=Addr2Proposal())
     function kernel(X::Vector{Float64}, node::Int)
         d = pgm.distributions[node](X)
         q = get(proposal, pgm.addresses[node], d)

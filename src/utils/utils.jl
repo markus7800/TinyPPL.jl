@@ -35,6 +35,7 @@ no_grad(x::Tracker.TrackedMatrix{Float64, Matrix{Float64}}) = Tracker.data(x)
 no_grad(x::Vector{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 no_grad(x::Matrix{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 
+# maps :x => :y => :z = :x => (:y => :z) to (:x => :y) => :z
 function reverse_pair(pair::Pair)
     new_pair = pair[1]
     while pair[2] isa Pair
@@ -82,6 +83,17 @@ function get_most_specific_match(d::Dict{Any, T}, k::Pair) where T
     return d[reversed_pair]
 end
 
+"""
+Dictionairy d for keys of form
+    key ::= const
+    key ::= key => const
+if key => const is not in dict, it will try to lookup key.
+E.g. if you have addresses of form :x => i, i = 1..N
+Then, you can map the same object to every :x => i, by inserting d[:x] = object
+Since :x => :y => :z = :x => (:y => :z) we reverse the pair to (:x => :y) => :z,
+before inserting in the underlying dict Q and before looking up the key.
+So the lookup strategy works with multi-level addresses.
+"""
 struct MostSpecificDict{T}
     Q::Dict{Any, T}
     function MostSpecificDict(Q::Dict{Any, T}) where T
@@ -99,6 +111,12 @@ struct MostSpecificDict{T}
     end
 end
 
+function Base.getindex(d::MostSpecificDict{T}, k::Pair, v) where T
+    d.Q[reverse_pair(k)] = d
+end
+function Base.getindex(d::MostSpecificDict{T}, k, v) where T
+    d.Q[k] = d
+end
 function Base.get(d::MostSpecificDict{T}, k::Any, default::T) where T
     return get(d.Q, k, default)
 end

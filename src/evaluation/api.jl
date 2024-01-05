@@ -14,6 +14,7 @@ struct UniversalTraces
     retvals::Vector{Any}
 end
 retvals(traces::UniversalTraces) = traces.retvals
+export retvals
 
 function Base.show(io::IO, traces::UniversalTraces)
     print(io, "UniversalTraces($(length(traces.data)) entries)")

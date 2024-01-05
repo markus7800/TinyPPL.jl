@@ -57,7 +57,6 @@ to save memory.
 """
 function likelihood_weighting(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, completion::Function)
     result =  Vector{Any}(undef, n_samples)
-    println(Base.return_types(completion))
     logprobs = Vector{Float64}(undef, n_samples)
     sampler = LW()
     @progress for i in 1:n_samples
