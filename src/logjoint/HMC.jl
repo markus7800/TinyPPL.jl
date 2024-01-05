@@ -1,4 +1,4 @@
-import ..Distributions: Normal
+import TinyPPL.Distributions: Normal
 import ProgressLogging: @progress
 
 import Tracker

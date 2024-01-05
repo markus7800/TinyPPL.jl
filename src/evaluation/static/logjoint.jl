@@ -31,7 +31,7 @@ function make_logjoint(model::StaticModel, args::Tuple, observations::Dict)
 end
 
 
-import ..Distributions: Transform, transform_to, to_unconstrained, support
+import TinyPPL.Distributions: Transform, transform_to, to_unconstrained, support
 
 mutable struct ConstraintTransformer{T} <: StaticSampler
     addresses_to_ix::Addr2Ix

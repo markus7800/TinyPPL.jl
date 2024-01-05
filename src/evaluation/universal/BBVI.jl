@@ -1,5 +1,5 @@
 import Distributions
-import ..Distributions: init_variational_distribution, logpdf_param_grads
+import TinyPPL.Distributions: init_variational_distribution, logpdf_param_grads
 
 mutable struct BBVI <: UniversalSampler
     ELBO::Float64 # log P(X,Y) - log Q(X; λ)

@@ -12,14 +12,14 @@ a default variance.
 mutable struct RWMH <: UniversalSingleSiteSampler
     W::Float64                      # log p(X,Y)
     Q::Dict{Any,Float64}            # proposal density
-    trace_current::Trace            # current trace X
-    trace_proposed::Trace           # proposed trace X'
+    trace_current::UniversalTrace   # current trace X
+    trace_proposed::UniversalTrace  # proposed trace X'
     resample_addr::Any              # address X0 at which to resample value
     Q_resample_address::Float64     # log Q(x_current | x_proposed) - log Q(x_proposed | x_current)
     default_var::Float64            # default random walk variance
     addr2var::Addr2Var              # mapping of address to random walk variance
     function RWMH(default_var::Float64, addr2var::Addr2Var)
-        return new(0., Dict{Any, Float64}(), Trace(), Trace(),  nothing, 0., default_var, addr2var)
+        return new(0., Dict{Any, Float64}(), UniversalTrace(), UniversalTrace(),  nothing, 0., default_var, addr2var)
     end
 end
 

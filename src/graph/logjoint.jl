@@ -1,5 +1,5 @@
 import Tracker
-import ..Distributions: mean
+import TinyPPL.Distributions: mean
 
 function make_logjoint(pgm::PGM)
     sample_mask = isnothing.(pgm.observed_values)

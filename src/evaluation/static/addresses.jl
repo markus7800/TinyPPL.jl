@@ -1,4 +1,4 @@
-import ..Distributions: mean
+import TinyPPL.Distributions: mean
 
 const Addr2Ix = Dict{Any, Int}
 const Addresses = Set{Any}
@@ -45,7 +45,7 @@ function get_address_to_ix(model::StaticModel, args::Tuple, observations::Dict):
 end
 export get_address_to_ix
 
-struct Traces
+struct Traces # TODO: rename StaticTraces
     addesses_to_ix::Addr2Ix
     data::Array{Real}
     function Traces(addesses_to_ix::Addr2Ix, n::Int)

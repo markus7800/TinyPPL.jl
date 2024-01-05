@@ -3,7 +3,7 @@ import PDMats
 import Distributions
 import LinearAlgebra
 import Random
-import ..Distributions: ELBOEstimator, estimate_elbo, VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf, MeanFieldGaussian, FullRankGaussian
+import TinyPPL.Distributions: ELBOEstimator, estimate_elbo, VariationalDistribution, update_params, get_params, rand_and_logpdf, logpdf, MeanFieldGaussian, FullRankGaussian
 
 # Fix merged to Tracker.jl
 # for f in :[rand, randn, randexp].args

@@ -25,13 +25,13 @@ addresses(X') - addresses(X) are all the addresses that need to be newly sampled
 mutable struct LMH <: UniversalSingleSiteSampler
     W::Float64                      # log p(X,Y)
     Q::Dict{Any,Float64}            # proposal density
-    trace_current::Trace            # current trace X
-    trace_proposed::Trace           # proposed trace X'
+    trace_current::UniversalTrace   # current trace X
+    trace_proposed::UniversalTrace  # proposed trace X'
     resample_addr::Any              # address X0 at which to resample value
     Q_resample_address::Float64     # log Q(x_current | x_proposed) - log Q(x_proposed | x_current)
     addr2proposal::Addr2Proposal    # map of addresses to proposal distribution
     function LMH(addr2proposal::Addr2Proposal)
-        return new(0., Dict{Any,Float64}(), Trace(),Trace(), nothing, 0., addr2proposal)
+        return new(0., Dict{Any,Float64}(), UniversalTrace(),UniversalTrace(), nothing, 0., addr2proposal)
     end
 end
 
@@ -72,8 +72,10 @@ end
 # this is usefull for static models
 # else only one resample address is chosen randomly per iteraion
 # this is worker functoin which may be used by any UniversalSingleSiteSampler (LMH or RWMH)
+# returns samples X_i ~ p(X|Y) 
+# returns also `logprobs` log p(X,Y) = log p(X|Y) + log p(Y), which my be used to estimate MAP
 function single_site_sampler(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, sampler::UniversalSingleSiteSampler, gibbs::Bool)
-    traces = Vector{Trace}(undef, n_samples)
+    traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples) # log p(X,Y)
 
@@ -99,7 +101,7 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::O
             sampler.Q = Dict{Any, Float64}()
             sampler.Q_resample_address = 0.
             sampler.trace_current = trace_current
-            sampler.trace_proposed = Trace()
+            sampler.trace_proposed = UniversalTrace()
 
             # set resample address
             sampler.resample_addr = addr

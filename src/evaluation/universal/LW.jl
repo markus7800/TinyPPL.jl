@@ -5,9 +5,9 @@ else uses the observed value and accumulates its log density in `W`.
 """
 mutable struct LW <: UniversalSampler
     W::Float64 # log p(Y|X)
-    trace::Trace
+    trace::UniversalTrace
     function LW()
-        return new(0., Trace())
+        return new(0., UniversalTrace())
     end
 end
 
@@ -31,13 +31,13 @@ The posterior can be approximated with ∑ w̃_i δ_{X_i},
 where w̃_i are the normalised weights w̃_i = w_i / ∑ w_i
 """
 function likelihood_weighting(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int)
-    traces = Vector{Trace}(undef, n_samples)
+    traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     sampler = LW()
     @progress for i in 1:n_samples
         sampler.W = 0.
-        sampler.trace = Trace()
+        sampler.trace = UniversalTrace()
         retvals[i] = model(args, sampler, observations)
         logprobs[i] = sampler.W
         traces[i] = sampler.trace
@@ -45,7 +45,7 @@ function likelihood_weighting(model::UniversalModel, args::Tuple, observations::
     return UniversalTraces(traces, retvals), normalise(logprobs)
 end
 
-function no_op_completion(trace::Trace, retval::Any)
+function no_op_completion(trace::UniversalTrace, retval::Any)
     return nothing
 end
 

@@ -1,5 +1,5 @@
 import TinyPPL.Logjoint: advi_meanfield_logjoint
-import ..Distributions: mean, MeanFieldGaussian, FullRankGaussian
+import TinyPPL.Distributions: mean, MeanFieldGaussian, FullRankGaussian
 
 struct StaticVIResult
     Q::VariationalDistribution
@@ -51,7 +51,7 @@ end
 
 export advi_meanfield, advi_fullrank, advi
 
-import ..Distributions: MeanField, init_variational_distribution
+import TinyPPL.Distributions: MeanField, init_variational_distribution
 
 struct MeanFieldCollector <: StaticSampler
     dists::Vector{VariationalDistribution}

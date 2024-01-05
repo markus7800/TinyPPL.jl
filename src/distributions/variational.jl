@@ -153,10 +153,10 @@ end
 
 abstract type VariationalWrappedDistribution <: VariationalDistribution end
 
-# function rand_and_logpdf(q::VariationalWrappedDistribution)
-#     value = rand(q.base)
-#     return value, Distributions.logpdf(q.base, value)
-# end
+function rand_and_logpdf(q::VariationalWrappedDistribution)
+    value = rand(q.base)
+    return value, Distributions.logpdf(q.base, value)
+end
 function Distributions.rand(q::VariationalWrappedDistribution)
     return Distributions.rand(q.base)
 end

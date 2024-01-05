@@ -1,5 +1,5 @@
 import Distributions
-import ..Distributions: mean
+import TinyPPL.Distributions: mean
 
 mutable struct ParametersCollector <: StaticSampler
     params_to_ix::Param2Ix
@@ -77,25 +77,25 @@ function make_guide(model::StaticModel, args::Tuple, observations::Dict, address
     return StaticGuide(sampler, model, args, observations)
 end
 
-# import ..Distributions: initial_params
+# import TinyPPL.Distributions: initial_params
 # function initial_params(guide::Guide)::AbstractVector{<:Float64}
 #     nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
 #     return zeros(nparams)
 # end
 
-import ..Distributions: get_params
+import TinyPPL.Distributions: get_params
 function get_params(q::StaticGuide)::AbstractVector{<:Real}
     return q.sampler.phi
 end
 
-import ..Distributions: update_params
+import TinyPPL.Distributions: update_params
 function update_params(guide::StaticGuide, params::AbstractVector{<:Float64})::VariationalDistribution
     # since StaticGuideSampler is generic type, we freshly instantiate
     new_sampler = StaticGuideSampler(guide.sampler.params_to_ix, guide.sampler.addresses_to_ix, params)
     return StaticGuide(new_sampler, guide.model, guide.args, guide.observations)
 end
 
-import ..Distributions: rand_and_logpdf
+import TinyPPL.Distributions: rand_and_logpdf
 function rand_and_logpdf(guide::StaticGuide)
     guide.sampler.W = 0.0
     guide.model(guide.args, guide.sampler, guide.observations)

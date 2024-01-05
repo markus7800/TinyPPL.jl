@@ -62,3 +62,69 @@ function make_unconstrained_logjoint(model::UniversalModel, args::Tuple, observa
         return sampler.W
     end
 end
+
+
+
+"""
+Transforms the values in trace `X` to either the original constraint model,
+or to the unconstrained model.
+We can only transform the values by execution the model instead of applying
+the same transformations to all traces, since the values of `X` may affect the
+transforms that are used.
+E.g. a ~ Uniform(-1,1) b ~ Uniforma(-a, a)
+transform for b depends on the value of a.
+
+Is deterministic, does not use rand().
+
+`X` can have more addresses than `Y` if a variational distribution samples too
+much addresses, e.g. UniversalMeanField.
+"""
+mutable struct UniversalConstraintTransformer <: UniversalSampler
+    X::AbstractUniversalTrace   # original trace
+    Y::UniversalTrace   # transformed trace
+    to::Symbol          # :constrained or :unconstrained
+    function UniversalConstraintTransformer(X::AbstractUniversalTrace, to::Symbol)
+        @assert to in (:constrained, :unconstrained)
+        return new(X, UniversalTrace(), to)
+    end
+end 
+function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Distributions.DiscreteDistribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        return obs
+    end
+    sampler.Y[addr] = get(sampler.X, addr, mean(dist))
+    return sampler.Y[addr]
+end
+function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Distributions.ContinuousDistribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        return obs
+    end
+    transformed_dist = to_unconstrained(dist)
+    if sampler.to == :unconstrained
+        constrained_value = get(sampler.X, addr, mean(dist))
+        unconstrained_value = transformed_dist.T(constrained_value)
+        sampler.Y[addr] = unconstrained_value
+    else # samper.to == :constrained
+        unconstrained_value = get(sampler.X, addr, 0.0)
+        constrained_value = transformed_dist.T_inv(unconstrained_value)
+        sampler.Y[addr] = constrained_value
+    end
+    return constrained_value
+end
+
+function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{UniversalTrace,Any}
+    sampler = UniversalConstraintTransformer(X, :constrained)
+    retval = model(args, sampler, constraints)
+    return sampler.Y, retval
+end
+
+function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{Vector{UniversalTrace},Vector{Any}}
+    samples = Vector{UniversalTrace}(undef, length(Xs))
+    retvals = Vector{Any}(undef, length(Xs))
+    for i in eachindex(Xs)
+        @inbounds samples[i], retvals[i] = transform_to_constrained(Xs[i], model, args, constraints)
+    end
+    return samples, retvals
+end
+
+export transform_to_constrained

@@ -59,18 +59,18 @@ function make_guide(model::UniversalModel, args::Tuple, observations::Dict)::Gui
 end
 export make_guide
 
-# import ..Distributions: initial_params
+# import TinyPPL.Distributions: initial_params
 # function initial_params(guide::Guide)::AbstractVector{<:Float64}
 #     nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
 #     return zeros(nparams)
 # end
 
-import ..Distributions: get_params
+import TinyPPL.Distributions: get_params
 function get_params(q::Guide)::AbstractVector{<:Real}
     return q.sampler.phi
 end
 
-import ..Distributions: update_params
+import TinyPPL.Distributions: update_params
 function update_params(guide::Guide, params::AbstractVector{<:Float64})::VariationalDistribution
     # since GuideSampler is generic type, we freshly instantiate
     # q_ = update_params(q, no_grad(get_params(q))) before rand(q_) or rand(q)
@@ -80,7 +80,7 @@ function update_params(guide::Guide, params::AbstractVector{<:Float64})::Variati
     return Guide(new_sampler, guide.model, guide.args, guide.observations)
 end
 
-import ..Distributions: rand_and_logpdf
+import TinyPPL.Distributions: rand_and_logpdf
 function rand_and_logpdf(guide::Guide)
     guide.sampler.W = 0.0
     guide.sampler.X = Dict{Any,Real}()

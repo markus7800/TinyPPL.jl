@@ -34,7 +34,7 @@ end
 export advi_meanfield, advi_fullrank, advi
 
 
-import ..Distributions: MeanField, init_variational_distribution
+import TinyPPL.Distributions: MeanField, init_variational_distribution
 
 # assumes static distributions
 function get_mixed_meanfield(pgm::PGM)::MeanField

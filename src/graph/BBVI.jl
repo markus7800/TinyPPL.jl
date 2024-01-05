@@ -1,4 +1,4 @@
-import ..Distributions: init_variational_distribution, logpdf_param_grads, get_params, update_params, to_unconstrained, MeanField
+import TinyPPL.Distributions: init_variational_distribution, logpdf_param_grads, get_params, update_params, to_unconstrained, MeanField
 import Distributions
 
 function bbvi_naive(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)

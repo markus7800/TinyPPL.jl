@@ -4,13 +4,17 @@ const RVValue = Real # currently only univariate distributions are supported
 const Observations = Dict{Address, RVValue}
 export Observations
 
-const Trace = Dict{Address,RVValue}
+abstract type AbstractTraces end
+
+const AbstractUniversalTrace = Dict{Address, <:RVValue}
+const UniversalTrace = Dict{Address, RVValue}
+
 """
 Wrapper for the result of sample based inference algorithms, like MH or IS.
 Provides getters for retrieving all values / specific value of a given address.
 """
-struct UniversalTraces
-    data::Vector{Trace}
+struct UniversalTraces <: AbstractTraces
+    data::Vector{<:AbstractUniversalTrace}
     retvals::Vector{Any}
 end
 retvals(traces::UniversalTraces) = traces.retvals
@@ -30,8 +34,17 @@ Base.length(traces::UniversalTraces) = length(traces.data)
 export UniversalTraces
 
 
-
+"""
+Wrapper for the result of variational inference methods like ADVI or BBVI.
+Includes a method to produce samples from posterior, which returns UniversalTraces.
+Usually wraps the variational distribution itself, where the parameters typically
+are optimised to fit the unconstrained objective (i.e. directly sampling from the
+wrapped distribution may not produce correct posterior samples - use `sample_posterior`
+instead).
+"""
 abstract type VIResult end
-function sample_posterior(::VIResult, n::Int)
+
+# returns samples X and log Q(X)
+function sample_posterior(::VIResult, n::Int)::Tuple{<:AbstractTraces,Vector{Float64}}
     error("Not implemented.")
 end
