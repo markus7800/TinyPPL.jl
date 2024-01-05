@@ -1,4 +1,9 @@
 
+const Address = Any
+const RVValue = Real # currently only univariate distributions are supported
+const Observations = Dict{Address, RVValue}
+export Observations
+
 """
 Samplers facilitate a *contextualised execution* of the probabilistic program.
 To accommodate this the samplers implement custom `sample` and/or `param` methods,
@@ -18,7 +23,7 @@ For convenience, one may constrain the parameters to (0,∞) or (0,1) by passing
 This is often useful for distribution parameters.
 You may instantiate also multiple parameters at once by passing a positive integer to the `size` argument.
 """
-function param(sampler::Sampler, addr::Address, size::Int=1, constraint::ParamConstraint=Unconstrained())::AbstractArray{<:Real}
+function param(sampler::Sampler, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())::AbstractArray{<:Real}
     error("param not implemented for $sampler.")
 end
 

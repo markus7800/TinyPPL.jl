@@ -3,6 +3,7 @@ import LinearAlgebra
 import Distributions: entropy, MultivariateNormal
 
 # TODO: be more precise with Vector{Tracked} vs Tracked Vector
+const VariationalParameters = Union{Vector{Float64}, Tracker.TrackedVector{Float64, Vector{Float64}}}
 
 abstract type VariationalDistribution end # <: Distribution{Distributions.Multivariate, Distributions.Continuous} end
 export VariationalDistribution

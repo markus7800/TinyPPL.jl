@@ -1,5 +1,7 @@
 import Distributions: Distribution, ContinuousUnivariateDistribution, logpdf, support, RealInterval
 
+export RealInterval
+
 abstract type Transform end
 
 function (::Transform)(x::Real)::Real
@@ -146,6 +148,7 @@ struct TransformedDistribution <: ContinuousUnivariateDistribution
         return new(base, T, inv(T))
     end
 end
+export TransformedDistribution
 
 function Base.rand(t::TransformedDistribution)::Real
     return t.T(Base.rand(t.base))

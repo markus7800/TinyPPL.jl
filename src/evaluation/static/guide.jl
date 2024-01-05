@@ -9,14 +9,14 @@ mutable struct ParametersCollector <: StaticSampler
     end
 end
 
-function sample(sampler::ParametersCollector, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::ParametersCollector, addr::Address, dist::Distribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         return obs
     end
     return mean(dist)
 end
 
-function param(sampler::ParametersCollector, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
+function param(sampler::ParametersCollector, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
     sampler.params_to_ix[addr] = (sampler.params_size+1):(sampler.params_size+size)
     sampler.params_size += size
     if size == 1
@@ -53,7 +53,7 @@ function sample(sampler::StaticGuideSampler, addr::Any, dist::Distribution, obs:
     return value
 end
 
-function param(sampler::StaticGuideSampler, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
+function param(sampler::StaticGuideSampler, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
     ix = sampler.params_to_ix[addr]
     if size == 1
         return constrain_param(constraint, sampler.phi[ix[1]])
@@ -121,23 +121,25 @@ function Distributions.rand(guide::StaticGuide, n::Int)
 end
 
 
-mutable struct ParameterTransformer <: StaticSampler
-    phi::AbstractVector{<:Real}
+export make_guide
+
+mutable struct StaticParameterTransformer <: StaticSampler
+    phi::VariationalParameters
     params_to_ix::Param2Ix
-    transformed_phi::AbstractVector{<:Real}
-    function ParameterTransformer(guide::StaticGuide)
+    transformed_phi::VariationalParameters
+    function StaticParameterTransformer(guide::StaticGuide)
         return new(guide.sampler.phi, guide.sampler.params_to_ix, similar(guide.sampler.phi))
     end
 end
 
-function sample(sampler::ParameterTransformer, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::StaticParameterTransformer, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         return obs
     end
     return mean(dist)
 end
 
-function param(sampler::ParameterTransformer, addr::Any, size::Int=1, constraint::ParamConstraint=Unconstrained())
+function param(sampler::StaticParameterTransformer, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
     ix = sampler.params_to_ix[addr]
     if size == 1
         parameters = constrain_param(constraint, sampler.phi[ix[1]])
@@ -148,10 +150,13 @@ function param(sampler::ParameterTransformer, addr::Any, size::Int=1, constraint
     return parameters
 end
 
+"""
+Extracts parameters of guide and transforms them to the specified constraints.
+"""
 function get_constrained_parameters(guide::StaticGuide)
-    sampler = ParameterTransformer(guide)
+    sampler = StaticParameterTransformer(guide)
     guide.model(guide.args, sampler, guide.observations)
-    return Parameters(sampler.transformed_phi, guide.sampler.params_to_ix)
+    return VIParameters(sampler.transformed_phi, guide.sampler.params_to_ix)
 end
 
-export make_guide, get_constrained_parameters
+export get_constrained_parameters

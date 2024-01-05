@@ -18,7 +18,6 @@ end
 function rand_and_logpdf(umf::UniversalMeanField)
     X = ContinuousUniversalTrace()
     lp = 0.0
-    # TODO: change to sample by running model
     for (addr, var_dist) in umf.variational_dists
         x, xlp = rand_and_logpdf(var_dist)
         lp += xlp
@@ -26,14 +25,15 @@ function rand_and_logpdf(umf::UniversalMeanField)
     end
     return X, lp
 end
-function rand_and_logpdf(umf::UniversalMeanField, n::Int)
-    Xs = Vector{ContinuousUniversalTrace}(undef, n)
-    lps = Vector{Float64}(undef, n)
-    for i in 1:n
-        @inbounds Xs[i], lps[i] = rand_and_logpdf(umf)
-    end
-    return Xs, lps
-end
+
+# function rand_and_logpdf(umf::UniversalMeanField, n::Int)
+#     Xs = Vector{ContinuousUniversalTrace}(undef, n)
+#     lps = Vector{Float64}(undef, n)
+#     for i in 1:n
+#         @inbounds Xs[i], lps[i] = rand_and_logpdf(umf)
+#     end
+#     return Xs, lps
+# end
 
 # function Distributions.rand(umf::UniversalMeanField)
 #     X = Dict{Any,Float64}(addr => Distributions.rand(var_dist) for (addr, var_dist) in umf.variational_dists)
@@ -47,16 +47,24 @@ end
 """
 Wrapper for the result of universal ADVI and BBVI.
 The only supported variational families are Meanfield and Guides.
+Transforms values to constrained model in `sample_posterior` if required.
 """
 struct UniversalVIResult <: VIResult
-    Q::Union{UniversalMeanField, Guide}
-    transform_to_constrained::Function # Vector{<:AbstractUniversalTrace} -> Tuple{Vector{<:AbstractUniversalTrace}, Vector{Any}}
+    Q::Union{UniversalMeanField, UniversalGuide}
+    transform_to_constrained::Function # AbstractUniversalTrace -> Tuple{Vector{<:AbstractUniversalTrace}, Vector{Any}}
 end
 function sample_posterior(res::UniversalVIResult, n::Int)
-    samples, lps = rand_and_logpdf(res.Q, n)
-    @assert samples isa Vector{Dict{Address,T}} where T <: Real
-    samples, retvals = res.transform_to_constrained(samples)
-    return UniversalTraces(samples, retvals), lps
+    Xs = Vector{ContinuousUniversalTrace}(undef, n)
+    retvals = Vector{Any}(undef, n)
+    lps = Vector{Float64}(undef, n)
+    @progress for i in 1:n
+        X, lp = rand_and_logpdf(res.Q)
+        X, retval = res.transform_to_constrained(X)
+        @inbounds Xs[i] = X
+        @inbounds retvals[i] = retval
+        @inbounds lps[i] = lp
+    end
+    return UniversalTraces(Xs, retvals), lps
 end
 
 mutable struct MeanfieldADVI <: UniversalSampler
@@ -150,22 +158,36 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observ
         
     end
 
-    _transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}) = transform_to_constrained(Xs, model, args, observations)
+    _transform_to_constrained(X::AbstractUniversalTrace) = transform_to_constrained(X, model, args, observations)
     return UniversalVIResult(UniversalMeanField(sampler.variational_dists), _transform_to_constrained)
 end
 export advi_meanfield
 
 import TinyPPL.Distributions: ELBOEstimator, estimate_elbo
 
-# TODO
+
 """
+ADVI with variational distributions given by guide program.
+Guide has to provide values in the correct support (absolute continuity).
+Guide is fitted by default to original model, but can also be fitted to unconstrained model,
+by setting `unconstrained = true`.
 """
 function advi(model::UniversalModel, args::Tuple, observations::Observations, 
     n_samples::Int, L::Int, learning_rate::Float64,
-    guide::UniversalModel, guide_args::Tuple, estimator::ELBOEstimator)
+    guide::UniversalModel, guide_args::Tuple, estimator::ELBOEstimator;
+    unconstrained::Bool=false)
 
-    logjoint = make_logjoint(model, args, observations)
-    q = make_guide(guide, guide_args, Dict())
+    if unconstrained
+        logjoint = make_unconstrained_logjoint(model, args, observations)
+        _transform_to_constrained(X::AbstractUniversalTrace) = transform_to_constrained(X, model, args, observations)
+        _viresult_map = _transform_to_constrained
+    else
+        logjoint = make_logjoint(model, args, observations)
+        _no_transform(X::AbstractUniversalTrace) = X, model(args, TraceSampler(X) , observations)
+        _viresult_map = _no_transform
+    end
+
+    q = make_guide(guide, guide_args)
 
     # cannot use advi_logjoint because phi is not of constant size
     phi = no_grad(get_params(q))
@@ -197,9 +219,7 @@ function advi(model::UniversalModel, args::Tuple, observations::Observations,
         phi += @. rho * grad
     end
 
-    # guide has to propose in correct support,
-    # if you want to fit guide to unconstrained model you have to do it manually and transform to constrained
-    return UniversalVIResult(update_params(q, phi), identity)
+    return UniversalVIResult(update_params(q, phi), _viresult_map)
 end
 
 export advi

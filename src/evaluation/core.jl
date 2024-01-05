@@ -76,7 +76,7 @@ end
 sample syntax: `{address} ~ distribution`
 sugar: `address ~ distribution` is equivalent to `address = {:address} ~ distribution`
 
-parameter syntax: p = param(name, size=1, constraint=NoConstraint())
+parameter syntax: p = param(name; size=1, constraint=NoConstraint())
 submodel syntax: @subppl submodel(args...)
 
 returns an UniversalModel model_name which is callable with

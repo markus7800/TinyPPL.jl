@@ -1,9 +1,4 @@
 
-const Address = Any
-const RVValue = Real # currently only univariate distributions are supported
-const Observations = Dict{Address, RVValue}
-export Observations
-
 abstract type AbstractTraces end
 
 const AbstractUniversalTrace = Dict{Address, <:RVValue}
@@ -47,4 +42,32 @@ abstract type VIResult end
 # returns samples X and log Q(X)
 function sample_posterior(::VIResult, n::Int)::Tuple{<:AbstractTraces,Vector{Float64}}
     error("Not implemented.")
+end
+
+
+import TinyPPL.Distributions: VariationalParameters
+const Param2Ix = Dict{Address, UnitRange{Int}}
+
+"""
+Wrapper for VariationalParameters, which maps name to value.
+"""
+struct VIParameters
+    phi::VariationalParameters
+    params_to_ix::Param2Ix
+end
+function Base.show(io::IO, p::VIParameters)
+    print(io, "VIParameters(")
+    print(io, sort(collect(keys(p.params_to_ix)), lt = (x,y) -> first(p.params_to_ix[x]) < first(p.params_to_ix[y])))
+    print(io, ")")
+end
+function Base.getindex(p::VIParameters, i::Int)
+    return p.phi[i]
+end
+function Base.getindex(p::VIParameters, addr::Any)
+    ix = p.params_to_ix[addr]
+    if length(ix) == 1
+        return p.phi[ix[1]]
+    else
+        return p.phi[ix]
+    end
 end
