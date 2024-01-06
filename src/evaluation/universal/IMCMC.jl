@@ -1,5 +1,8 @@
 import LinearAlgebra: logabsdet
 
+"""
+Involutive MCMC
+"""
 function imcmc(model::UniversalModel, args::Tuple, observations::Dict,
     aux_model::UniversalModel, aux_args::Tuple,
     involution::Function,
@@ -24,7 +27,9 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Dict,
 
         trace_proposed, aux_proposed = apply(transformation, trace_current, aux_current)
         J = jacobian_fwd_diff(transformation, trace_current, aux_current, trace_proposed, aux_proposed)
+
         if check_involution
+            # TODO: check J dimension
             trace_current_2, aux_current_2 = apply(transformation, trace_proposed, aux_proposed)
             for addr in keys(trace_current) ∪ keys(trace_current_2)
                 @assert trace_current[addr] ≈ trace_current_2[addr] (addr, trace_current[addr], trace_current_2[addr])

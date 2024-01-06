@@ -3,8 +3,8 @@ import TinyPPL.Distributions: VariationalParameters
 
 """
 Samples values or reuses values of trace `X` and computes log Q(X).
-Parameters are used by indexing into `phi` with `params_to_ix`.
-If we encounter parameter with unknown address, then we expand `phi` with the new parameter.
+Parameters are used by indexing into `phi` with `addr`.
+If we encounter parameter with unknown address, then we add the new parameter to `phi`.
 Parameters are always initiliased to 0.
 Also, the parameter constraints are recorded which are assumed to be *static*.
 
@@ -119,37 +119,6 @@ function Distributions.rand(guide::UniversalGuide, n::Int)
     return [Distributions.rand(guide) for _ in 1:n]
 end
 
-
-# mutable struct UniversalParameterTransformer <: UniversalSampler
-#     phi::VariationalParameters
-#     params_to_ix::Param2Ix
-#     transformed_phi::VariationalParameters
-#     function UniversalParameterTransformer(guide::UniversalGuide)
-#         return new(guide.sampler.phi, guide.sampler.params_to_ix, similar(guide.sampler.phi))
-#     end
-# end
-
-# const ParameterTransformer = Union{UniversalParameterTransformer, StaticParameterTransformer}
-
-# function sample(sampler::ParameterTransformer, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
-#     if !isnothing(obs)
-#         return obs
-#     end
-#     return mean(dist)
-# end
-
-# function param(sampler::ParameterTransformer, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
-#     ix = sampler.params_to_ix[addr]
-#     if size == 1
-#         parameters = constrain_param(constraint, sampler.phi[ix[1]])
-#     else
-#         parameters = constrain_param(constraint, sampler.phi[ix])
-#     end
-#     sampler.transformed_phi[ix] .= parameters
-#     return parameters
-# end
-
-
 struct UniversalVIParameters <: VIParameters
     phi::Dict{Address, <:VariationalParameters}
 end
@@ -173,7 +142,7 @@ UniversalParameterTransformer with dynamic constraints does not work,
 since we do not know if all parameters are encountered in model execution.
 """
 function get_constrained_parameters(guide::UniversalGuide)
-    transformed_phi = Dict{Address, valtype(guide.sampler.phi)}()
+    transformed_phi = emtpy(guide.sampler.phi)
     for (addr, params) in guide.sampler.phi
         transformed_phi[addr] = constrain_param(guide.sampler.constraints[addr], params)
     end

@@ -1,13 +1,16 @@
 import Distributions
 
+"""
+Accumulates the log density log p(X,Y) for input trace `X`.
+"""
 mutable struct LogJointSampler <: UniversalSampler
-    W::Real # tracked or untracked
-    X::Dict{Any,Real}
-    function LogJointSampler(X::Dict{Any,Real})
+    W::Real # log p(X,Y) tracked or untracked
+    X::AbstractUniversalTrace
+    function LogJointSampler(X::AbstractUniversalTrace)
         return new(0.,X)
     end
 end
-function sample(sampler::LogJointSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::LogJointSampler, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
@@ -17,23 +20,32 @@ function sample(sampler::LogJointSampler, addr::Any, dist::Distribution, obs::Un
     return value
 end
 
-function make_logjoint(model::UniversalModel, args::Tuple, observations::Dict)
-    return function logjoint(X::Dict{Any,Real})
+"""
+Transforms a universal model to a function which takes as input an universal trace `X`
+and returns the log density log p(X,Y).
+Closes over args and observations Y.
+"""
+function make_logjoint(model::UniversalModel, args::Tuple, observations::Observations)
+    return function logjoint(X::AbstractUniversalTrace)
         sampler = LogJointSampler(X)
         model(args, sampler, observations)
         return sampler.W
     end
 end
-
+"""
+Accumulates the log density log p(T(X),Y) + log abs det ∇T(X) for input trace `X`.
+The values of continuous distributions are assumed to be unconstrained and are mapped
+to the support via a transformation T.
+"""
 mutable struct UnconstrainedLogJointSampler <: UniversalSampler
-    W::Real # tracked or untracked
-    X::Dict{Any,Real}
-    function UnconstrainedLogJointSampler(X::Dict{Any,Real})
+    W::Real # log p(T(X),Y) + log abs det ∇T(X) tracked or untracked
+    X::AbstractUniversalTrace
+    function UnconstrainedLogJointSampler(X::AbstractUniversalTrace)
         return new(0.,X)
     end
 end
 
-function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::UnconstrainedLogJointSampler, addr::Address, dist::Distributions.DiscreteDistribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
@@ -43,20 +55,26 @@ function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distribu
     return value
 end
 
-function sample(sampler::UnconstrainedLogJointSampler, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::UnconstrainedLogJointSampler, addr::Address, dist::Distributions.ContinuousDistribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
     end
+    # map unconstrained value to support
     unconstrained_value = sampler.X[addr]
-    transformed_dist = to_unconstrained(dist)
-    sampler.W += logpdf(transformed_dist, unconstrained_value)
+    transformed_dist = to_unconstrained(dist) # T
+    sampler.W += logpdf(transformed_dist, unconstrained_value) # log p(T^{-1}(X)) + log abs det ∇T^{-1}(X)
     constrained_value = transformed_dist.T_inv(unconstrained_value)
     return constrained_value
 end
 
+"""
+Transforms a universal model to a function which takes as input an universal trace `X`
+and returns the log density log p(T(X),Y) + log abs det ∇T(X).
+Closes over args and observations Y.
+"""
 function make_unconstrained_logjoint(model::UniversalModel, args::Tuple, observations::Dict)
-    return function unconstrained_logjoint(X::Dict{Any,Real})
+    return function unconstrained_logjoint(X::AbstractUniversalTrace)
         sampler = UnconstrainedLogJointSampler(X)
         model(args, sampler, observations)
         return sampler.W

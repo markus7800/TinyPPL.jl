@@ -4,6 +4,8 @@ abstract type AbstractTraces end
 const AbstractUniversalTrace = Dict{Address, <:RVValue}
 const UniversalTrace = Dict{Address, RVValue}
 
+export AbstractUniversalTrace, UniversalTrace
+
 """
 Wrapper for the result of sample based inference algorithms, like MH or IS.
 Provides getters for retrieving all values / specific value of a given address.

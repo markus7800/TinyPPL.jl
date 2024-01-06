@@ -33,7 +33,7 @@ mutable struct TraceSampler <: UniversalSampler
     end
 end
 
-function sample(sampler::TraceSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::TraceSampler, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
@@ -46,3 +46,26 @@ function sample(sampler::TraceSampler, addr::Any, dist::Distribution, obs::Union
     sampler.W += logpdf(dist, value)
     return value
 end
+
+"""
+Convenience method for sampling from model.
+"""
+function sample_trace(model::UniversalModel, args::Tuple, observations::Observations=Observations())
+    sampler = TraceSampler()
+    model(args, sampler, observations)
+    return sampler.X
+end
+export sample_trace
+
+"""
+Convenience method for computing log p(X,Y) for given trace `X` according to model.
+"""
+function score_trace(model::UniversalModel, args::Tuple, observations::Observations, X::AbstractUniversalTrace)
+    sampler = TraceSampler(X)
+    model(args, sampler, observations)
+    return sampler.W
+end
+function score_trace(model::UniversalModel, args::Tuple, X::AbstractUniversalTrace)
+    return score_trace(model, args, Observations(), X)
+end
+export score_trace
