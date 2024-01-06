@@ -142,7 +142,7 @@ UniversalParameterTransformer with dynamic constraints does not work,
 since we do not know if all parameters are encountered in model execution.
 """
 function get_constrained_parameters(guide::UniversalGuide)
-    transformed_phi = emtpy(guide.sampler.phi)
+    transformed_phi = empty(guide.sampler.phi)
     for (addr, params) in guide.sampler.phi
         transformed_phi[addr] = constrain_param(guide.sampler.constraints[addr], params)
     end

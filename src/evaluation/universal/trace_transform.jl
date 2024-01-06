@@ -87,6 +87,8 @@ end
 
 
 # wrap transformation as function which maps vectors to vectors for AD
+# this is a bit hacky: Dict -> Vector -> Dict
+# Could be replaced with Dictionaries.jl where convertion is light weight.
 function get_wrapped_f(tt::TraceTransformation, old_trace::AbstractUniversalTrace)
     function wrapped_f(X::AbstractVector{<:Real})
         # could be replace by directly reading from X at correct index ala JacobianPassState,

@@ -86,8 +86,8 @@ Random.seed!(0)
 vi_result_reinforce = advi(LinReg, args, observations,  10_000, 100, 0.01, LinRegGuide, (), ReinforceELBO())
 mu_reinforce, sigma_reinforce = get_guide_parameters(vi_result_reinforce)
 # is equivalent
-maximum(abs, mu_bbvi .- mu_reinforce)
-maximum(abs, sigma_bbvi .- sigma_reinforce)
+@assert all(mu_bbvi .≈ mu_reinforce)
+@assert all(sigma_bbvi .≈ sigma_reinforce)
 
 
 Random.seed!(0)

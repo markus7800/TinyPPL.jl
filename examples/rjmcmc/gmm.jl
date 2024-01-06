@@ -2,7 +2,6 @@ using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
 import LinearAlgebra: det, logabsdet
-# using Plots
 
 const gt_k = 4
 const gt_ys = [-7.87951290075215, -23.251364738213493, -5.34679518882793, -3.163770449770572,
@@ -47,7 +46,7 @@ const κ = 0.01
 const α = 2.0
 const β = 10.0
 
-# does work, because no bijection from gamma to dirichlet
+# does not work, because no bijection from gamma to dirichlet
 @ppl function dirichlet_gamma(δ, k)
     w = [{:w=>j} ~ Gamma(δ, 1) for j in 1:k]
     return w / sum(w)
