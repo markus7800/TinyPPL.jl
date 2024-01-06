@@ -1,4 +1,4 @@
-import TinyPPL.Distributions: mean
+import TinyPPL.Distributions: mean, mode
 
 const Addr2Ix = Dict{Any, Int}
 const Addresses = Set{Any}
@@ -15,7 +15,7 @@ function sample(sampler::AddressCollector, addr::Any, dist::Distribution, obs::U
         return obs
     end
 
-    value = mean(dist)
+    value = dist isa Distribution.DiscreteDistribution ? mode(dist) : mean(dist)
     push!(sampler.addresses, addr)
     
     return value
@@ -70,8 +70,8 @@ function Base.getindex(traces::Traces, addr::Any, i::Int)::Real
     return traces.data[traces.addesses_to_ix[addr], i]
 end
 
-function Base.getindex(traces::Traces, addrs::Vector{Any}, i::Int)::Real
-    return traces.data[[traces.addesses_to_ix[addr] for addr in addrs], i]
-end
+# function Base.getindex(traces::Traces, addrs::Vector{Any}, i::Int)::Real
+#     return traces.data[[traces.addesses_to_ix[addr] for addr in addrs], i]
+# end
 
 export Traces

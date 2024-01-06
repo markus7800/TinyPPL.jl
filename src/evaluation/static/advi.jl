@@ -57,7 +57,8 @@ struct MeanFieldCollector <: StaticSampler
     dists::Vector{VariationalDistribution}
     addresses_to_ix::Addr2Ix
 end
-function sample(sampler::MeanFieldCollector, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+# TODO: handle DiscreteDistribution
+function sample(sampler::MeanFieldCollector, addr::Any, dist::Distribution.ContinuousDistribution, obs::Union{Nothing, Real})::Real
     if !isnothing(obs)
         return obs
     end

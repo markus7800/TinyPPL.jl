@@ -1,5 +1,5 @@
 import Distributions
-import TinyPPL.Distributions: mean
+import TinyPPL.Distributions: mean, mode
 
 mutable struct ParametersCollector <: StaticSampler
     params_to_ix::Param2Ix
@@ -13,7 +13,7 @@ function sample(sampler::ParametersCollector, addr::Address, dist::Distribution,
     if !isnothing(obs)
         return obs
     end
-    return mean(dist)
+    return  dist isa Distribution.DiscreteDistribution ? mode(dist) : mean(dist)
 end
 
 function param(sampler::ParametersCollector, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
@@ -136,7 +136,7 @@ function sample(sampler::StaticParameterTransformer, addr::Address, dist::Distri
     if !isnothing(obs)
         return obs
     end
-    return mean(dist)
+    return dist isa Distribution.DiscreteDistribution ? mode(dist) : mean(dist)
 end
 
 function param(sampler::StaticParameterTransformer, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())

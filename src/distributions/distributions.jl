@@ -1,5 +1,5 @@
 module Distributions
-    import Distributions: Distribution, logpdf, params, mean
+    import Distributions: Distribution, logpdf, params, mean, mode
 
     import Distributions: Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
     import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
@@ -14,7 +14,7 @@ module Distributions
     include("elbo.jl")
 
 
-    export Distribution, logpdf, params, mean
+    export Distribution, logpdf, params, mean, mode
 
     export Bernoulli, Binomial, Categorical, DiscreteUniform, Geometric, Poisson
     export Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform

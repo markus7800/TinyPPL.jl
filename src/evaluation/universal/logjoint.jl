@@ -110,7 +110,7 @@ function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Di
     if !isnothing(obs)
         return obs
     end
-    sampler.Y[addr] = get(sampler.X, addr, mean(dist))
+    sampler.Y[addr] = get(sampler.X, addr, mode(dist))
     return sampler.Y[addr]
 end
 function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Distributions.ContinuousDistribution, obs::Union{Nothing,RVValue})::RVValue
