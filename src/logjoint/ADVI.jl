@@ -10,6 +10,11 @@ import TinyPPL.Distributions: ELBOEstimator, estimate_elbo, VariationalDistribut
 #     @eval Random.$f(rng::Random.AbstractRNG,::Type{Tracker.TrackedReal{T}}) where {T} = Tracker.param(Random.$f(rng,T))
 # end
 
+"""
+ADVI with Gaussian meanfield approximation, fitted to `logjoint`.
+Approximates ELBO gradient with closed form entropy.
+Thus, is equivalent to advi_logjoint with MeanFieldGaussian and RelativeEntropyELBO
+"""
 function advi_meanfield_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, learning_rate::Float64)
     phi = zeros(2*K)
 
@@ -50,6 +55,11 @@ function advi_meanfield_logjoint(logjoint::Function, K::Int, n_samples::Int, L::
 end
 
 import LinearAlgebra: transpose, inv, LowerTriangular, Diagonal
+"""
+ADVI with Gaussian fullrank approximation, fitted to `logjoint`.
+Approximates ELBO gradient with closed form entropy.
+Thus, is equivalent to advi_logjoint with FullRankGaussian and RelativeEntropyELBO
+"""
 function advi_fullrank_logjoint(logjoint::Function, K::Int, n_samples::Int, N::Int, learning_rate::Float64)
     phi = vcat(zeros(K), reshape(LinearAlgebra.I(K),:))
 
@@ -64,10 +74,8 @@ function advi_fullrank_logjoint(logjoint::Function, K::Int, n_samples::Int, N::I
         # setup for gradient computation
         phi_tracked = Tracker.param(phi)
         mu = phi_tracked[1:K] # Tracked K-element Vector{Float64}
-        # mu = convert(Vector{eltype(phi_tracked)}, phi_tracked[1:K]) # Vector{Tracker.TrackedReal{Float64}}
         A = reshape(phi_tracked[K+1:end],K,K) # Tracked K×K Matrix{Float64}
         L = A .* mask # Tracked K×K Matrix{Float64}
-        # L = LinearAlgebra.LowerTriangular(convert(Matrix{eltype(A)}, A)) # Matrix{Tracker.TrackedReal{Float64}}
 
         # estimate elbo
         elbo = 0.
@@ -99,6 +107,10 @@ function advi_fullrank_logjoint(logjoint::Function, K::Int, n_samples::Int, N::I
     return FullRankGaussian(mu, L)
 end
 
+"""
+ADVI with arbitary VariationalDistribution approximation, fitted to `logjoint`.
+Approximates ELBO gradient with ELBOEstimator.
+"""
 function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
     phi = no_grad(get_params(q))
 

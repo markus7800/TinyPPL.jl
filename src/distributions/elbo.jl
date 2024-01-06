@@ -42,6 +42,19 @@ function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistri
     return elbo
 end
 
+# struct ReinforceSurrogateELBO <: ELBOEstimator end
+# function estimate_elbo(::ReinforceSurrogateELBO, logjoint::Function, q::VariationalDistribution, L::Int)
+#     surrogate_elbo = 0.
+#     for _ in 1:L
+#         zeta = no_grad(rand(q))
+#         lpq = logpdf(q, zeta)
+#         elbo = logjoint(zeta) - lpq
+#         surrogate_elbo += no_grad(elbo) * lpq + elbo
+#     end
+#     surrogate_elbo = surrogate_elbo / L
+#     return surrogate_elbo
+# end
+
 struct PathDerivativeELBO <: ELBOEstimator end
 function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.

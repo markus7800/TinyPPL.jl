@@ -39,7 +39,10 @@ function sample(sampler::TraceSampler, addr::Any, dist::Distribution, obs::Union
         return obs
     end
     # evaluate at given value or sample and store
-    value = get!(sampler.X, addr, rand(dist))
+    if !haskey(sampler.X, addr)
+        sampler.X[addr] = rand(dist)
+    end
+    value = sampler.X[addr]
     sampler.W += logpdf(dist, value)
     return value
 end

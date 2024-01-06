@@ -53,6 +53,13 @@ struct UniversalVIResult <: VIResult
     Q::Union{UniversalMeanField, UniversalGuide}
     transform_to_constrained::Function # AbstractUniversalTrace -> Tuple{Vector{<:AbstractUniversalTrace}, Vector{Any}}
 end
+function Base.show(io::IO, vi_result::UniversalVIResult)
+    if vi_result.Q isa UniversalGuide
+        print(io, "VIResult(UniversalGuide($(vi_result.Q.model.f)))")
+    else
+        print(io, "VIResult(UniversalMeanField($(length(vi_result.Q.variational_dists)) distributions))")
+    end
+end
 function sample_posterior(res::UniversalVIResult, n::Int)
     Xs = Vector{ContinuousUniversalTrace}(undef, n)
     retvals = Vector{Any}(undef, n)
@@ -88,7 +95,7 @@ function sample(sampler::MeanfieldADVI, addr::Address, dist::Distribution, obs::
     if !haskey(sampler.variational_dists, addr)
         # Gaussian approximation for every variable
         q = VariationalNormal()
-        params::AbstractVector{Tracker.TrackedReal{Float64}} = Tracker.param.(get_params(q)) # no vector params
+        params::Tracker.TrackedVector{Float64, Vector{Float64}} = Tracker.param(get_params(q))
         sampler.variational_dists[addr] = update_params(q, params)
     end
 
@@ -112,6 +119,8 @@ since we cannot share VariationalDistribution among addresses.
 If no VariationalDistribution is found at address, fit Gaussian to unconstrained distribution.
 
 If you want this alternative behavior use ADVI with a guide program.
+
+ELBO is optimised with automatic differentiation (AD).
 """
 function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64)
 
@@ -121,14 +130,14 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observ
     post = 0.9
 
     sampler = MeanfieldADVI(Dict{Address, VariationalDistribution}())
-    local params::AbstractVector{Float64}
-    local tracked_params::AbstractVector{Tracker.TrackedReal{Float64}}
+    local params::Vector{Float64}
+    local tracked_params::Tracker.TrackedVector{Float64, Vector{Float64}}
     @progress for i in 1:n_samples
 
         for (addr, var_dist) in sampler.variational_dists
             params = get_params(var_dist)
-            @assert !any(Tracker.istracked.(params))
-            tracked_params = Tracker.param.(params) # no vector params
+            @assert !Tracker.istracked(params)
+            tracked_params = Tracker.param(params)
             sampler.variational_dists[addr] = update_params(var_dist, tracked_params)
         end
 
@@ -143,7 +152,7 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observ
         # adagrad update for each address
         for (addr, var_dist) in sampler.variational_dists
             tracked_params = get_params(var_dist)
-            grad = Tracker.grad.(tracked_params)
+            grad = Tracker.grad(tracked_params)
 
             acc_addr = get(acc, addr, fill(eps,size(grad)))
             acc_addr = post .* acc_addr .+ pre .* grad.^2
@@ -171,6 +180,9 @@ ADVI with variational distributions given by guide program.
 Guide has to provide values in the correct support (absolute continuity).
 Guide is fitted by default to original model, but can also be fitted to unconstrained model,
 by setting `unconstrained = true`.
+ELBO is optimised with automatic differentiation (AD).
+
+This is almost the same as advi_logjoint, but the size of phi is not constant.
 """
 function advi(model::UniversalModel, args::Tuple, observations::Observations, 
     n_samples::Int, L::Int, learning_rate::Float64,
@@ -193,13 +205,15 @@ function advi(model::UniversalModel, args::Tuple, observations::Observations,
     phi = no_grad(get_params(q))
 
     eps = 1e-8
-    acc = fill(eps, size(phi))
+    acc = Dict{Any, AbstractVector{Float64}}()
     pre = 1.1
     post = 0.9
 
     @progress for _ in 1:n_samples
         # setup for gradient computation
-        phi_tracked = Tracker.param(phi)
+        phi_tracked = Dict{Address,Tracker.TrackedVector{Float64, Vector{Float64}}}(
+            addr => Tracker.param(param) for (addr, param) in phi
+        )
         q = update_params(q, phi_tracked)
 
         # estimate elbo
@@ -208,15 +222,18 @@ function advi(model::UniversalModel, args::Tuple, observations::Observations,
         # automatically compute gradient
         Tracker.back!(elbo)
         phi_tracked = get_params(q) # still has grads because of growing with vcat
-        phi = vcat(phi, zeros(length(phi_tracked) - length(phi)))
 
-        grad = Tracker.grad(phi_tracked)
+        for (addr, params) in phi_tracked
+            grad = Tracker.grad(params) # defaults to zeros
 
-        # decayed adagrad update rule
-        acc = vcat(acc, fill(eps, length(phi_tracked) - length(acc)))
-        acc = @. post * acc + pre * grad^2
-        rho = @. learning_rate / (sqrt(acc) + eps)
-        phi += @. rho * grad
+            # adagrad update
+            acc_addr = get(acc, addr, fill(eps,size(grad)))
+            acc_addr = post .* acc_addr .+ pre .* grad.^2
+            acc[addr] = acc_addr
+            rho = learning_rate ./ (sqrt.(acc_addr) .+ eps)
+
+            phi[addr] = get(phi, addr, grad isa Float64 ? 0. : zeros(size(grad))) + rho .* grad
+        end
     end
 
     return UniversalVIResult(update_params(q, phi), _viresult_map)

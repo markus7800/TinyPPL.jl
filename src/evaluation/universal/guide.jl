@@ -7,15 +7,16 @@ Parameters are used by indexing into `phi` with `params_to_ix`.
 If we encounter parameter with unknown address, then we expand `phi` with the new parameter.
 Parameters are always initiliased to 0.
 Also, the parameter constraints are recorded which are assumed to be *static*.
+
+Alternative implementation: phi:: Dict{Address, Tracked} and do not implementation VariationalDistribution interface.
 """
 mutable struct UniversalGuideSampler{V} <: UniversalSampler
     W::Real                                 # log Q(X), type depends on the eltype of phi and X
-    params_to_ix::Param2Ix                  # mapping of parameter address to index in phi
-    phi::V                                  # vector of parameters Vector{Float64} or TrackedVector
+    phi::Dict{Address,V}                    # mapping of params to address
     X::UniversalTrace                       # Sample trace of guide, values will be sampled if not provided 
-    constraints::Dict{Any,ParamConstraint}
-    function UniversalGuideSampler(params_to_ix::Param2Ix, phi::V, constraints=Dict{Address,ParamConstraint}()) where {V <: VariationalParameters}
-        return new{V}(0., params_to_ix, phi, UniversalTrace(), constraints)
+    constraints::Dict{Address,ParamConstraint}
+    function UniversalGuideSampler(phi::Dict{Address,V}, constraints=Dict{Address,ParamConstraint}()) where {V <: VariationalParameters}
+        return new{V}(0., phi, UniversalTrace(), constraints)
     end
 end
 
@@ -24,31 +25,35 @@ function sample(sampler::UniversalGuideSampler, addr::Address, dist::Distributio
 end
 
 function sample(sampler::UniversalGuideSampler, addr::Address, dist::Distribution, obs::Nothing)::RVValue
-    value = get!(sampler.X, addr, rand(dist)) # if there is a value in trace use it else sample
+    # if there is a value in trace use it else sample
+    if !haskey(sampler.X, addr)
+        sampler.X[addr] = rand(dist)
+    end
+    value = sampler.X[addr]
     sampler.W += logpdf(dist, value)
+    # println("guide: ", addr, " ", value, " ", dist)
     return value
 end
 
-function param(sampler::UniversalGuideSampler, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
-    if !haskey(sampler.params_to_ix, addr)
+function param(sampler::UniversalGuideSampler{V}, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained()) where V <: VariationalParameters
+    if !haskey(sampler.phi, addr)
         # add new parameter
-        n = length(sampler.phi)
-        ix = (n+1):(n+size)
-        sampler.params_to_ix[addr] = ix
         sampler.constraints[addr] = constraint
         # all parameters are initialised to 0, vcat to preserve TrackedVector type
-        if Tracker.istracked(sampler.phi)
-            sampler.phi = vcat(sampler.phi, Tracker.param(zeros(size)))
+        if V == Vector{Float64}
+            # sampler.phi = vcat(sampler.phi, zeros(eltype(sampler.phi), size))
+            sampler.phi[addr] = zeros(size)
         else
-            sampler.phi = vcat(sampler.phi, zeros(eltype(sampler.phi), size))
+            # This does not feed back grads correctly, because phi is not leaf?
+            # sampler.phi = vcat(sampler.phi, Tracker.param(zeros(size)))
+            sampler.phi[addr] = Tracker.param(zeros(size))
         end
     end
     # inject parameter
-    ix = sampler.params_to_ix[addr]
     if size == 1
-        return constrain_param(constraint, sampler.phi[ix[1]])
+        return constrain_param(constraint, sampler.phi[addr][1])
     else
-        return constrain_param(constraint, sampler.phi[ix])
+        return constrain_param(constraint, sampler.phi[addr])
     end
 end
 
@@ -67,23 +72,21 @@ end
 
 # guide can be used for unconstrained and constrained logjoint
 function make_guide(model::UniversalModel, args::Tuple)::UniversalGuide
-    sampler = UniversalGuideSampler(Param2Ix(), zeros(0))
+    sampler = UniversalGuideSampler(Dict{Address,Vector{Float64}}())
     return UniversalGuide(sampler, model, args, Observations())
 end
 export make_guide
 
+# deliberate violation of VariationalDistribution interface types
 import TinyPPL.Distributions: get_params
-function get_params(q::UniversalGuide)::VariationalParameters
+function get_params(q::UniversalGuide)::Dict{Address,<:VariationalParameters}
     return q.sampler.phi
 end
 
+# deliberate violation of VariationalDistribution interface types
 import TinyPPL.Distributions: update_params
-function update_params(guide::UniversalGuide, params::VariationalParameters)::VariationalDistribution
-    # since UniversalGuideSampler is generic type, we freshly instantiate
-    # q_ = update_params(q, no_grad(get_params(q))) before rand(q_) or rand(q)
-    # can lead to descrepancies between the size of phi of q_ and q if params_to_ix are the same
-    # -> copy params_to_ix
-    new_sampler = UniversalGuideSampler(copy(guide.sampler.params_to_ix), params, copy(guide.sampler.constraints))
+function update_params(guide::UniversalGuide, params::Dict{Address,<:VariationalParameters})::VariationalDistribution
+    new_sampler = UniversalGuideSampler(params, copy(guide.sampler.constraints))
     return UniversalGuide(new_sampler, guide.model, guide.args, guide.observations)
 end
 
@@ -146,17 +149,35 @@ end
 #     return parameters
 # end
 
+
+struct UniversalVIParameters <: VIParameters
+    phi::Dict{Address, <:VariationalParameters}
+end
+function Base.show(io::IO, p::UniversalVIParameters)
+    print(io, "UniversalVIParameters(")
+    print(io, sort(collect(keys(p.phi))))
+    print(io, ")")
+end
+function Base.getindex(p::UniversalVIParameters, addr::Address)
+    params = p.phi[addr]
+    if length(params) == 1
+        return params[1]
+    else
+        return params
+    end
+end
+
 """
 Extracts parameters of guide and transforms them to the specified *static* constraints.
 UniversalParameterTransformer with dynamic constraints does not work,
 since we do not know if all parameters are encountered in model execution.
 """
 function get_constrained_parameters(guide::UniversalGuide)
-    transformed_phi = similar(guide.sampler.phi)
-    for (addr, ix) in guide.sampler.params_to_ix
-        transformed_phi[ix] = constrain_param(guide.sampler.constraints[addr], guide.sampler.phi[ix])
+    transformed_phi = Dict{Address, valtype(guide.sampler.phi)}()
+    for (addr, params) in guide.sampler.phi
+        transformed_phi[addr] = constrain_param(guide.sampler.constraints[addr], params)
     end
-    return VIParameters(transformed_phi, guide.sampler.params_to_ix)
+    return UniversalVIParameters(transformed_phi)
 end
 
 export get_constrained_parameters

@@ -150,6 +150,28 @@ function param(sampler::StaticParameterTransformer, addr::Address; size::Int=1, 
     return parameters
 end
 
+
+# struct VIParameters
+#     phi::VariationalParameters
+#     params_to_ix::Param2Ix
+# end
+# function Base.show(io::IO, p::VIParameters)
+#     print(io, "VIParameters(")
+#     print(io, sort(collect(keys(p.params_to_ix)), lt = (x,y) -> first(p.params_to_ix[x]) < first(p.params_to_ix[y])))
+#     print(io, ")")
+# end
+# function Base.getindex(p::VIParameters, i::Int)
+#     return p.phi[i]
+# end
+# function Base.getindex(p::VIParameters, addr::Any)
+#     ix = p.params_to_ix[addr]
+#     if length(ix) == 1
+#         return p.phi[ix[1]]
+#     else
+#         return p.phi[ix]
+#     end
+# end
+
 """
 Extracts parameters of guide and transforms them to the specified constraints.
 """

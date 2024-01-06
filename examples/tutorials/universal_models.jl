@@ -49,12 +49,19 @@ lmh_traces_2, _ = lmh(pedestrian, args, observations, 1_000_000,
 posterior_mean = mean(retvals(lmh_traces_2))
 
 # is equivalent
-all(rwmh_traces[:start_position] .≈ lmh_traces_2[:start_position])
+@assert all(rwmh_traces[:start_position] .≈ lmh_traces_2[:start_position])
 
 
 histogram(lw_result, weights=W, normalize=true, legend=false)
 histogram!(retvals(lmh_traces), normalize=true, linewidth=0, alpha=0.5)
 histogram!(retvals(rwmh_traces), normalize=true, linewidth=0, alpha=0.5)
+
+
+
+
+
+
+
 
 Random.seed!(0)
 vi_result = advi_meanfield(pedestrian, args, observations, 1_000, 10, 0.1);

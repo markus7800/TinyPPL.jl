@@ -34,6 +34,8 @@ no_grad(x::Tracker.TrackedVector{Float64, Vector{Float64}}) = Tracker.data(x)
 no_grad(x::Tracker.TrackedMatrix{Float64, Matrix{Float64}}) = Tracker.data(x)
 no_grad(x::Vector{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 no_grad(x::Matrix{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
+no_grad(x::Dict{K,Tracker.TrackedVector{Float64, Vector{Float64}}}) where {K <: Any} = Dict{K,Vector{Float64}}(addr => no_grad(v) for (addr, v) in x)
+no_grad(x::Dict{<:Any,Vector{Float64}}) = x
 
 # maps :x => :y => :z = :x => (:y => :z) to (:x => :y) => :z
 function reverse_pair(pair::Pair)
