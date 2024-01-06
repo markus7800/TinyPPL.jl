@@ -17,6 +17,8 @@ function proposal_logpdf(dist::ProposalDistribution, x_proposed, x_current)
     error("Not implemented!")
 end
 
+export proposal_dist, propose_and_logpdf, proposal_logpdf
+
 export ProposalDistribution
 
 struct StaticProposal <: ProposalDistribution

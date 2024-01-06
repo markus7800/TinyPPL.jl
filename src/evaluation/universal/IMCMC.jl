@@ -77,7 +77,7 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Observations,
         retvals[i] = retval_current
     end
     
-    @info "RJMCMC" n_accepted/n_samples
+    @info "iMCMC" n_accepted/n_samples
 
     return UniversalTraces(traces, retvals), lps
 end
