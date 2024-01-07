@@ -51,37 +51,6 @@ end
 
 export advi_meanfield, advi_fullrank, advi
 
-import TinyPPL.Distributions: MeanField, init_variational_distribution
-
-struct MeanFieldCollector <: StaticSampler
-    dists::Vector{VariationalDistribution}
-    addresses_to_ix::Addr2Ix
-end
-# TODO: handle DiscreteDistribution
-function sample(sampler::MeanFieldCollector, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs)
-        return obs
-    end
-    value = mean(dist)
-    ix = sampler.addresses_to_ix[addr]
-    sampler.dists[ix] = init_variational_distribution(dist)
-    return value
-end
-function get_mixed_meanfield(model::StaticModel, args::Tuple, observations::Dict, addresses_to_ix::Addr2Ix)::MeanField
-    sampler = MeanFieldCollector(Vector{VariationalDistribution}(undef, length(addresses_to_ix)), addresses_to_ix)
-    model(args, sampler, observations)
-    return MeanField(sampler.dists)
-end
-export get_mixed_meanfield
-
-function bbvi(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, L::Int, learning_rate::Float64)
-    ulj = make_unconstrained_logjoint(model, args, observations)
-    q = get_mixed_meanfield(model, args, observations, ulj.addresses_to_ix)
-    result = advi_logjoint(ulj.logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
-    return StaticVIResult(result, ulj.addresses_to_ix, ulj.transform_to_constrained!)
-end
-export bbvi
-
 function get_number_of_latent_variables(model::StaticModel, args::Tuple, observations::Dict)
     return length(get_addresses(model, args, observations))
 end

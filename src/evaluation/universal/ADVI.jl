@@ -74,19 +74,19 @@ function sample_posterior(res::UniversalVIResult, n::Int)
     return UniversalTraces(Xs, retvals), lps
 end
 
-mutable struct MeanfieldADVI <: UniversalSampler
+mutable struct MeanFieldADVI <: UniversalSampler
     ELBO::Tracker.TrackedReal{Float64}
     variational_dists::Dict{Address,VariationalDistribution}
 
-    function MeanfieldADVI(variational_dists::Dict{Address,VariationalDistribution})
+    function MeanFieldADVI(variational_dists::Dict{Address,VariationalDistribution})
         return new(0., variational_dists)
     end
 end
-function sample(sampler::MeanfieldADVI, addr::Address, dist::Distributions.DiscreteDistribution, obs::Nothing)::RVValue
+function sample(sampler::MeanFieldADVI, addr::Address, dist::Distributions.DiscreteDistribution, obs::Nothing)::RVValue
     error("Discrete sample encountered in ADVI: $addr ~ $dist")
 end
 
-function sample(sampler::MeanfieldADVI, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
+function sample(sampler::MeanFieldADVI, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         sampler.ELBO += logpdf(dist, obs)
         return obs
@@ -129,7 +129,7 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observ
     pre = 1.1
     post = 0.9
 
-    sampler = MeanfieldADVI(Dict{Address, VariationalDistribution}())
+    sampler = MeanFieldADVI(Dict{Address, VariationalDistribution}())
     local params::Vector{Float64}
     local tracked_params::Tracker.TrackedVector{Float64, Vector{Float64}}
     @progress for i in 1:n_samples

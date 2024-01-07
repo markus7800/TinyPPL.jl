@@ -9,10 +9,11 @@ TODOS:
 - 
 - document everyting
 
+
 - fix func(; a = ..) keyword arguments @ppl eval macro
 - param transform reuse transform.jl? transform_to RealInterval
 - remove observations from guide? can be passed as argument instead
-
+- HMC find eps ala mcmcgallery
 
 - rjmcmc
 - smc (graph ok / universial with channels?)

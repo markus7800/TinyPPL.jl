@@ -1,35 +1,17 @@
-
-abstract type AbstractTraces end
-
-const AbstractUniversalTrace = Dict{Address, <:RVValue}
-const UniversalTrace = Dict{Address, RVValue}
-
-export AbstractUniversalTrace, UniversalTrace
-
 """
 Wrapper for the result of sample based inference algorithms, like MH or IS.
 Provides getters for retrieving all values / specific value of a given address.
 """
-struct UniversalTraces <: AbstractTraces
-    data::Vector{<:AbstractUniversalTrace}
-    retvals::Vector{Any}
+abstract type AbstractTraces end
+function Base.getindex(::AbstractTraces, ::Address)
+    error("Not implemented!")
 end
-retvals(traces::UniversalTraces) = traces.retvals
-export retvals
-
-function Base.show(io::IO, traces::UniversalTraces)
-    print(io, "UniversalTraces($(length(traces.data)) entries)")
+function Base.getindex(::AbstractTraces, ::Address, ::Int)
+    error("Not implemented!")
 end
-
-function Base.getindex(traces::UniversalTraces, addr::Address)
-    return [get(t, addr, missing) for t in traces.data]
+function retvals(::AbstractTraces)
+    error("Not implemented!")
 end
-function Base.getindex(traces::UniversalTraces, addr::Address, i::Int)
-    return get(traces.data[i], addr, missing)
-end
-Base.length(traces::UniversalTraces) = length(traces.data)
-export UniversalTraces
-
 
 """
 Wrapper for the result of variational inference methods like ADVI or BBVI.
