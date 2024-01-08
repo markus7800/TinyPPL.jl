@@ -1,6 +1,10 @@
+"""
+This file includes various ELBO estimators.
+"""
+
 
 abstract type ELBOEstimator end
-struct MonteCarloELBO <: ELBOEstimator end
+struct MonteCarloELBO <: ELBOEstimator end # requires differentiable model
 function estimate_elbo(::MonteCarloELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     for _ in 1:L
@@ -13,7 +17,7 @@ function estimate_elbo(::MonteCarloELBO, logjoint::Function, q::VariationalDistr
     return elbo
 end
 
-struct RelativeEntropyELBO <: ELBOEstimator end
+struct RelativeEntropyELBO <: ELBOEstimator end # requires differentiable model and closed form entropy
 function estimate_elbo(::RelativeEntropyELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     for _ in 1:L
@@ -25,7 +29,8 @@ function estimate_elbo(::RelativeEntropyELBO, logjoint::Function, q::Variational
     return elbo
 end
 
-struct ReinforceELBO <: ELBOEstimator end
+struct ReinforceELBO <: ELBOEstimator end # does not require differentiable model
+# this is a special case of the Reinforce gradient approximation where E_q(z|ϕ)[∇f_ϕ(z)] = 0
 function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     q_ = update_params(q, no_grad(get_params(q)))
@@ -55,7 +60,7 @@ end
 #     return surrogate_elbo
 # end
 
-struct PathDerivativeELBO <: ELBOEstimator end
+struct PathDerivativeELBO <: ELBOEstimator end # requires differentiable model
 function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     q_ = update_params(q, no_grad(get_params(q)))

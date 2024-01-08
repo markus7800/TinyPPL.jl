@@ -580,3 +580,7 @@ _A = randn(3,3)
 A = Tracker.param(_A)
 Tracker.back!(log(det(transpose(A)*A)))
 all(Tracker.grad(A) .≈ 2*transpose(inv(_A)))
+
+A = Tracker.param(_A)
+Tracker.back!(log(abs(det(A))))
+all(Tracker.grad(A) .≈ transpose(inv(_A)))

@@ -4,6 +4,9 @@ import Distributions: entropy, MultivariateNormal
 
 const VariationalParameters = Union{Vector{Float64}, Tracker.TrackedVector{Float64, Vector{Float64}}}
 
+"""
+General interface for variational distributions.
+"""
 abstract type VariationalDistribution end
 export VariationalDistribution
 
@@ -32,12 +35,18 @@ function logpdf_param_grads(q::VariationalDistribution, x)
     error("Not implemented.")
 end
 
+
+"""
+MeanFieldGaussian
+Z ~ Normal(mu, Diagonal(exp(log_sigma)^2))
+"""
 struct MeanFieldGaussian <: VariationalDistribution
     mu::VariationalParameters
     log_sigma::VariationalParameters
     sigma::VariationalParameters
 end
 Base.show(io::IO, Q::MeanFieldGaussian) = print(io, "MeanFieldGaussian($(length(Q.mu)))")
+export MeanFieldGaussian
 
 function MeanFieldGaussian(K::Int)
     return MeanFieldGaussian(zeros(K), zeros(K), ones(K))
@@ -81,13 +90,17 @@ function Distributions.entropy(q::MeanFieldGaussian)
     return sum(log, q.sigma) + length(q.mu)/2 * (log(2π) + 1)
 end
 
+"""
+FullRankGaussian
+Z ~ Normal(mu, L*L')
+"""
 struct FullRankGaussian <: VariationalDistribution
     mu::VariationalParameters
     L::VariationalParameters
     base::Distributions.MultivariateNormal
 end
 Base.show(io::IO, Q::FullRankGaussian) = print(io, "FullRankGaussian($(length(Q.mu)))")
-
+export FullRankGaussian
 
 function FullRankGaussian(K::Int)
     mu = zeros(K)
@@ -142,6 +155,12 @@ function Distributions.entropy(q::FullRankGaussian)
     return K/2*(log(2π) + 1) + log(abs(prod(LinearAlgebra.diag(L))))
 end
 
+
+"""
+VariationalWrappedDistribution
+Wraps a standard Distributions.jl distribution with its parameters in unconstrained form.
+Implements logpdf_params_grads to compute parameter grads in closed form for input sample.
+"""
 abstract type VariationalWrappedDistribution <: VariationalDistribution end
 Base.show(io::IO, Q::VariationalWrappedDistribution) = print(io, "VariationalDistribution($(Q.base))")
 
@@ -166,6 +185,7 @@ struct VariationalNormal <: VariationalWrappedDistribution
     params::VariationalParameters # [mu, log_σ]
     base::Distributions.Normal
 end
+export VariationalNormal
 function VariationalNormal()
     return VariationalNormal([0., 0.], Distributions.Normal())
 end
@@ -183,6 +203,7 @@ struct VariationalGeometric <: VariationalWrappedDistribution
     params::VariationalParameters # [inv_sigmoid_p]
     base::Distributions.Geometric
 end
+export VariationalGeometric
 function VariationalGeometric()
     return VariationalGeometric([0.], Distributions.Geometric(sigmoid(0.)))
 end
@@ -198,14 +219,17 @@ end
 
 # TODO: add variational wrapped distributions
 
-export MeanFieldGaussian, FullRankGaussian
-export VariationalNormal, VariationalGeometric
-
 init_variational_distribution(::Distributions.ContinuousUnivariateDistribution) = VariationalNormal()
 init_variational_distribution(::Distributions.Geometric) = VariationalGeometric()
 export init_variational_distribution
 
 
+"""
+MeanField
+Wraps a vector of VariationalDistribution and combines their parameters.
+Useful if each random variable can be mapped to a fixed index and faciliates a
+mean-field approximation with arbitrary distributions for each variable.
+"""
 struct MeanField <: VariationalDistribution
     dists::Vector{VariationalDistribution}
     param_ixs::Vector{UnitRange{Int}}

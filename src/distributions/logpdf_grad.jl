@@ -1,5 +1,7 @@
 import SpecialFunctions: digamma
 
+# TODO: rewrite to VariationalWrappedDistribution
+
 # parameter gradients for BBVI
 
 function logpdf_params_grad(d::Distribution, x::Real)

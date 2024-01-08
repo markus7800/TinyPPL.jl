@@ -145,10 +145,12 @@ mutable struct StaticGuideScorer{T,V} <: StaticSampler
     phi::V
     X::AbstractStaticTrace
     function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Float64}) where {T <: Real, V <: AbstractVector{T}}
-        return new{eltype(phi),V}(0., params_to_ix, addresses_to_ix, phi, X)
+        # return new{eltype(phi),V}(0., params_to_ix, addresses_to_ix, phi, X)
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
     function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Tracker.TrackedVector{Float64,Vector{Float64}}) where {T <: Real, V <: AbstractVector{T}}
-        return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
+        # return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
     # function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Tracker.TrackedReal{Float64}}) where {T <: Real, V <: AbstractVector{T}}
     #     return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)

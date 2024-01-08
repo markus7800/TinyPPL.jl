@@ -5,7 +5,7 @@ import TinyPPL.Distributions: VariationalDistribution, VariationalNormal, get_pa
 const ContinuousUniversalTrace = Dict{Address,Float64}
 
 """
-Meanfield variational approximation. Each address gets its own variational distribution.
+Meanfield variational approximation. Maps address to variational distribution.
 It is just a wrapper for ADVI / BBVI results and not <: VariationalDistribution
 """
 struct UniversalMeanField

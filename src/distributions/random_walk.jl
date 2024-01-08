@@ -165,8 +165,6 @@ function Addr2Var(args...)
 end
 export Addr2Var
 
-export Addr2Proposal
-
 # using Plots
 # d = continuous_interval(-1, 3, 1.5, 0.5)
 # Distributions.mean(d)

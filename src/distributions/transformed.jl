@@ -1,6 +1,11 @@
 import Distributions: Distribution, ContinuousUnivariateDistribution, logpdf, support, RealInterval
-
 export RealInterval
+
+"""
+This file includes several f:ℝ → ℝ bijective transformations.
+The transformations implement a method to compute the log_abs_det_jacobian = log |d/dx f(x)|.
+There is also utilities to compute the support and image of transformations.
+"""
 
 abstract type Transform end
 
@@ -116,7 +121,7 @@ in_domain(t::AffineTransform, x::Real) = true
 domain(t::AffineTransform) = RealInterval(-Inf, Inf)
 image(t::AffineTransform, domain::RealInterval) = t.k > 0 ? RealInterval(t(domain.lb), t(domain.ub)) :  RealInterval(t(domain.ub), t(domain.lb))
 
-
+# composition of two transforms where t(x) = t2(t1(x))
 struct ComposeTransform <: Transform
     t1::Transform
     t2::Transform
@@ -139,7 +144,10 @@ in_domain(t::ComposeTransform, x::Real) = in_domain(t.t1, x) && in_domain(t.t2, 
 domain(t::ComposeTransform) = domain(t.t1)
 image(t::ComposeTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(domain.ub))
 
-# X ~ base, Y ~ T(X)
+"""
+if X ~ base then for Y=TransformedDistribution(base,T) Y ~ T(X)
+This wrapper essentially implements the probability density transform.
+"""
 struct TransformedDistribution <: ContinuousUnivariateDistribution
     base::ContinuousUnivariateDistribution
     T::Transform
@@ -158,6 +166,7 @@ function logpdf(t::TransformedDistribution, y::Real)::Real
     if !in_domain(t.T_inv, y) # !(y in support(t))
         return -Inf
     end
+    # probability density transform
     x = t.T_inv(y)
     return logpdf(t.base, x) + log_abs_det_jacobian(t.T_inv, y)
 end
@@ -166,7 +175,9 @@ function support(t::TransformedDistribution)
     return image(t.T, support(t.base))
 end
 
-
+"""
+Returns a transfomr that maps the given interval `supp` bijectively to ℝ
+"""
 function transform_to_unconstrained_from(supp::RealInterval)::Transform
     if supp.lb == -Inf && supp.ub == Inf
         return IdentityTransform()
@@ -193,11 +204,16 @@ function transform_to_unconstrained_from(supp::RealInterval)::Transform
 
 end
 
+"""
+Returns the transoform that maps ℝ bijectively to `interval`.
+"""
 function transform_to(interval::RealInterval)::Transform
     return inv(transform_to_unconstrained_from(interval))
 end
 
-
+"""
+Transforms a (constrained) distribution to an unconstrained distribution.
+"""
 function to_unconstrained(base::ContinuousUnivariateDistribution)::ContinuousUnivariateDistribution
     supp = support(base)
     transform = transform_to_unconstrained_from(supp)

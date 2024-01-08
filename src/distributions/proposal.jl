@@ -115,3 +115,5 @@ end
 function Addr2Proposal(d::Dict{Any,T}) where T <: ProposalDistribution
     return MostSpecificDict{ProposalDistribution}(d)
 end
+
+export Addr2Proposal
