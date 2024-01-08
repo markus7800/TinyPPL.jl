@@ -242,7 +242,12 @@ function Distributions.rand(q::MeanField)
     return Tracker.collectmemaybe(Distributions.rand.(q.dists))
 end
 function Distributions.rand(q::MeanField, n::Int)
-    return reduce(hcat, Distributions.rand(q) for _ in 1:n)
+    K = length(q.dists)
+    X = Array{Real}(undef, K, n) # TODO: Real here is ugly
+    for i in 1:n
+        X[:,i] = Distributions.rand(q)
+    end
+    return X
 end
 
 function Distributions.logpdf(q::MeanField, x)

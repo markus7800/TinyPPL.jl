@@ -127,7 +127,12 @@ function Distributions.rand(guide::StaticGuide)
 end
 
 function Distributions.rand(guide::StaticGuide, n::Int)
-    return reduce(hcat, Distributions.rand(guide) for _ in 1:n)
+    K = length(guide.sampler.addresses_to_ix)
+    X = Array{Real}(undef, K, n) # TODO: Real here is ugly
+    for i in 1:N
+        X[:,i] = Distributions.rand(guide)
+    end
+    return X
 end
 
 """

@@ -37,6 +37,6 @@ function bbvi(model::StaticModel, args::Tuple, observations::Observations, n_sam
     q = get_mixed_meanfield(model, args, observations, addresses_to_ix)
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
     _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
-    return StaticVIResult(result, addresses_to_ix, transform_to_constrained!)
+    return StaticVIResult(result, addresses_to_ix, _transform_to_constrained!)
 end
 export bbvi
