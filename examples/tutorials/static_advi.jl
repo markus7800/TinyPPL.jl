@@ -69,13 +69,13 @@ mean(posterior[:intercept]), mean(posterior[:slope])
 vi_result_meanfield.Q.mu
 
 Random.seed!(0)
-vi_result_meanfield_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO())
+vi_result_meanfield_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), RelativeEntropyELBO(), unconstrained=true)
 # is equivalent to advi_meanfield
 @assert all(vi_result_meanfield.Q.mu .≈ vi_result_meanfield_2.Q.mu)
 @assert all(vi_result_meanfield.Q.sigma .≈ vi_result_meanfield_2.Q.sigma)
 
 Random.seed!(0)
-vi_result_meanfield_3 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), MonteCarloELBO())
+vi_result_meanfield_3 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), MonteCarloELBO(), unconstrained=true)
 mu_meanfield_3, sigma_meanfield_3 = get_meanfield_parameters(vi_result_meanfield_3)
 # is equivalent to advi_meanfield
 @assert all(vi_result_meanfield.Q.mu .≈ mu_meanfield_3)
@@ -83,12 +83,12 @@ mu_meanfield_3, sigma_meanfield_3 = get_meanfield_parameters(vi_result_meanfield
 
 # PathDerivativeELBO works best, closes approximation
 Random.seed!(0)
-vi_result_pd = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
+vi_result_pd = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO(), unconstrained=true)
 maximum(abs, map_mu .- vi_result_pd.Q.mu)
 maximum(abs, map_sigma .- vi_result_pd.Q.sigma)
 
 Random.seed!(0)
-vi_result_pd_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), PathDerivativeELBO())
+vi_result_pd_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), PathDerivativeELBO(), unconstrained=true)
 mu_pd_2, sigma_pd_2 = get_meanfield_parameters(vi_result_pd_2)
 # is equivalent to MeanFieldGaussian(K), PathDerivativeELBO()
 @assert all(vi_result_pd.Q.mu .≈ mu_pd_2)
@@ -97,23 +97,24 @@ mu_pd_2, sigma_pd_2 = get_meanfield_parameters(vi_result_pd_2)
 # ReinforceELBO
 Random.seed!(0)
 vi_result_bbvi = bbvi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01)
-mu_pd_bbvi, sigma_pd_bbvi = get_meanfield_parameters(vi_result_pd_2)
+mu_pd_bbvi, sigma_pd_bbvi = get_meanfield_parameters(vi_result_bbvi)
+maximum(abs, map_mu .- mu_pd_bbvi)
+maximum(abs, map_sigma .- sigma_pd_bbvi)
 
 
 @ppl static function LinRegGuideStatic()
     mu1 = param("mu_intercept")
+    sigma1 = param("sigma_intercept", constraint=Positive()) # equivalent to sigma_1 = exp(param("omega_intercept"))
     mu2 = param("mu_slope")
-    sigma1 = param("sigma_intercept", constraint=Positive())
-    # equivalent to sigma_1 = exp(param("omega_intercept"))
-    sigma2 = param("sigma_slope", constraint=Positive())
-    # equivalent to sigma_2 = exp(param("omega_slope"))
+    sigma2 = param("sigma_slope", constraint=Positive())  # equivalent to sigma_2 = exp(param("omega_slope"))
+   
 
     {:intercept} ~ Normal(mu1, sigma1)
     {:slope} ~ Normal(mu2, sigma2)
 end
 
 Random.seed!(0)
-@time vi_result_guide = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), MonteCarloELBO())
+@time vi_result_guide = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), MonteCarloELBO(), unconstrained=true)
 mu_guide, sigma_guide = get_guide_parameters(vi_result_guide)
 # is equivalent to advi_meanfield
 @assert all(vi_result_meanfield.Q.mu .≈ mu_guide)
@@ -121,43 +122,42 @@ mu_guide, sigma_guide = get_guide_parameters(vi_result_guide)
 
 
 Random.seed!(0)
-@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO())
+@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=true)
 mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
 
 # TODO: figure out where we deviate numerially
 @assert all(vi_result_pd.Q.mu .≈ mu_guide_pd)
 @assert all(vi_result_pd.Q.sigma .≈ sigma_guide_pd)
 
-
 Random.seed!(0)
-@time vi_result_guide_bbvi = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), ReinforceELBO())
-mu_guide_bbvi, sigma_guide_bbiv = get_guide_parameters(vi_result_guide_pd)
-
-# TODO: figure out where we deviate numerially
-@assert all(mu_pd_bbvi .≈ mu_guide_bbvi)
-@assert all(sigma_pd_bbvi .≈ sigma_guide_bbiv)
-
+vi_result_pd = advi(LinRegStatic, (xs,), observations, 1000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO(), unconstrained=false)
 Random.seed!(0)
-vi_result_pd = advi(LinRegStatic, (xs,), observations, 10, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
-Random.seed!(0)
-@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 10, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO())
+@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 1000, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
 mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
-
 maximum(abs, mu_guide_pd .- vi_result_pd.Q.mu)
 maximum(abs, sigma_guide_pd .- vi_result_pd.Q.sigma)
 
+Random.seed!(0)
+vi_result_pd = advi(LinRegStatic, (xs,), observations, 1000, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), PathDerivativeELBO(), unconstrained=false)
+mu_pd, sigma_pd = get_meanfield_parameters(vi_result_pd)
+Random.seed!(0)
+@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 1000, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
+mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
+maximum(abs, mu_guide_pd .- mu_pd)
+maximum(abs, sigma_guide_pd .- sigma_pd)
+
+phi1 = vi_result_guide_pd.Q.sampler.phi
+phi2 = reduce(vcat,d.params for d in vi_result_pd.Q.dists)
+maximum(abs, phi1 .- phi2)
+
 
 
 Random.seed!(0)
-vi_result_bbvi = bbvi(LinRegStatic, (xs,), observations, 2, 2, 0.01)
-mu_pd_bbvi, sigma_pd_bbvi = get_meanfield_parameters(vi_result_pd_2)
-
-Random.seed!(0)
-@time vi_result_guide_bbvi = advi(LinRegStatic, (xs,), observations, 2, 2, 0.01, LinRegGuideStatic, (), ReinforceELBO())
-mu_guide_bbvi, sigma_guide_bbiv = get_guide_parameters(vi_result_guide_pd)
-
-maximum(abs, mu_pd_bbvi .- mu_guide_bbvi)
-maximum(abs, sigma_pd_bbvi .- sigma_guide_bbiv)
+@time vi_result_guide_bbvi = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), ReinforceELBO(), unconstrained=false)
+mu_guide_bbvi, sigma_guide_bbiv = get_guide_parameters(vi_result_guide_bbvi)
+# is equivalent to bbvi
+@assert all(mu_pd_bbvi .≈ mu_guide_bbvi)
+@assert all(sigma_pd_bbvi .≈ sigma_guide_bbiv)
 
 
 # ====== FullRank ======
@@ -168,10 +168,20 @@ maximum(abs, map_mu .- vi_result_fullrank.Q.mu)
 maximum(abs, map_Σ .- vi_result_fullrank.Q.base.Σ)
 
 Random.seed!(0)
-vi_result_fullrank_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO())
+vi_result_fullrank_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, FullRankGaussian(K), RelativeEntropyELBO(), unconstrained=true)
 # is equivalent to advi_fullrank
 @assert all(vi_result_fullrank.Q.mu .≈ vi_result_fullrank_2.Q.base.μ)
 @assert all(vi_result_fullrank.Q.base.Σ .≈ vi_result_fullrank_2.Q.base.Σ)
 
+# Note that for the special case of Gaussian distributions, RelativeEntropyELBO is equivalent to MonteCarloELBO
+# because the gradient of the reparemeterised sample does not depend on the sample
+# in short ∇ϕ log q(t(ζ,ϕ)|ϕ) = ∇ϕ entropy(q(.|ϕ))
+# ∇ log(1/sqrt(2π det(L*L'))) - (L ζ + μ - μ)' inv(L*L) * (L ζ + μ - μ) = ∇ log(1/sqrt(2π det(L*L'))) + ζ'ζ
+# entropy = const + 1/2 log(det(L*L'))
+# ∇L log(1/sqrt(2π det(L*L'))) = -diag(L) since ∇L log det(L*L') = 2 (L^{-1})^T = 2 diag(L)
+Random.seed!(0)
+vi_result_fullrank_3 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, FullRankGaussian(K), MonteCarloELBO(), unconstrained=true)
+@assert all(vi_result_fullrank.Q.mu .≈ vi_result_fullrank_3.Q.base.μ)
+@assert all(vi_result_fullrank.Q.base.Σ .≈ vi_result_fullrank_3.Q.base.Σ)
 
 

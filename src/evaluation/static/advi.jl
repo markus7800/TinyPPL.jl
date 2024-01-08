@@ -46,11 +46,28 @@ end
 
 import TinyPPL.Logjoint: advi_logjoint
 
-function advi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
-    logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+"""
+ADVI with variational distributions given `q`.
+Variational distribution is fitted by default to original model, but can also be fitted to unconstrained model,
+by setting `unconstrained = true`.
+ELBO is optimised with automatic differentiation (AD).
+"""
+function advi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64,
+    q::VariationalDistribution, estimator::ELBOEstimator;
+    unconstrained::Bool=false)
+
+    if unconstrained
+        logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+        _transform_to_constrained(X::AbstractUniversalTrace) = transform_to_constrained(X, model, args, observations)
+        _viresult_map! = _transform_to_constrained
+    else
+        logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+        _no_transform(X::AbstractUniversalTrace) = X, model(args, TraceSampler(X) , observations)
+        _viresult_map! = _no_transform
+    end
+
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
-    _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
-    return StaticVIResult(result, addresses_to_ix, _transform_to_constrained!)
+    return StaticVIResult(result, addresses_to_ix, _viresult_map!)
 end
 
 """

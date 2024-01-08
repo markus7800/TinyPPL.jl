@@ -571,3 +571,12 @@ Tracker.back!( -log(sqrt(2π * det(LL * LL'))))
 Tracker.grad.(L) # = ∇ entropy
 
 inv(Diagonal(Tracker.data(L)))
+
+
+import Tracker
+import LinearAlgebra: det, inv
+
+_A = randn(3,3)
+A = Tracker.param(_A)
+Tracker.back!(log(det(transpose(A)*A)))
+all(Tracker.grad(A) .≈ 2*transpose(inv(_A)))

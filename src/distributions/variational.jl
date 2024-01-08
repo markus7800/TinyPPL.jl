@@ -143,7 +143,7 @@ function Distributions.entropy(q::FullRankGaussian)
 end
 
 abstract type VariationalWrappedDistribution <: VariationalDistribution end
-Base.show(io::IO, Q::VariationalWrappedDistribution) = print(io, "VariationalDistribution($(length(Q.base)))")
+Base.show(io::IO, Q::VariationalWrappedDistribution) = print(io, "VariationalDistribution($(Q.base))")
 
 function rand_and_logpdf(q::VariationalWrappedDistribution)
     value = rand(q.base)

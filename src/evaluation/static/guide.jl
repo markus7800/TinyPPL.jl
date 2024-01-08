@@ -145,13 +145,13 @@ mutable struct StaticGuideScorer{T,V} <: StaticSampler
     function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Tracker.TrackedVector{Float64,Vector{Float64}}) where {T <: Real, V <: AbstractVector{T}}
         return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Tracker.TrackedReal{Float64}}) where {T <: Real, V <: AbstractVector{T}}
-        return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
-    end
-    # fall back
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::AbstractStaticTrace) where {T <: Real, V <: AbstractVector{T}}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
-    end
+    # function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Tracker.TrackedReal{Float64}}) where {T <: Real, V <: AbstractVector{T}}
+    #     return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
+    # end
+    # # fall back
+    # function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::AbstractStaticTrace) where {T <: Real, V <: AbstractVector{T}}
+    #     return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
+    # end
 end
 
 function sample(sampler::StaticGuideScorer, addr::Address, dist::Distribution, obs::RVValue)::RVValue
@@ -213,7 +213,7 @@ struct StaticVIParameters <: VIParameters
     params_to_ix::Param2Ix
 end
 function Base.show(io::IO, p::StaticVIParameters)
-    print(io, "VStaticVIParameters(")
+    print(io, "StaticVIParameters(")
     print(io, sort(collect(keys(p.params_to_ix)), lt = (x,y) -> first(p.params_to_ix[x]) < first(p.params_to_ix[y])))
     print(io, ")")
 end

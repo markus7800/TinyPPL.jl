@@ -118,7 +118,7 @@ import TinyPPL.Distributions: Transform, transform_to, to_unconstrained, support
 mutable struct StaticConstraintTransformer{T} <: StaticSampler
     addresses_to_ix::Addr2Ix
     X::T
-    Y::T
+    Y::T # inplace transformation Y = X is allowed, as the value of X[i] is only read once.
     to::Symbol
     function StaticConstraintTransformer(addresses_to_ix::Addr2Ix, X::T, Y::T; to::Symbol) where T <: AbstractStaticTrace
         @assert to in (:constrained, :unconstrained)
@@ -164,8 +164,6 @@ function transform_to_unconstrained!(X::AbstractStaticTrace, model::StaticModel,
     retval = model(args, sampler, constraints)
     return sampler.Y, retval
 end
-
-export transform_to_constrained, transform_to_unconstrained
 
 function transform_to_constrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
     sampler = StaticConstraintTransformer(addresses_to_ix, X, similar(X), to=:constrained)

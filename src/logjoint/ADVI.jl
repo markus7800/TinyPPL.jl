@@ -130,6 +130,7 @@ function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate
         # automatically compute gradient
         Tracker.back!(elbo)
         grad = Tracker.grad(phi_tracked)
+        # println(i, ": ", elbo)
 
         # decayed adagrad update rule
         acc = @. post * acc + pre * grad^2

@@ -29,11 +29,9 @@ struct ReinforceELBO <: ELBOEstimator end
 function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     q_ = update_params(q, no_grad(get_params(q)))
-    println(get_params(q))
     for _ in 1:L
         zeta = rand(q_)
-        println("zeta: ", zeta)
-        lpq = logpdf(q, zeta)
+        lpq = logpdf(q, zeta) # tracked q, untracked zeta
         no_grad_elbo = logjoint(zeta) - no_grad(lpq)
         @assert !Tracker.istracked(no_grad_elbo) zeta
         @assert Tracker.istracked(lpq)
@@ -65,7 +63,7 @@ function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalD
     for _ in 1:L
         zeta = rand(q)
         # println("zeta: ", zeta)
-        elbo += logjoint(zeta) - logpdf(q_, zeta)
+        elbo += logjoint(zeta) - logpdf(q_, zeta) # tracked zeta, untracked q
     end
     elbo = elbo / L
     return elbo
