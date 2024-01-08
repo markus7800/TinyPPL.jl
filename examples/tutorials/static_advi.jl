@@ -1,6 +1,5 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
-using TinyPPL.Logjoint
 import Random
 
 
@@ -12,12 +11,12 @@ begin
 #     return mu, sigma    
 # end
 
-# function get_guide_parameters(vi_result)
-#     p = get_constrained_parameters(vi_result.Q)
-#     mu = [p["mu_intercept"], p["mu_slope"]]
-#     sigma = [p["sigma_intercept"], p["sigma_slope"]]
-#     return mu, sigma    
-# end
+function get_guide_parameters(vi_result)
+    p = get_constrained_parameters(vi_result.Q)
+    mu = [p["mu_intercept"], p["mu_slope"]]
+    sigma = [p["sigma_intercept"], p["sigma_slope"]]
+    return mu, sigma    
+end
 
     # xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
     xs = [-1., -0.5, 0.0, 0.5, 1.0];
@@ -76,6 +75,36 @@ vi_result_meanfield_2 = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01
 @assert all(vi_result_meanfield.Q.mu .≈ vi_result_meanfield_2.Q.mu)
 @assert all(vi_result_meanfield.Q.sigma .≈ vi_result_meanfield_2.Q.sigma)
 
+# PathDerivativeELBO works best, closes approximation
+Random.seed!(0)
+vi_result_pd = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO())
+maximum(abs, map_mu .- vi_result_pd.Q.mu)
+maximum(abs, map_sigma .- vi_result_pd.Q.sigma)
+
+
+@ppl static function LinRegGuideStatic()
+    mu1 = param("mu_intercept")
+    mu2 = param("mu_slope")
+    sigma1 = param("sigma_intercept", constraint=Positive())
+    # equivalent to sigma_1 = exp(param("omega_intercept"))
+    sigma2 = param("sigma_slope", constraint=Positive())
+    # equivalent to sigma_2 = exp(param("omega_slope"))
+
+    {:intercept} ~ Normal(mu1, sigma1)
+    {:slope} ~ Normal(mu2, sigma2)
+end
+
+
+Random.seed!(0)
+@time vi_result_guide = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), MonteCarloELBO())
+mu_guide, sigma_guide = get_guide_parameters(vi_result_guide)
+# is equivalent to advi_meanfield
+@assert all(vi_result_meanfield.Q.mu .≈ mu_guide)
+@assert all(vi_result_meanfield.Q.sigma .≈ sigma_guide)
+
+
+# Random.seed!(0)
+# @time vi_result_guide = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO())
 
 # ====== FullRank ======
 

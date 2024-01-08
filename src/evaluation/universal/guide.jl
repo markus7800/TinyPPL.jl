@@ -3,12 +3,10 @@ import TinyPPL.Distributions: VariationalParameters
 
 """
 Samples values or reuses values of trace `X` and computes log Q(X).
-Parameters are used by indexing into `phi` with `addr`.
+Parameter name are directly mapped to their values in `phi`.
 If we encounter parameter with unknown address, then we add the new parameter to `phi`.
 Parameters are always initiliased to 0.
 Also, the parameter constraints are recorded which are assumed to be *static*.
-
-Alternative implementation: phi:: Dict{Address, Tracked} and do not implementation VariationalDistribution interface.
 """
 mutable struct UniversalGuideSampler{V} <: UniversalSampler
     W::Real                                 # log Q(X), type depends on the eltype of phi and X
@@ -61,9 +59,9 @@ import TinyPPL.Distributions: VariationalDistribution
 
 """
 Wraps `UniversalGuideSampler` and guide program.
-Implements VariationalDistribution interface.
+Implements similar interface to VariationalDistribution.
 """
-struct UniversalGuide <: VariationalDistribution
+struct UniversalGuide
     sampler::UniversalGuideSampler
     model::UniversalModel
     args::Tuple

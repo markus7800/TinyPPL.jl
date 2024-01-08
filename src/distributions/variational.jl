@@ -244,7 +244,7 @@ function Distributions.rand(q::MeanField)
     # return reduce(vcat, Distributions.rand(d) for d in q.dists; init=Float64[]) # hack to avoid Vector{Int}
 end
 function Distributions.rand(q::MeanField, n::Int)
-    return reduce(hcat, Distribution.rand(q) for _ in 1:n)
+    return reduce(hcat, Distributions.rand(q) for _ in 1:n)
 end
 
 function Distributions.logpdf(q::MeanField, x)

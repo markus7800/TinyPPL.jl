@@ -32,6 +32,12 @@ function get_addresses(model::StaticModel, args::Tuple, observations::Observatio
     return sampler.addresses
 end
 
+function get_number_of_latent_variables(model::StaticModel, args::Tuple, observations::Observations)
+    return length(get_addresses(model, args, observations))
+end
+export get_number_of_latent_variables
+
+
 """
 Maps each address to an unique index.
 """

@@ -28,10 +28,6 @@ function sample_posterior(::VIResult, n::Int)::Tuple{<:AbstractTraces,Vector{Flo
     error("Not implemented.")
 end
 
-
-import TinyPPL.Distributions: VariationalParameters
-const Param2Ix = Dict{Address, UnitRange{Int}}
-
 """
 Wrapper for VariationalParameters, which maps name to value.
 """

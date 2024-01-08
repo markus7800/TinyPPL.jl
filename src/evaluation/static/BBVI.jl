@@ -11,7 +11,7 @@ function sample(sampler::MeanFieldCollector, addr::Address, dist::Distribution, 
     if !isnothing(obs)
         return obs
     end
-    value = dist isa Distribution.DiscreteDistribution ? mode(dist) : mean(dist)
+    value = dist isa Distributions.DiscreteDistribution ? mode(dist) : mean(dist)
     ix = sampler.addresses_to_ix[addr]
     sampler.dists[ix] = init_variational_distribution(dist)
     return value

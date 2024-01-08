@@ -1,6 +1,13 @@
 import Distributions
-import TinyPPL.Distributions: mean, mode
+import TinyPPL.Distributions: mean, mode, VariationalParameters, VariationalDistribution
 
+const Param2Ix = Dict{Address, UnitRange{Int}}
+
+"""
+Collects all parameters in a model by executing it.
+Maps parameters to index in vector.
+Names are mapped to ranges i:j, where j-i+1 is the size of parameter vector for name.
+"""
 mutable struct ParametersCollector <: StaticSampler
     params_to_ix::Param2Ix
     params_size::Int
@@ -9,11 +16,11 @@ mutable struct ParametersCollector <: StaticSampler
     end
 end
 
-function sample(sampler::ParametersCollector, addr::Address, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::ParametersCollector, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         return obs
     end
-    return  dist isa Distribution.DiscreteDistribution ? mode(dist) : mean(dist)
+    return  dist isa Distributions.DiscreteDistribution ? mode(dist) : mean(dist)
 end
 
 function param(sampler::ParametersCollector, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
@@ -32,6 +39,8 @@ function get_params_to_ix(model::StaticModel, args::Tuple, observations::Dict)::
     return sampler.params_to_ix
 end
 
+import Tracker
+
 mutable struct StaticGuideSampler{T,V} <: StaticSampler
     W::T # depends on the eltype of phi
     params_to_ix::Param2Ix
@@ -43,10 +52,11 @@ mutable struct StaticGuideSampler{T,V} <: StaticSampler
     end
 end
 
-function sample(sampler::StaticGuideSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs) # TODO: assert no obs?
-        return obs
-    end
+function sample(sampler::StaticGuideSampler, addr::Address, dist::Distribution, obs::RVValue)::RVValue
+    error("A guide program should not have observed values")
+end
+
+function sample(sampler::StaticGuideSampler, addr::Address, dist::Distribution, obs::Nothing)::RVValue
     value = rand(dist)
     sampler.X[sampler.addresses_to_ix[addr]] = value
     sampler.W += logpdf(dist, value)
@@ -62,26 +72,24 @@ function param(sampler::StaticGuideSampler, addr::Address; size::Int=1, constrai
     end
 end
 
+"""
+Wraps `StaticGuideSampler` and guide program.
+Implements the VariationalDistribution interface.
+"""
 struct StaticGuide <: VariationalDistribution
     sampler::StaticGuideSampler
     model::StaticModel
     args::Tuple
-    observations::Dict
+    observations::Observations
 end
 
 # guide can be used for unconstrained and constrained logjoint
-function make_guide(model::StaticModel, args::Tuple, observations::Dict, addresses_to_ix::Addr2Ix)
-    params_to_ix = get_params_to_ix(model, args, observations)
+function make_guide(model::StaticModel, args::Tuple, addresses_to_ix::Addr2Ix)
+    params_to_ix = get_params_to_ix(model, args, Observations())
     N = sum(length(ix) for (_, ix) in params_to_ix)
     sampler = StaticGuideSampler(params_to_ix, addresses_to_ix, zeros(N))
-    return StaticGuide(sampler, model, args, observations)
+    return StaticGuide(sampler, model, args, Observations())
 end
-
-# import TinyPPL.Distributions: initial_params
-# function initial_params(guide::Guide)::AbstractVector{<:Float64}
-#     nparams = sum(length(ix) for (_, ix) in guide.sampler.params_to_ix)
-#     return zeros(nparams)
-# end
 
 import TinyPPL.Distributions: get_params
 function get_params(q::StaticGuide)::AbstractVector{<:Real}
@@ -89,7 +97,7 @@ function get_params(q::StaticGuide)::AbstractVector{<:Real}
 end
 
 import TinyPPL.Distributions: update_params
-function update_params(guide::StaticGuide, params::AbstractVector{<:Float64})::VariationalDistribution
+function update_params(guide::StaticGuide, params::VariationalParameters)::VariationalDistribution
     # since StaticGuideSampler is generic type, we freshly instantiate
     new_sampler = StaticGuideSampler(guide.sampler.params_to_ix, guide.sampler.addresses_to_ix, params)
     return StaticGuide(new_sampler, guide.model, guide.args, guide.observations)
@@ -108,7 +116,6 @@ function Distributions.rand(guide::StaticGuide)
     return guide.sampler.X
 end
 
-# TODO?
 # function Distributions.logpdf(guide::StaticGuide, X)
 #     guide.sampler.W = 0.0
 #     guide.sampler.X = X
@@ -117,12 +124,16 @@ end
 # end
 
 function Distributions.rand(guide::StaticGuide, n::Int)
-    return reduce(hcat, Distribution.rand(guide) for _ in 1:n)
+    return reduce(hcat, Distributions.rand(guide) for _ in 1:n)
 end
 
 
 export make_guide
 
+"""
+For parameters `phi`, run the model and transform them accorinding to their static constraints.
+Result is stored in `transformed_phi`.
+"""
 mutable struct StaticParameterTransformer <: StaticSampler
     phi::VariationalParameters
     params_to_ix::Param2Ix
@@ -132,11 +143,8 @@ mutable struct StaticParameterTransformer <: StaticSampler
     end
 end
 
-function sample(sampler::StaticParameterTransformer, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
-    if !isnothing(obs)
-        return obs
-    end
-    return dist isa Distribution.DiscreteDistribution ? mode(dist) : mean(dist)
+function sample(sampler::StaticParameterTransformer, addr::Address, dist::Distribution, obs::Nothing)::RVValue
+    return dist isa Distributions.DiscreteDistribution ? mode(dist) : mean(dist)
 end
 
 function param(sampler::StaticParameterTransformer, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
@@ -151,26 +159,23 @@ function param(sampler::StaticParameterTransformer, addr::Address; size::Int=1, 
 end
 
 
-# struct VIParameters
-#     phi::VariationalParameters
-#     params_to_ix::Param2Ix
-# end
-# function Base.show(io::IO, p::VIParameters)
-#     print(io, "VIParameters(")
-#     print(io, sort(collect(keys(p.params_to_ix)), lt = (x,y) -> first(p.params_to_ix[x]) < first(p.params_to_ix[y])))
-#     print(io, ")")
-# end
-# function Base.getindex(p::VIParameters, i::Int)
-#     return p.phi[i]
-# end
-# function Base.getindex(p::VIParameters, addr::Any)
-#     ix = p.params_to_ix[addr]
-#     if length(ix) == 1
-#         return p.phi[ix[1]]
-#     else
-#         return p.phi[ix]
-#     end
-# end
+struct StaticVIParameters <: VIParameters
+    phi::VariationalParameters
+    params_to_ix::Param2Ix
+end
+function Base.show(io::IO, p::StaticVIParameters)
+    print(io, "VStaticVIParameters(")
+    print(io, sort(collect(keys(p.params_to_ix)), lt = (x,y) -> first(p.params_to_ix[x]) < first(p.params_to_ix[y])))
+    print(io, ")")
+end
+function Base.getindex(p::StaticVIParameters, addr::Address)
+    ix = p.params_to_ix[addr]
+    if length(ix) == 1
+        return p.phi[ix[1]]
+    else
+        return p.phi[ix]
+    end
+end
 
 """
 Extracts parameters of guide and transforms them to the specified constraints.
@@ -178,7 +183,7 @@ Extracts parameters of guide and transforms them to the specified constraints.
 function get_constrained_parameters(guide::StaticGuide)
     sampler = StaticParameterTransformer(guide)
     guide.model(guide.args, sampler, guide.observations)
-    return VIParameters(sampler.transformed_phi, guide.sampler.params_to_ix)
+    return StaticVIParameters(sampler.transformed_phi, guide.sampler.params_to_ix)
 end
 
 export get_constrained_parameters

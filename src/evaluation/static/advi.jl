@@ -53,18 +53,31 @@ function advi(model::StaticModel, args::Tuple, observations::Observations, n_sam
     return StaticVIResult(result, addresses_to_ix, _transform_to_constrained!)
 end
 
-function advi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64, guide::StaticModel, guide_args::Tuple, estimator::ELBOEstimator)
-    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
-    q = make_guide(guide, guide_args, Dict(), addresses_to_ix)
+"""
+ADVI with variational distributions given by guide program.
+Guide has to provide values in the correct support (absolute continuity).
+Guide is fitted by default to original model, but can also be fitted to unconstrained model,
+by setting `unconstrained = true`.
+ELBO is optimised with automatic differentiation (AD).
+"""
+function advi(model::StaticModel, args::Tuple, observations::Observations,
+    n_samples::Int, L::Int, learning_rate::Float64,
+    guide::StaticModel, guide_args::Tuple, estimator::ELBOEstimator;
+    unconstrained::Bool=false)
+
+    if unconstrained
+        logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+        _transform_to_constrained(X::AbstractUniversalTrace) = transform_to_constrained(X, model, args, observations)
+        _viresult_map! = _transform_to_constrained
+    else
+        logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+        _no_transform(X::AbstractUniversalTrace) = X, model(args, TraceSampler(X) , observations)
+        _viresult_map! = _no_transform
+    end
+
+    q = make_guide(guide, guide_args, addresses_to_ix)
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
-    # guide has to propose in correct support
-    # if you want to fit guide to unconstrained model you have to do it manually and transform to constrained
-    return StaticVIResult(result, addresses_to_ix, identity)
+    return StaticVIResult(result, addresses_to_ix, _viresult_map!)
 end
 
 export advi_meanfield, advi_fullrank, advi
-
-function get_number_of_latent_variables(model::StaticModel, args::Tuple, observations::Observations)
-    return length(get_addresses(model, args, observations))
-end
-export get_number_of_latent_variables
