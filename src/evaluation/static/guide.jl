@@ -41,14 +41,22 @@ end
 
 import Tracker
 
+"""
+For given parameteers `phi` this sampler generates a trace into `X`.
+Type-optimised for generating (tracked) samples.
+Cannot evaluate logjoint in contrast to UniversalGuideSampler.
+"""
 mutable struct StaticGuideSampler{T,V} <: StaticSampler
     W::T # depends on the eltype of phi
     params_to_ix::Param2Ix
     addresses_to_ix::Addr2Ix
     phi::V
     X::Vector{T}
-    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where {T <: Real, V <: AbstractVector{T}}
-        return new{eltype(V),V}(0., params_to_ix, addresses_to_ix, phi, zeros(eltype(phi), length(addresses_to_ix)))
+    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{Float64}
+        return new{Float64,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Float64,length(addresses_to_ix)))
+    end
+    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Tracker.TrackedVector{Float64,Vector{Float64}}
+        return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
     end
 end
 
@@ -82,6 +90,7 @@ struct StaticGuide <: VariationalDistribution
     args::Tuple
     observations::Observations
 end
+Base.show(io::IO, guide::StaticGuide) = print(io, "Guide($(guide.model.f))")
 
 # guide can be used for unconstrained and constrained logjoint
 function make_guide(model::StaticModel, args::Tuple, addresses_to_ix::Addr2Ix)
@@ -90,6 +99,7 @@ function make_guide(model::StaticModel, args::Tuple, addresses_to_ix::Addr2Ix)
     sampler = StaticGuideSampler(params_to_ix, addresses_to_ix, zeros(N))
     return StaticGuide(sampler, model, args, Observations())
 end
+export make_guide
 
 import TinyPPL.Distributions: get_params
 function get_params(q::StaticGuide)::AbstractVector{<:Real}
@@ -113,22 +123,61 @@ end
 function Distributions.rand(guide::StaticGuide)
     guide.sampler.W = 0.0
     guide.model(guide.args, guide.sampler, guide.observations)
-    return guide.sampler.X
+    return Tracker.collectmemaybe(guide.sampler.X)
 end
-
-# function Distributions.logpdf(guide::StaticGuide, X)
-#     guide.sampler.W = 0.0
-#     guide.sampler.X = X
-#     guide.model(guide.args, guide.sampler, guide.observations)
-#     return guide.sampler.W
-# end
 
 function Distributions.rand(guide::StaticGuide, n::Int)
     return reduce(hcat, Distributions.rand(guide) for _ in 1:n)
 end
 
+"""
+For given parameteers `phi` this sampler scores a trace `X`.
+"""
+mutable struct StaticGuideScorer{T,V} <: StaticSampler
+    W::T
+    params_to_ix::Param2Ix
+    addresses_to_ix::Addr2Ix
+    phi::V
+    X::AbstractStaticTrace
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Float64}) where {T <: Real, V <: AbstractVector{T}}
+        return new{eltype(phi),V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Tracker.TrackedVector{Float64,Vector{Float64}}) where {T <: Real, V <: AbstractVector{T}}
+        return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Tracker.TrackedReal{Float64}}) where {T <: Real, V <: AbstractVector{T}}
+        return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
+    # fall back
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::AbstractStaticTrace) where {T <: Real, V <: AbstractVector{T}}
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
+end
 
-export make_guide
+function sample(sampler::StaticGuideScorer, addr::Address, dist::Distribution, obs::RVValue)::RVValue
+    error("A guide program should not have observed values")
+end
+
+function sample(sampler::StaticGuideScorer, addr::Address, dist::Distribution, obs::Nothing)::RVValue
+    value = sampler.X[sampler.addresses_to_ix[addr]]
+    sampler.W += logpdf(dist, value)
+    return value
+end
+
+function param(sampler::StaticGuideScorer, addr::Address; size::Int=1, constraint::ParamConstraint=Unconstrained())
+    ix = sampler.params_to_ix[addr]
+    if size == 1
+        return constrain_param(constraint, sampler.phi[ix[1]])
+    else
+        return constrain_param(constraint, sampler.phi[ix])
+    end
+end
+
+function Distributions.logpdf(guide::StaticGuide, X::AbstractStaticTrace)
+    scorer = StaticGuideScorer(guide.sampler.params_to_ix, guide.sampler.addresses_to_ix, guide.sampler.phi, X)
+    guide.model(guide.args, scorer, guide.observations)
+    return scorer.W
+end
 
 """
 For parameters `phi`, run the model and transform them accorinding to their static constraints.

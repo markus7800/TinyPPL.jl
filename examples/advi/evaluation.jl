@@ -20,12 +20,9 @@ intercept_prior_sigma = 3
 m0 = [0., 0.]
 S0 = [intercept_prior_sigma^2 0.; 0. slope_prior_sigma^2]
 Phi = hcat(fill(1., length(xs)), xs)
-S = inv(inv(S0) + Phi'Phi / σ^2) 
-map_mu = S*(inv(S0) * m0 + Phi'ys / σ^2)
-
-map_Σ = S
-map_mu
-map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
+map_Σ = inv(inv(S0) + Phi'Phi / σ^2) 
+map_mu = map_Σ*(inv(S0) * m0 + Phi'ys / σ^2)
+map_sigma = [sqrt(map_Σ[1,1]), sqrt(map_Σ[2,2])]
 
 @ppl static function LinRegStatic(xs)
     intercept = {:intercept} ~ Normal(intercept_prior_mean, intercept_prior_sigma)
@@ -39,7 +36,7 @@ map_sigma = [sqrt(S[1,1]), sqrt(S[2,2])]
     return (slope, intercept)
 end
 
-observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
+observations = Observations((:y, i) => y for (i, y) in enumerate(ys));
 ulj = Evaluation.make_unconstrained_logjoint(LinRegStatic, (xs,), observations)
 addresses_to_ix = get_address_to_ix(LinRegStatic, (xs,), observations)
 K = length(addresses_to_ix)
@@ -267,7 +264,7 @@ end
     {:slope} ~ Normal(mu2, sigma2)
 end
 
-observations = Dict((:y, i) => y for (i, y) in enumerate(ys));
+observations = Observations((:y, i) => y for (i, y) in enumerate(ys));
 
 Random.seed!(0)
 vi_result = advi_meanfield(LinReg, (xs,), observations,  10_000, 10, 0.01)
@@ -566,7 +563,7 @@ Tracker.grad.(μ) # = ∇ entropy
 Tracker.grad.(L) # = ∇ entropy
 
 # ∇ log(1/sqrt(2π det(L*L'))) - (L ζ + μ - μ)' inv(L*L) * (L ζ + μ - μ)
-# d/dω log(1/sqrt(2π exp(ω)^2)) = -1
+# d/dω log(1/sqrt(2π det(L*L'))) = -1/diag(L)
 
 L = Tracker.param.([2 0 0; 1 2 0; 0 1 2])
 LL = LowerTriangular(L)

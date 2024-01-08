@@ -239,9 +239,7 @@ function rand_and_logpdf(q::MeanField)
 end
 function Distributions.rand(q::MeanField)
     # assume univariate q.dists
-    # TODO: i think we can remove hack now, with new constraint transformer
-    return vcat(Distributions.rand.(q.dists), Float64[]) # hack to avoid Vector{Int}
-    # return reduce(vcat, Distributions.rand(d) for d in q.dists; init=Float64[]) # hack to avoid Vector{Int}
+    return Tracker.collectmemaybe(Distributions.rand.(q.dists))
 end
 function Distributions.rand(q::MeanField, n::Int)
     return reduce(hcat, Distributions.rand(q) for _ in 1:n)

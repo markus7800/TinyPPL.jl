@@ -2,6 +2,10 @@
 import TinyPPL.Distributions: MeanField, init_variational_distribution, mean, mode
 import TinyPPL.Distributions: ReinforceELBO
 
+"""
+Determine variational distribution for each address.
+Assumes that distribution type is static for each address,
+"""
 struct MeanFieldCollector <: StaticSampler
     dists::Vector{VariationalDistribution}
     addresses_to_ix::Addr2Ix
@@ -23,10 +27,16 @@ function get_mixed_meanfield(model::StaticModel, args::Tuple, observations::Obse
 end
 export get_mixed_meanfield
 
+"""
+BBVI, where we fit unconstrained model.
+VariationalDistributions are automatically determined with MeanFieldCollector, which uses init_variational_distribution.
+This method *uses* AD to compute gradient of REINFORCE approximation.
+"""
 function bbvi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64)
-    ulj = make_unconstrained_logjoint(model, args, observations)
-    q = get_mixed_meanfield(model, args, observations, ulj.addresses_to_ix)
-    result = advi_logjoint(ulj.logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
-    return StaticVIResult(result, ulj.addresses_to_ix, ulj.transform_to_constrained!)
+    logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+    q = get_mixed_meanfield(model, args, observations, addresses_to_ix)
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
+    _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
+    return StaticVIResult(result, addresses_to_ix, transform_to_constrained!)
 end
 export bbvi
