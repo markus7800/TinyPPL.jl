@@ -1,6 +1,7 @@
 import TinyPPL.Distributions: Normal
 import ProgressLogging: @progress
 
+# Several backends which compute gradient of logjoint.
 import Tracker
 function get_grad_U_tracker(logjoint::Function)
     function grad_U(X::Vector{Float64})
@@ -50,6 +51,10 @@ function leapfrog(
     return X, -P
 end
 
+"""
+Hamiltonian Monte Carlo with potential function -logjoint, number of variables `K`
+trajectory length `L` and leapfrog step-size `eps`.
+"""
 function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::Float64; ad_backend::Symbol=:tracker)
     if ad_backend == :tracker
         grad_U = get_grad_U_tracker(logjoint)
