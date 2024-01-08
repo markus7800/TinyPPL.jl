@@ -1,14 +1,27 @@
-
-mutable struct StaticLogJointSampler{T} <: StaticSampler
+"""
+Accumulates the log density log p(X,Y) for input trace `X`.
+"""
+mutable struct StaticLogJointSampler{T,V} <: StaticSampler
     W::T
     addresses_to_ix::Addr2Ix
-    X::AbstractVector{T}
-    function StaticLogJointSampler(addresses_to_ix::Addr2Ix, X::AbstractVector{T}) where T <: Real
-        return new{T}(0., addresses_to_ix, X)
+    X::V
+    # type-optimised constructors
+    function StaticLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where V <: Vector{Float64}
+        return new{Float64,V}(0., addresses_to_ix, X)
+    end
+    function StaticLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where V <: Tracker.TrackedVector{Float64, Vector{Float64}}
+        return new{Tracker.TrackedReal{Float64},V}(0., addresses_to_ix, X)
+    end
+    function StaticLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where V <: Vector{Tracker.TrackedReal{Float64}}
+        return new{Tracker.TrackedReal{Float64},V}(0., addresses_to_ix, X)
+    end
+    # fall back
+    function StaticLogJointSampler(addresses_to_ix::Addr2Ix, X::AbstractStaticTrace)
+        return new{Real,typeof(X)}(0., addresses_to_ix, X)
     end
 end
 
-function sample(sampler::StaticLogJointSampler, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::StaticLogJointSampler, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         sampler.W += logpdf(dist, obs)
         return obs
@@ -19,32 +32,110 @@ function sample(sampler::StaticLogJointSampler, addr::Any, dist::Distribution, o
     return value
 end
 
-function make_logjoint(model::StaticModel, args::Tuple, observations::Dict)
-    addresses = get_addresses(model, args, observations)
-    addresses_to_ix = get_address_to_ix(addresses)
-    function logjoint(X::AbstractVector{<:Real})
+"""
+Transforms a static model to a function which takes as input an static trace `X`
+and returns the log density log p(X,Y).
+Closes over args and observations Y.
+"""
+function make_logjoint(model::StaticModel, args::Tuple, observations::Observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    function logjoint(X::AbstractStaticTrace)
         sampler = StaticLogJointSampler(addresses_to_ix, X)
         model(args, sampler, observations)
         return sampler.W
     end
-    return logjoint, addresses_to_ix # TODO: type?
+    return logjoint, addresses_to_ix
+end
+
+
+
+import Tracker
+"""
+Accumulates the log density log p(T(X),Y) + log abs det ∇T(X) for input trace `X`.
+The values of continuous distributions are assumed to be unconstrained and are mapped
+to the support via a transformation T.
+"""
+mutable struct StaticUnconstrainedLogJointSampler{T,V} <: StaticSampler
+    W::T
+    addresses_to_ix::Addr2Ix
+    X::V
+    # type-optimised constructors
+    function StaticUnconstrainedLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where V <: Vector{Float64}
+        return new{Float64,V}(0., addresses_to_ix, X)
+    end
+    function StaticUnconstrainedLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where V <: Tracker.TrackedVector{Float64, Vector{Float64}}
+        return new{Tracker.TrackedReal{Float64},V}(0., addresses_to_ix, X)
+    end
+    function StaticUnconstrainedLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where V <: Vector{Tracker.TrackedReal{Float64}}
+        return new{Tracker.TrackedReal{Float64},V}(0., addresses_to_ix, X)
+    end
+    # fall back
+    function StaticUnconstrainedLogJointSampler(addresses_to_ix::Addr2Ix, X::AbstractStaticTrace)
+        return new{Real,typeof(X)}(0., addresses_to_ix, X)
+    end
+end
+function sample(sampler::StaticUnconstrainedLogJointSampler, addr::Address, dist::Distributions.DiscreteDistribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        sampler.W += logpdf(dist, obs)
+        return obs
+    end
+    value = sampler.X[sampler.addresses_to_ix[addr]]
+    sampler.W += logpdf(dist, value)
+    return value
+end
+function sample(sampler::StaticUnconstrainedLogJointSampler, addr::Address, dist::Distributions.ContinuousDistribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        sampler.W += logpdf(dist, obs)
+        return obs
+    end
+    unconstrained_value = sampler.X[sampler.addresses_to_ix[addr]]
+    transformed_dist = to_unconstrained(dist)
+    sampler.W += logpdf(transformed_dist, unconstrained_value)
+    constrained_value = transformed_dist.T_inv(unconstrained_value)
+    return constrained_value
+end
+
+"""
+Transforms a universal model to a function which takes as input an universal trace `X`
+and returns the log density log p(T(X),Y) + log abs det ∇T(X).
+Closes over args and observations Y.
+"""
+function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observations::Observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+
+    function logjoint(X::AbstractStaticTrace)
+        sampler = StaticUnconstrainedLogJointSampler(addresses_to_ix, X)
+        model(args, sampler, observations)
+        return sampler.W
+    end
+
+    return logjoint, addresses_to_ix
 end
 
 
 import TinyPPL.Distributions: Transform, transform_to, to_unconstrained, support
 
-mutable struct ConstraintTransformer{T} <: StaticSampler
+mutable struct StaticConstraintTransformer{T} <: StaticSampler
     addresses_to_ix::Addr2Ix
     X::T
     Y::T
     to::Symbol
-    function ConstraintTransformer(addresses_to_ix::Addr2Ix, X::T, Y::T; to::Symbol) where T <: AbstractVector{Float64}
+    function StaticConstraintTransformer(addresses_to_ix::Addr2Ix, X::T, Y::T; to::Symbol) where T <: AbstractStaticTrace
         @assert to in (:constrained, :unconstrained)
         return new{T}(addresses_to_ix, X, Y, to)
     end
 end 
+function sample(sampler::StaticConstraintTransformer, addr::Address, dist::Distributions.DiscreteDistribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        return obs
+    end
+    i = sampler.addresses_to_ix[addr]
+    value = sampler.X[i]
+    sampler.Y[i] = value
+    return value
+end
 
-function sample(sampler::ConstraintTransformer, addr::Any, dist::Distribution, obs::Union{Nothing, Real})::Real
+function sample(sampler::StaticConstraintTransformer, addr::Address, dist::Distributions.ContinuousDistribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         return obs
     end
@@ -62,81 +153,30 @@ function sample(sampler::ConstraintTransformer, addr::Any, dist::Distribution, o
     return constrained_value
 end
 
-mutable struct StaticUnconstrainedLogJointSampler{T,V} <: StaticSampler
-    W::T
-    addresses_to_ix::Addr2Ix
-    X::V
-    # TODO: handle T = Int
-    function StaticUnconstrainedLogJointSampler(addresses_to_ix::Addr2Ix, X::V) where {T <: Real, V <: AbstractVector{T}}
-        return new{eltype(V),V}(0., addresses_to_ix, X)
-    end
-end
-function sample(sampler::StaticUnconstrainedLogJointSampler, addr::Any, dist::Distributions.DiscreteDistribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs)
-        sampler.W += logpdf(dist, obs)
-        return obs
-    end
-    value = sampler.X[sampler.addresses_to_ix[addr]]
-    sampler.W += logpdf(dist, value)
-    return value
-end
-function sample(sampler::StaticUnconstrainedLogJointSampler, addr::Any, dist::Distributions.ContinuousDistribution, obs::Union{Nothing, Real})::Real
-    if !isnothing(obs)
-        sampler.W += logpdf(dist, obs)
-        return obs
-    end
-    unconstrained_value = sampler.X[sampler.addresses_to_ix[addr]]
-    transformed_dist = to_unconstrained(dist)
-    sampler.W += logpdf(transformed_dist, unconstrained_value)
-    constrained_value = transformed_dist.T_inv(unconstrained_value)
-    return constrained_value
+function transform_to_constrained!(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+    sampler = StaticConstraintTransformer(addresses_to_ix, X, X, to=:constrained)
+    retval = model(args, sampler, constraints)
+    return sampler.Y, retval
 end
 
-struct UnconstrainedLogJoint
-    addresses_to_ix::Addr2Ix
-    logjoint::Function
-    transform_to_constrained!::Function
-    transform_to_unconstrained!::Function
+function transform_to_unconstrained!(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+    sampler = StaticConstraintTransformer(addresses_to_ix,  X, X, to=:unconstrained)
+    retval = model(args, sampler, constraints)
+    return sampler.Y, retval
 end
 
-function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observations::Dict)
-    addresses = get_addresses(model, args, observations)
-    addresses_to_ix = get_address_to_ix(addresses)
+export transform_to_constrained, transform_to_unconstrained
 
-    # TODO: only input matrix, if distributions (e.g. support) is also static
-    function transform_to_constrained!(X::AbstractArray{Float64})
-        if ndims(X) == 2
-            for i in axes(X,2)
-                X_i = view(X, :, i)
-                sampler = ConstraintTransformer(addresses_to_ix, X_i, X_i, to=:constrained)
-                model(args, sampler, observations)
-            end
-        else
-            sampler = ConstraintTransformer(addresses_to_ix, X, X, to=:constrained)
-            model(args, sampler, observations)
-        end
-        return X
-    end
-
-    function transform_to_unconstrained!(X::AbstractArray{Float64})
-        if ndims(X) == 2
-            for i in axes(X,2)
-                X_i = view(X, :, i)
-                sampler = ConstraintTransformer(addresses_to_ix,  X_i, X_i, to=:unconstrained)
-                model(args, sampler, observations)
-            end
-        else
-            sampler = ConstraintTransformer(addresses_to_ix, X, X, to=:unconstrained)
-            model(args, sampler, observations)
-        end
-        return X
-    end
-
-    function logjoint(X::AbstractVector{<:Real})
-        sampler = StaticUnconstrainedLogJointSampler(addresses_to_ix, X)
-        model(args, sampler, observations)
-        return sampler.W
-    end
-
-    return UnconstrainedLogJoint(addresses_to_ix, logjoint, transform_to_constrained!, transform_to_unconstrained!)
+function transform_to_constrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+    sampler = StaticConstraintTransformer(addresses_to_ix, X, similar(X), to=:constrained)
+    retval = model(args, sampler, constraints)
+    return sampler.Y, retval
 end
+
+function transform_to_unconstrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+    sampler = StaticConstraintTransformer(addresses_to_ix,  X, similar(X), to=:unconstrained)
+    retval = model(args, sampler, constraints)
+    return sampler.Y, retval
+end
+
+export transform_to_constrained, transform_to_unconstrained

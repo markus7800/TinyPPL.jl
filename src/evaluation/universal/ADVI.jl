@@ -51,7 +51,7 @@ Transforms values to constrained model in `sample_posterior` if required.
 """
 struct UniversalVIResult <: VIResult
     Q::Union{UniversalMeanField, UniversalGuide}
-    transform_to_constrained::Function # AbstractUniversalTrace -> Tuple{Vector{<:AbstractUniversalTrace}, Vector{Any}}
+    transform_to_constrained::Function # AbstractUniversalTrace -> Tuple{<:AbstractUniversalTrace}, Any}
 end
 function Base.show(io::IO, vi_result::UniversalVIResult)
     if vi_result.Q isa UniversalGuide

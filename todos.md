@@ -14,6 +14,9 @@ TODOS:
 - param transform reuse transform.jl? transform_to RealInterval
 - remove observations from guide? can be passed as argument instead
 - HMC find eps ala mcmcgallery
+- constraints::Observations -> observations::Observations
+
+- param syntax: p = {:p => i} ∈ ℝ^n = init (0,∞)^n etc \bbR
 
 - rjmcmc
 - smc (graph ok / universial with channels?)
@@ -23,6 +26,9 @@ TODOS:
 - universal
 - IS Proposal and Guide
 - MH with Guide
+- Nonparametric HMC
+
+- model learning -> maximising log p(Y)
 
 TinyGen:
 - one sampler:

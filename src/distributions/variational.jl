@@ -37,6 +37,7 @@ struct MeanFieldGaussian <: VariationalDistribution
     log_sigma::VariationalParameters
     sigma::VariationalParameters
 end
+Base.show(io::IO, Q::MeanFieldGaussian) = print(io, "MeanFieldGaussian($(length(Q.mu)))")
 
 function MeanFieldGaussian(K::Int)
     return MeanFieldGaussian(zeros(K), zeros(K), ones(K))
@@ -85,6 +86,8 @@ struct FullRankGaussian <: VariationalDistribution
     L::VariationalParameters
     base::Distributions.MultivariateNormal
 end
+Base.show(io::IO, Q::FullRankGaussian) = print(io, "FullRankGaussian($(length(Q.mu)))")
+
 
 function FullRankGaussian(K::Int)
     mu = zeros(K)
@@ -140,6 +143,7 @@ function Distributions.entropy(q::FullRankGaussian)
 end
 
 abstract type VariationalWrappedDistribution <: VariationalDistribution end
+Base.show(io::IO, Q::VariationalWrappedDistribution) = print(io, "VariationalDistribution($(length(Q.base)))")
 
 function rand_and_logpdf(q::VariationalWrappedDistribution)
     value = rand(q.base)
@@ -206,6 +210,7 @@ struct MeanField <: VariationalDistribution
     dists::Vector{VariationalDistribution}
     param_ixs::Vector{UnitRange{Int}}
 end
+Base.show(io::IO, Q::MeanField) = print(io, "MeanField($(length(Q.dists)))")
 function MeanField(dists::Vector{<:VariationalDistribution})
     param_ixs = Vector{UnitRange{Int}}(undef, length(dists))
     ix = 1
@@ -234,6 +239,7 @@ function rand_and_logpdf(q::MeanField)
 end
 function Distributions.rand(q::MeanField)
     # assume univariate q.dists
+    # TODO: i think we can remove hack now, with new constraint transformer
     return vcat(Distributions.rand.(q.dists), Float64[]) # hack to avoid Vector{Int}
     # return reduce(vcat, Distributions.rand(d) for d in q.dists; init=Float64[]) # hack to avoid Vector{Int}
 end

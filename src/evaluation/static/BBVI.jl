@@ -1,5 +1,6 @@
 
 import TinyPPL.Distributions: MeanField, init_variational_distribution, mean, mode
+import TinyPPL.Distributions: ReinforceELBO
 
 struct MeanFieldCollector <: StaticSampler
     dists::Vector{VariationalDistribution}

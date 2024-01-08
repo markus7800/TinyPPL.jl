@@ -47,7 +47,6 @@ end
 
 """
 Sets up addresses_to_ix such that address in `first` are index before other addresses in `all`.
-
 """
 function get_address_to_ix(first::Addresses, all::Addresses)::Addr2Ix
     @assert first ⊆ all

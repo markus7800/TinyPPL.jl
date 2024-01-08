@@ -32,6 +32,7 @@ function make_logjoint(model::UniversalModel, args::Tuple, observations::Observa
         return sampler.W
     end
 end
+
 """
 Accumulates the log density log p(T(X),Y) + log abs det ∇T(X) for input trace `X`.
 The values of continuous distributions are assumed to be unconstrained and are mapped
@@ -110,7 +111,7 @@ function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Di
     if !isnothing(obs)
         return obs
     end
-    sampler.Y[addr] = get(sampler.X, addr, mode(dist))
+    sampler.Y[addr] = sampler.X[addr]
     return sampler.Y[addr]
 end
 function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Distributions.ContinuousDistribution, obs::Union{Nothing,RVValue})::RVValue
@@ -119,30 +120,36 @@ function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Di
     end
     transformed_dist = to_unconstrained(dist)
     if sampler.to == :unconstrained
-        constrained_value = get(sampler.X, addr, mean(dist))
+        constrained_value = sampler.X[addr]
         unconstrained_value = transformed_dist.T(constrained_value)
         sampler.Y[addr] = unconstrained_value
     else # samper.to == :constrained
-        unconstrained_value = get(sampler.X, addr, 0.0)
+        unconstrained_value = sampler.X[addr]
         constrained_value = transformed_dist.T_inv(unconstrained_value)
         sampler.Y[addr] = constrained_value
     end
     return constrained_value
 end
 
-function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{UniversalTrace,Any}
+function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{<:UniversalTrace,Any}
     sampler = UniversalConstraintTransformer(X, :constrained)
     retval = model(args, sampler, constraints)
     return sampler.Y, retval
 end
 
-function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{Vector{UniversalTrace},Vector{Any}}
-    samples = Vector{UniversalTrace}(undef, length(Xs))
-    retvals = Vector{Any}(undef, length(Xs))
-    for i in eachindex(Xs)
-        @inbounds samples[i], retvals[i] = transform_to_constrained(Xs[i], model, args, constraints)
-    end
-    return samples, retvals
+function transform_to_unconstrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{<:UniversalTrace,Any}
+    sampler = UniversalConstraintTransformer(X, :unconstrained)
+    retval = model(args, sampler, constraints)
+    return sampler.Y, retval
 end
 
-export transform_to_constrained
+export transform_to_constrained, transform_to_unconstrained
+
+# function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{Vector{UniversalTrace},Vector{Any}}
+#     samples = Vector{UniversalTrace}(undef, length(Xs))
+#     retvals = Vector{Any}(undef, length(Xs))
+#     for i in eachindex(Xs)
+#         @inbounds samples[i], retvals[i] = transform_to_constrained(Xs[i], model, args, constraints)
+#     end
+#     return samples, retvals
+# end
