@@ -44,7 +44,7 @@ function advi_fullrank(model::StaticModel, args::Tuple, observations::Observatio
     return StaticVIResult(result, addresses_to_ix, _transform_to_constrained!)
 end
 
-import TinyPPL.Logjoint: advi_logjoint
+import TinyPPL.Logjoint: advi_logjoint, advi_logjoint_fwd, advi_logjoint_rws, advi_logjoint_rws_2, advi_logjoint_tracker_2
 
 """
 ADVI with variational distributions given `q`.
@@ -66,7 +66,7 @@ function advi(model::StaticModel, args::Tuple, observations::Observations, n_sam
         _viresult_map! = _no_transform
     end
 
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    result = advi_logjoint_rws_2(logjoint, n_samples, L, learning_rate, q, estimator)
     return StaticVIResult(result, addresses_to_ix, _viresult_map!)
 end
 
@@ -93,7 +93,7 @@ function advi(model::StaticModel, args::Tuple, observations::Observations,
     end
 
     q = make_guide(guide, guide_args, addresses_to_ix)
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    result = advi_logjoint_rws_2(logjoint, n_samples, L, learning_rate, q, estimator)
     return StaticVIResult(result, addresses_to_ix, _viresult_map!)
 end
 

@@ -26,16 +26,28 @@ function ∇sigmoid(x)
 end
 invsigmoid(x) = log(x / (1-x))
 
-import Tracker
 no_grad(x::Float64) = x
 no_grad(x::Vector{Float64}) = x
+no_grad(x::Dict{<:Any,Vector{Float64}}) = x
+
+import Tracker
 no_grad(x::Tracker.TrackedReal{Float64}) = Tracker.data(x)
 no_grad(x::Tracker.TrackedVector{Float64, Vector{Float64}}) = Tracker.data(x)
 no_grad(x::Tracker.TrackedMatrix{Float64, Matrix{Float64}}) = Tracker.data(x)
 no_grad(x::Vector{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 no_grad(x::Matrix{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 no_grad(x::Dict{K,Tracker.TrackedVector{Float64, Vector{Float64}}}) where {K <: Any} = Dict{K,Vector{Float64}}(addr => no_grad(v) for (addr, v) in x)
-no_grad(x::Dict{<:Any,Vector{Float64}}) = x
+
+import ForwardDiff
+no_grad(x::Vector{<:ForwardDiff.Dual}) = ForwardDiff.value.(x)
+
+import ReverseDiff
+no_grad(x::ReverseDiff.TrackedArray) = ReverseDiff.value(x)
+
+import Base, Random
+Base.randn(::Type{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = ReverseDiff.TrackedReal{V,D,O}(randn(V))
+Base.randn(rng::Random.AbstractRNG, ::Type{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = ReverseDiff.TrackedReal{V,D,O}(randn(rng, V))
+
 
 # maps :x => :y => :z = :x => (:y => :z) to (:x => :y) => :z
 function reverse_pair(pair::Pair)

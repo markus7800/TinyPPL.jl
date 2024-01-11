@@ -127,29 +127,33 @@ mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
 # TODO: figure out where we deviate numerically
 @assert all(vi_result_pd.Q.mu .≈ mu_guide_pd)
 @assert all(vi_result_pd.Q.sigma .≈ sigma_guide_pd)
+maximum(abs, map_mu .- mu_guide_pd)
+maximum(abs, map_sigma .- sigma_guide_pd)
 
-Random.seed!(0)
-vi_result_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO(), unconstrained=false)
-Random.seed!(0)
-@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
-mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
-maximum(abs, mu_guide_pd .- vi_result_pd.Q.mu)
-maximum(abs, sigma_guide_pd .- vi_result_pd.Q.sigma)
+# Random.seed!(0);
+# vi_result_pd = advi(LinRegStatic, (xs,), observations, 428, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO(), unconstrained=false)
+# Random.seed!(0);
+# vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 428, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
+# mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
+# maximum(abs, mu_guide_pd .- vi_result_pd.Q.mu)
+# maximum(abs, sigma_guide_pd .- vi_result_pd.Q.sigma)
 
-# deviation starts at 427
-Random.seed!(0)
-vi_result_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), PathDerivativeELBO(), unconstrained=false)
+# deviation starts at 424
+N = 100_000
+L = 1
+Random.seed!(0);
+vi_result_pd = advi(LinRegStatic, (xs,), observations, N, L, 0.01, MeanField([VariationalNormal() for _ in 1:K]), PathDerivativeELBO(), unconstrained=false)
 mu_pd, sigma_pd = get_meanfield_parameters(vi_result_pd)
-Random.seed!(0)
-@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
+Random.seed!(0);
+@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, N, L, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
 mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
-maximum(abs, mu_guide_pd .- mu_pd)
-maximum(abs, sigma_guide_pd .- sigma_pd)
 
 phi1 = vi_result_guide_pd.Q.sampler.phi
 phi2 = reduce(vcat,d.params for d in vi_result_pd.Q.dists)
 maximum(abs, phi1 .- phi2)
 
+maximum(abs, mu_guide_pd .- mu_pd)
+maximum(abs, sigma_guide_pd .- sigma_pd)
 
 
 Random.seed!(0)

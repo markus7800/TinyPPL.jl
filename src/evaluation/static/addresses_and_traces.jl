@@ -83,6 +83,7 @@ function Base.show(io::IO, traces::StaticTraces)
     print(io, "StaticTraces($(length(traces.retvals)) entries for $(length(traces.addesses_to_ix)) addresses)")
 end
 
+Base.length(traces::StaticTraces) = length(traces.retvals)
 retvals(traces::StaticTraces) = traces.retvals
 
 function Base.getindex(traces::StaticTraces, addr::Address)::Vector{<:RVValue}
