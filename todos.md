@@ -5,6 +5,8 @@ TODOS:
 - belief propagation with queue instead of recursion
 - reduce compile time in graph by batching distributions, observed_values functions similar to plated
 
+- graph: TODO: x[1] = 1 not allowed, immutable, but y = x[1] is allowed
+
 - AQUA inference for graphsample
 - 
 - document everyting
@@ -14,7 +16,6 @@ TODOS:
 - param transform reuse transform.jl? transform_to RealInterval
 - remove observations from guide? can be passed as argument instead
 - HMC find eps ala mcmcgallery
-- constraints::Observations -> observations::Observations
 
 - param syntax: p = {:p => i} ∈ ℝ^n = init (0,∞)^n etc \bbR
 

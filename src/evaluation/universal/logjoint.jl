@@ -131,25 +131,25 @@ function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Di
     return constrained_value
 end
 
-function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{<:UniversalTrace,Any}
+function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, observations::Observations)::Tuple{<:UniversalTrace,Any}
     sampler = UniversalConstraintTransformer(X, :constrained)
-    retval = model(args, sampler, constraints)
+    retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 
-function transform_to_unconstrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{<:UniversalTrace,Any}
+function transform_to_unconstrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, observations::Observations)::Tuple{<:UniversalTrace,Any}
     sampler = UniversalConstraintTransformer(X, :unconstrained)
-    retval = model(args, sampler, constraints)
+    retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 
 export transform_to_constrained, transform_to_unconstrained
 
-# function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, constraints::Observations)::Tuple{Vector{UniversalTrace},Vector{Any}}
+# function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, observations::Observations)::Tuple{Vector{UniversalTrace},Vector{Any}}
 #     samples = Vector{UniversalTrace}(undef, length(Xs))
 #     retvals = Vector{Any}(undef, length(Xs))
 #     for i in eachindex(Xs)
-#         @inbounds samples[i], retvals[i] = transform_to_constrained(Xs[i], model, args, constraints)
+#         @inbounds samples[i], retvals[i] = transform_to_constrained(Xs[i], model, args, observations)
 #     end
 #     return samples, retvals
 # end

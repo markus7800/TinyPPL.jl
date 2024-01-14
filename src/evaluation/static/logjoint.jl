@@ -153,27 +153,27 @@ function sample(sampler::StaticConstraintTransformer, addr::Address, dist::Distr
     return constrained_value
 end
 
-function transform_to_constrained!(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+function transform_to_constrained!(X::AbstractStaticTrace, model::StaticModel, args::Tuple, observations::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
     sampler = StaticConstraintTransformer(addresses_to_ix, X, X, to=:constrained)
-    retval = model(args, sampler, constraints)
+    retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 
-function transform_to_unconstrained!(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+function transform_to_unconstrained!(X::AbstractStaticTrace, model::StaticModel, args::Tuple, observations::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
     sampler = StaticConstraintTransformer(addresses_to_ix,  X, X, to=:unconstrained)
-    retval = model(args, sampler, constraints)
+    retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 
-function transform_to_constrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+function transform_to_constrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, observations::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
     sampler = StaticConstraintTransformer(addresses_to_ix, X, similar(X), to=:constrained)
-    retval = model(args, sampler, constraints)
+    retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 
-function transform_to_unconstrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, constraints::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
+function transform_to_unconstrained(X::AbstractStaticTrace, model::StaticModel, args::Tuple, observations::Observations, addresses_to_ix::Addr2Ix)::Tuple{<:AbstractStaticTrace,Any}
     sampler = StaticConstraintTransformer(addresses_to_ix,  X, similar(X), to=:unconstrained)
-    retval = model(args, sampler, constraints)
+    retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 

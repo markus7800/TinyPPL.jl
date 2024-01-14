@@ -55,7 +55,8 @@ end
 Hamiltonian Monte Carlo with potential function -logjoint, number of variables `K`
 trajectory length `L` and leapfrog step-size `eps`.
 """
-function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::Float64; ad_backend::Symbol=:tracker)
+function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::Float64;
+    ad_backend::Symbol=:tracker, x_initial::Union{Nothing,Vector{Float64}}=nothing)
     if ad_backend == :tracker
         grad_U = get_grad_U_tracker(logjoint)
     elseif ad_backend == :forwarddiff
@@ -67,7 +68,7 @@ function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::F
     end
     
     # initialise x0
-    X_current = zeros(K)
+    X_current = isnothing(x_initial) ? zeros(K) : x_initial
     log_prob_current = logjoint(X_current)
     U_current = -log_prob_current
 
