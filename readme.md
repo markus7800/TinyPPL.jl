@@ -159,12 +159,14 @@ x1
 
 A linear regression model can be written as
 ```julia
+xs = [1., 2., 3., 4., 5.]
+ys = [2.1, 3.9, 5.3, 7.7, 10.2]
 model = @ppl LinReg begin
     function f(slope, intercept, x)
         intercept + slope * x
     end
-    let xs = [1., 2., 3., 4., 5.],
-        ys = [2.1, 3.9, 5.3, 7.7, 10.2],
+    let xs = $(Main.xs),
+        ys = $(Main.ys),
         slope ~ Normal(0.0, 10.),
         intercept ~ Normal(0.0, 10.)
 
@@ -229,7 +231,7 @@ r = pgm.return_expr(X)
 
 ### Inference Algorihms
 
-| Algorithm | Eval-Universal | Eval-Static | Graph | Reference7
+| Algorithm | Eval-Universal | Eval-Static | Graph | Reference
 |-----------|:----------------:|:-------------:|:-------:|----------|
 |Likelihood-Weighting | X | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
 |Single-Site Metropolis Hastings| X |  | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
