@@ -72,8 +72,8 @@ end
 
 function get_U(model::UniversalModel, args::Tuple, observations::Observations, X::Dictionary{Address,Float64}, seen::Union{Nothing,Dictionary{Address,Bool}})
     sampler = NonParametricHMCLogjoint(X, seen)
-    model(args, sampler, observations)
-    return -sampler.W
+    retval = model(args, sampler, observations)
+    return -sampler.W, retval
 end
 
 function get_U_grad_and_extend!(model::UniversalModel, args::Tuple, observations::Observations, X::Dictionary{Address,Float64}, P::Dictionary{Address,Float64})
@@ -135,9 +135,11 @@ function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Ob
 
     # initialise x0
     X_current = isnothing(x_initial) ? Dictionary{Address,Float64}() : todo(x_initial)
+    retval_current = nothing
     U_current = Inf
 
     result = Vector{Any}(undef, n_samples)
+    retvals = Vector{Any}(undef, n_samples)
     n_accepted = 0
     @progress for i in 1:n_samples
 
@@ -145,7 +147,7 @@ function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Ob
 
         # Compute new kinetic and potential energy
         seen = Dictionary{Address,Bool}(keys(X_proposed), falses(length(X_proposed)))
-        U_proposed = get_U(model, args, observations, X_proposed, seen)
+        U_proposed, retval_proposed = get_U(model, args, observations, X_proposed, seen)
 
         # With perfect precision the leapfrog integrator should preserve the energy and accept with probability 1.
         # But it is an approximation and we adjust with a metropolis hasting step
@@ -154,16 +156,18 @@ function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Ob
             # reduce X
             for (addr, seen) in pairs(seen) # optimise
                 if !seen
-                    delete!(X, addr)
+                    delete!(X_current, addr)
                 end
             end
 
             U_current = U_proposed
             X_current = X_proposed
+            retval_current = retval_proposed
             n_accepted += 1
         end
         # Store regardless of acceptance
         result[i] = X_current
+        retvals[i] = retval_current
     end
 
     @info "HMC" n_accepted/n_samples

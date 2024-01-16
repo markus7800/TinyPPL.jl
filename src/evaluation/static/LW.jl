@@ -43,7 +43,13 @@ function likelihood_weighting(model::StaticModel, args::Tuple, observations::Obs
     return traces, normalise(logprobs)
 end
 
-
+"""
+Same as likelihood_weighting, but we do not need weights.
+"""
+function sample_from_prior(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int)
+    return likelihood_weighting(model, args, observations, n_samples)[1]
+end
+export sample_from_prior
 
 """
 Sets up addresses_to_ix such that address in `first` are index before other addresses in `all`.

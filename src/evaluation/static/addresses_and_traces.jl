@@ -80,10 +80,12 @@ struct StaticTraces <: AbstractTraces
 end
 
 function Base.show(io::IO, traces::StaticTraces)
-    print(io, "StaticTraces($(length(traces.retvals)) entries for $(length(traces.addesses_to_ix)) addresses)")
+    print(io, "StaticTraces($(size(traces.data,2)) entries for $(length(traces.addesses_to_ix)) addresses)")
 end
 
 retvals(traces::StaticTraces) = traces.retvals
+
+Base.length(traces::StaticTraces) = size(traces.data,2)
 
 function Base.getindex(traces::StaticTraces, addr::Address)::Vector{<:RVValue}
     return traces.data[traces.addesses_to_ix[addr], :]
@@ -93,6 +95,11 @@ function Base.getindex(traces::StaticTraces, addr::Address, i::Int)::RVValue
     @assert addr in traces.addesses_to_ix
     return traces.data[traces.addesses_to_ix[addr], i]
 end
+
+function subset(traces::StaticTraces, ixs)
+    return StaticTraces(traces.addesses_to_ix, traces.data[:,ixs], traces.retvals[ixs])
+end
+export subset
 
 # function Base.getindex(traces::Traces, addrs::Vector{Any}, i::Int)::Real
 #     return traces.data[[traces.addesses_to_ix[addr] for addr in addrs], i]

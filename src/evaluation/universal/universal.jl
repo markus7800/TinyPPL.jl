@@ -26,6 +26,12 @@ function Base.getindex(traces::UniversalTraces, addr::Address, i::Int)
     return get(traces.data[i], addr, missing)
 end
 Base.length(traces::UniversalTraces) = length(traces.data)
+
+function subset(traces::UniversalTraces, ixs)
+    return UniversalTraces(traces.data[ixs], traces.retvals[ixs])
+end
+export subset
+
 export UniversalTraces
 
 

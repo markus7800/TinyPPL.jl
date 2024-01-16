@@ -87,7 +87,7 @@ function hmc_logjoint(logjoint::Function, K::Int, n_samples::Int, L::Int, eps::F
 
         # With perfect precision the leapfrog integrator should preserve the energy and accept with probability 1.
         # But it is an approximation and we adjust with a metropolis hasting step
-        if log(rand()) < (U_current - U_proposed + K_current - K_proposed)
+        if log(rand()) < (U_current - U_proposed + K_current - K_proposed) # -H(proposed) + H(current)
             U_current = U_proposed
             X_current = X_proposed
             n_accepted += 1

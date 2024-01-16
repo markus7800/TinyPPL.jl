@@ -45,6 +45,15 @@ function likelihood_weighting(model::UniversalModel, args::Tuple, observations::
     return UniversalTraces(traces, retvals), normalise(logprobs)
 end
 
+
+"""
+Same as likelihood_weighting, but we do not need weights.
+"""
+function sample_from_prior(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int)
+    return likelihood_weighting(model, args, observations, n_samples)[1]
+end
+export sample_from_prior
+
 function no_op_completion(trace::UniversalTrace, retval::Any)
     return nothing
 end
