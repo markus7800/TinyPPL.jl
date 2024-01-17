@@ -9,6 +9,7 @@ module Graph
     include("HMC.jl")
     include("ADVI.jl")
     include("BBVI.jl")
+    include("SMC.jl")
     include("compiled/LW.jl")
     include("compiled/LMH.jl")
     include("exact/factor_graph.jl")
