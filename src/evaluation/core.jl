@@ -1,5 +1,6 @@
 
 import MacroTools
+import Libtask
 
 macro subppl(expr) return expr end # just a place holder
 
@@ -91,12 +92,10 @@ function ppl_macro(annotations::Set{Symbol}, func)
     julia_fn_name = gensym(f)
     return rmlines(quote
         function $(esc(julia_fn_name))($(esc.(func_args)...), $(esc(sampler))::$(esc(sampler_type)), $(esc(observations))=Dict())
-            function inner()
-                $new_body
-            end
-            return inner()
+            $new_body
         end
         $(esc(f)) = $(esc(model_type))($(esc(julia_fn_name)))
+        Libtask.is_primitive(::typeof($(esc(julia_fn_name))), args...) = false
     end)
 end
 

@@ -56,7 +56,7 @@ const AbstractStaticTrace = AbstractVector{<:RVValue} # note: change here for mu
 const StaticTrace = Vector{Real}
 StaticTrace(n::Int) = Vector{Real}(undef, n)
 
-export AbstractUniversalTrace, UniversalTrace
+export AbstractStaticTrace, StaticTrace
 
 """
 Wrapper for the result of sample based inference algorithms, like MH or IS.

@@ -2,7 +2,7 @@
 
 julia_version = "1.9.1"
 manifest_format = "2.0"
-project_hash = "2166f584475d3efa2d63bbdfb407e964f889b1b5"
+project_hash = "ed3e38fc14a8c64edf97d85f3c7bf617bc62d17b"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -252,6 +252,11 @@ git-tree-sha1 = "98eaee04d96d973e79c25d49167668c5c8fb50e2"
 uuid = "dad2f222-ce93-54a1-a47d-0025e8a3acab"
 version = "0.0.27+1"
 
+[[deps.LRUCache]]
+git-tree-sha1 = "5930ef949f30a9a947c69ef6b069c0b1aa27619d"
+uuid = "8ac3fa9e-de4c-5943-b1dc-09c6b5f20637"
+version = "1.6.0"
+
 [[deps.LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
 uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
@@ -277,6 +282,14 @@ version = "1.10.2+0"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+
+[[deps.Libtask]]
+deps = ["FunctionWrappers", "LRUCache", "LinearAlgebra", "Statistics"]
+git-tree-sha1 = "f5d44e7a42aaf9877afe44ddcd24089663327c2f"
+repo-rev = "subtape"
+repo-url = "https://github.com/markus7800/Libtask.jl.git"
+uuid = "6f1fad26-d15e-5dc8-ae53-837a1d7b8c9f"
+version = "0.8.7"
 
 [[deps.LinearAlgebra]]
 deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
