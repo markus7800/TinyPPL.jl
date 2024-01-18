@@ -47,7 +47,7 @@ end
 
 
 Random.seed!(0)
-traces, lps = SMC(weather_guessing, args, observations, 1000);
+traces, lps = smc(weather_guessing, args, observations, 1000);
 W = exp.(lps);
 
 
@@ -112,7 +112,6 @@ println(W'traces[:intercept], " vs true ", map_mu[1])
 println(W'traces[:slope], " vs true ", map_mu[2])
 
 length(unique(zip(traces[:intercept], traces[:slope])))
-
 
 
 
