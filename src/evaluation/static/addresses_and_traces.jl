@@ -88,11 +88,12 @@ retvals(traces::StaticTraces) = traces.retvals
 Base.length(traces::StaticTraces) = size(traces.data,2)
 
 function Base.getindex(traces::StaticTraces, addr::Address)
+    @assert haskey(traces.addesses_to_ix, addr) "$addr not in addresses_to_ix"
     return traces.data[traces.addesses_to_ix[addr], :]
 end
 
 function Base.getindex(traces::StaticTraces, addr::Address, i::Int)
-    @assert addr in traces.addesses_to_ix
+    @assert haskey(traces.addesses_to_ix, addr) "$addr not in addresses_to_ix"
     return traces.data[traces.addesses_to_ix[addr], i]
 end
 

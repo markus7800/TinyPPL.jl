@@ -33,7 +33,7 @@ args = (N,)
 Random.seed!(0)
 traces = sample_from_prior(weather_guessing, args, Observations(), 1)
 
-observations = Observations((:activity => i) => traces[:activity => i][1] for i in 1:N)
+observations = Observations((:activity => i) => traces[:activity => i, 1] for i in 1:N)
 ground_truth = Dict((:weather => i) => traces[:weather => i][1] for i in 0:N)
 
 
@@ -156,6 +156,38 @@ scatter(posterior_sample[1,:], posterior_sample[2,:],)
 
 # 1.8221096950814604 vs true 1.8679245283018866
 
+
+@ppl static function LGSS(T)
+    a = 0.9
+    σ_v = 0.32
+    σ_e = 1.
+
+    x = 0
+    for t in 1:T
+        x = {:x => t} ~ Normal(a * x, σ_v)
+        {:y => t} ~ Normal(x, σ_e)
+    end
+end
+T = 400
+args = (T,)
+
+Random.seed!(0)
+traces = sample_from_prior(LGSS, args, Observations(), 1)
+
+observations = Observations((:y => t) => traces[:y => t, 1] for t in 1:T)
+ground_truth = Dict((:x => t) => traces[:x => t, 1] for t in 1:T)
+
+using Plots
+plot([observations[:y => t] for t in 1:T])
+plot!([ground_truth[:x => t] for t in 1:T])
+
+n_particles = 5
+n_samples = 1000
+Random.seed!(0)
+traces = particle_gibbs(LGSS, args, observations, n_particles, n_samples; ancestral_sampling=true);
+
+update_freq = [mean(traces[:x=>t, i] != traces[:x=>t, i+1] for i in 1:n_samples-1) for t in 1:T]
+plot(update_freq, ylim=(0,1))
 
 
 import Libtask

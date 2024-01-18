@@ -59,74 +59,11 @@ end
 update_particle!(task::Libtask.TapedTask, particle::SMCParticle) = update_particle!(task.tf, particle)
 
 # Following Particle Gibbs Ancestral Sampling
-function smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
-    addresses_to_ix = get_address_to_ix(model, args, observations)
 
-    particles = [SMCParticle(addresses_to_ix, addr2proposal) for _ in 1:n_particles]
-    tasks = [Libtask.TapedTask(model.f, args..., particles[i], observations) for i in 1:n_particles]
+function _smc_worker(model::StaticModel, args::Tuple, observations::Observations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
+    X::Union{Nothing,StaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
 
-    traces = StaticTraces(addresses_to_ix, n_particles)
-
-    addresses = Vector{Address}(undef, n_particles)
-    log_w = Vector{Float64}(undef, n_particles)
-    log_γ = zeros(n_particles)
-    while true
-        # x_t ~ Q(x_t | x_1:{t-1})
-        for i in 1:n_particles # TODO: parallelise
-            consumed_value = Libtask.consume(tasks[i])
-            if has_returned(tasks[i])
-                traces.data[:,i] .= particles[i].trace
-                traces.retvals[i] = get_retval(tasks[i])
-                addresses[i] = :__BREAK
-            else
-                addresses[i], log_γ_new, log_Q = consumed_value
-                # compute W_t
-                log_w[i] = log_γ_new - log_γ[i] - log_Q
-                log_γ[i] = log_γ_new
-            end
-        end
-        if check_addresses
-            unique_addresses = unique(addresses)
-            println(unique_addresses)
-            @assert (length(unique_addresses) == 1) unique_addresses
-        end
-        if addresses[1] == :__BREAK
-            break
-        end
-
-        W = exp.(log_w) # = γ_t(X_1:t, Y_1:t) / (γ_{t-1}(X_1:{t-1},Y_1:{t-1}) * Q(X_t|X_1:{t-1},Y_1:{t-1}))
-        W = W / sum(W)
-        # for resampling it does not matter if w / sum(w) (like in PMCMC and PGAS) or w⋅Z / sum(w⋅Z) (like in Intro to PPL)
-
-        # a_{t+1} ~ Categorical(W_t)
-        A = rand(Categorical(W), n_particles)
-        particles = copy.(particles[A]) # sets log_Q to 0
-        tasks = copy.(tasks[A]) # fork
-        log_γ = log_γ[A]
-        for i in 1:n_particles
-            update_particle!(tasks[i], particles[i])
-        end
-
-        # println("Neff=", 1/sum(W.^2))
-        # TODO: resample if collapse?
-    end
-
-    logprobs = normalise(log_w)
-    return traces, logprobs
-end
-
-export smc
-
-function conditional_smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int,
-    X::StaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
-    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
-
-    return _conditional_smc(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
-                            ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal, check_addresses=check_addresses)
-end
-
-function _conditional_smc(model::StaticModel, args::Tuple, observations::Observations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
-    X::StaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+    conditional = !isnothing(X)
 
     # particles[1] is reference particle
     particles = [SMCParticle(addresses_to_ix, addr2proposal) for _ in 1:n_particles]
@@ -138,13 +75,16 @@ function _conditional_smc(model::StaticModel, args::Tuple, observations::Observa
     log_w = Vector{Float64}(undef, n_particles)
     log_γ = zeros(n_particles)
     while true
-        # reference particle
-        p_ref = particles[1]
-        p_ref.score_only = true # all others should have score_only = false
-        p_ref.trace[p_ref.t+1:end] = X[p_ref.t+1:end]
+        if conditional
+            # reference particle
+            p_ref = particles[1]
+            p_ref.score_only = true # all others should have score_only = false
+            p_ref.trace[p_ref.t+1:end] = X[p_ref.t+1:end]
+            # x_t^i ~ Q(x_t | x_1:{t-1}) for i in  2:n_particles
+            # x_t^1 = X_t
+        end
+        # else x_t^i ~ Q(x_t | x_1:{t-1}) for i in  1:n_particles
 
-        # x_t^i ~ Q(x_t | x_1:{t-1}) for i in  2:n_particles
-        # x_t^1 = X_t
         for i in 1:n_particles # TODO: parallelise
             consumed_value = Libtask.consume(tasks[i])
             if has_returned(tasks[i])
@@ -167,16 +107,26 @@ function _conditional_smc(model::StaticModel, args::Tuple, observations::Observa
             break
         end
 
-        W = exp.(log_w)  # = γ_t(X_1:t, Y_1:t) / (γ_{t-1}(X_1:{t-1},Y_1:{t-1}) * Q(X_t|X_1:{t-1},Y_1:{t-1}))
+        # W_t
+        W = exp.(log_w) # = γ_t(x_1:t, y_1:t) / (γ_{t-1}(x_1:{t-1},y_1:{t-1}) * Q(X_t|x_1:{t-1},y_1:{t-1}))
         W = W / sum(W)
         # for resampling it does not matter if w / sum(w) (like in PMCMC and PGAS) or w⋅Z / sum(w⋅Z) (like in Intro to PPL)
 
         # a_{t+1} ~ Categorical(W_t)
         A = rand(Categorical(W), n_particles)
-        if ancestral_sampling
-            error("Not implemented!")
-        else
-            A[1] = 1 # retain reference particle
+
+        if conditional
+            if ancestral_sampling
+                # log_γ = log γ_t(x_1:t)
+                t = particles[1].t
+                # this is very expensive and may be replaced by copying and running particles to end
+                log_γ_T = [logjoint(vcat(particles[i].trace[1:t], X[t+1:end])) for i in 1:n_particles]
+                log_w_tilde = log_w + log_γ_T - log_γ
+                W_tilde = exp.(log_w_tilde)
+                A[1] = rand(Categorical(W_tilde / sum(W_tilde)))
+            else
+                A[1] = 1 # retain reference particle
+            end
         end
 
         particles = copy.(particles[A]) # sets log_Q to 0 and score_only to false
@@ -194,7 +144,25 @@ function _conditional_smc(model::StaticModel, args::Tuple, observations::Observa
     return traces, logprobs
 end
 
+
+function smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+
+    return _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, nothing;
+                       addr2proposal=addr2proposal, check_addresses=check_addresses)
+end
+
+export smc
+
+function conditional_smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int,
+    X::StaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+
+    return _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
+                       ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal, check_addresses=check_addresses)
+end
 export conditional_smc
+
 
 function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
@@ -207,8 +175,8 @@ function particle_gibbs(model::StaticModel, args::Tuple, observations::Observati
     X = smc_traces[:, rand(Categorical(W))]
 
     @progress for i in 1:n_samples
-        smc_traces, lps = _conditional_smc(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
-                                           ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal)
+        smc_traces, lps = _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
+                                      ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal)
         W = exp.(lps)
         k = rand(Categorical(W))
         X = smc_traces[:,k]
