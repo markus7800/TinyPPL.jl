@@ -10,6 +10,8 @@ mutable struct SMCParticle <: StaticSampler
     addresses_to_ix::Addr2Ix
 end
 
+Base.copy(p::SMCParticle) = SMCParticle(p.log_γ, copy(p.trace), p.addresses_to_ix)
+
 function sample(sampler::SMCParticle, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
     if !isnothing(obs)
         log_w = logpdf(dist, obs)
@@ -75,10 +77,13 @@ function smc(model::StaticModel, args::Tuple, observations::Observations, n_part
 
         A = rand(Categorical(W), n_particles)
         _particles = copy(particles) # shallow copy to reorder
+        _tasks = copy(tasks) # shallow copy to reorder
         for i in 1:n_particles
-            tasks[i] = copy(tasks[A[i]]) # fork
-            particles[i] = deepcopy(_particles[A[i]])
-            update_particle!(tasks[i], particles[i])
+            task = copy(_tasks[A[i]]) # fork
+            particle = copy(_particles[A[i]])
+            update_particle!(task, particle)
+            tasks[i] = task
+            particles[i] = particle
         end
 
         println("Neff=", 1/sum(W.^2))

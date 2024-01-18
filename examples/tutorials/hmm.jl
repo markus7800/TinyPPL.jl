@@ -105,7 +105,7 @@ W = exp.(lps);
 
 
 Random.seed!(0)
-traces, lps = SMC(LinRegStatic, args, observations, 10_000);
+@time traces, lps = smc(LinRegStatic, args, observations, 10_000); # 5.248353 seconds (7.27 M allocations: 469.391 MiB, 4.32% gc time)
 W = exp.(lps);
 
 println(W'traces[:intercept], " vs true ", map_mu[1])
