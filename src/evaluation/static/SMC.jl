@@ -61,15 +61,16 @@ update_particle!(task::Libtask.TapedTask, particle::SMCParticle) = update_partic
 # Following Particle Gibbs Ancestral Sampling
 
 function _smc_worker(model::StaticModel, args::Tuple, observations::Observations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
-    X::Union{Nothing,StaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+    X_ref::Union{Nothing,StaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
 
-    conditional = !isnothing(X)
+    conditional = !isnothing(X_ref)
 
     # particles[1] is reference particle
     particles = [SMCParticle(addresses_to_ix, addr2proposal) for _ in 1:n_particles]
     tasks = [Libtask.TapedTask(model.f, args..., particles[i], observations) for i in 1:n_particles]
 
     traces = StaticTraces(addresses_to_ix, n_particles)
+    marginal_lik = 1
 
     addresses = Vector{Address}(undef, n_particles)
     log_w = Vector{Float64}(undef, n_particles)
@@ -79,7 +80,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
             # reference particle
             p_ref = particles[1]
             p_ref.score_only = true # all others should have score_only = false
-            p_ref.trace[p_ref.t+1:end] = X[p_ref.t+1:end]
+            p_ref.trace[p_ref.t+1:end] = X_ref[p_ref.t+1:end]
             # x_t^i ~ Q(x_t | x_1:{t-1}) for i in  2:n_particles
             # x_t^1 = X_t
         end
@@ -93,7 +94,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
                 addresses[i] = :__BREAK
             else
                 addresses[i], log_γ_new, log_Q = consumed_value
-                # compute W_t
+                # compute W_t, W_1 = γ_1 / Q_1 is correctly computed since log_γ is initialised to 0.
                 log_w[i] = log_γ_new - log_γ[i] - log_Q
                 log_γ[i] = log_γ_new
             end
@@ -103,24 +104,27 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
             println(unique_addresses)
             @assert (length(unique_addresses) == 1) unique_addresses
         end
+
+        # W_t
+        # for resampling it does not matter if w / sum(w) (like in PMCMC and PGAS) or w⋅Z / sum(w⋅Z) (like in Intro to PPL)
+        W = exp.(log_w) # = γ_t(x_1:t, y_1:t) / (γ_{t-1}(x_1:{t-1},y_1:{t-1}) * Q(X_t|x_1:{t-1},y_1:{t-1}))
+        sum_W = sum(W)
+        marginal_lik *= sum_W / n_particles
+        W = W / sum_W
+
         if addresses[1] == :__BREAK
             break
         end
-
-        # W_t
-        W = exp.(log_w) # = γ_t(x_1:t, y_1:t) / (γ_{t-1}(x_1:{t-1},y_1:{t-1}) * Q(X_t|x_1:{t-1},y_1:{t-1}))
-        W = W / sum(W)
-        # for resampling it does not matter if w / sum(w) (like in PMCMC and PGAS) or w⋅Z / sum(w⋅Z) (like in Intro to PPL)
 
         # a_{t+1} ~ Categorical(W_t)
         A = rand(Categorical(W), n_particles)
 
         if conditional
             if ancestral_sampling
-                # log_γ = log γ_t(x_1:t)
+                # log_γ = log γ_t(x_1:t), log_w = log W_t(x_1:t) where x_1:t = particle.trace[1:particle.t]
                 t = particles[1].t
-                # this is very expensive and may be replaced by copying and running particles to end
-                log_γ_T = [logjoint(vcat(particles[i].trace[1:t], X[t+1:end])) for i in 1:n_particles]
+                # this is very expensive and may be replaced by copying task and running particles to end
+                log_γ_T = [logjoint(vcat(particles[i].trace[1:t], X_ref[t+1:end])) for i in 1:n_particles]
                 log_w_tilde = log_w + log_γ_T - log_γ
                 W_tilde = exp.(log_w_tilde)
                 A[1] = rand(Categorical(W_tilde / sum(W_tilde)))
@@ -141,7 +145,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
     end
 
     logprobs = normalise(log_w)
-    return traces, logprobs
+    return traces, logprobs, marginal_lik
 end
 
 
@@ -170,12 +174,12 @@ function particle_gibbs(model::StaticModel, args::Tuple, observations::Observati
     traces = StaticTraces(addresses_to_ix, n_samples)
 
     # initialise with SMC
-    smc_traces, lps = smc(model, args, observations, n_particles; addr2proposal=addr2proposal)
+    smc_traces, lps, _ = smc(model, args, observations, n_particles; addr2proposal=addr2proposal)
     W = exp.(lps)
     X = smc_traces[:, rand(Categorical(W))]
 
     @progress for i in 1:n_samples
-        smc_traces, lps = _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
+        smc_traces, lps, _ = _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
                                       ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal)
         W = exp.(lps)
         k = rand(Categorical(W))
@@ -188,3 +192,43 @@ function particle_gibbs(model::StaticModel, args::Tuple, observations::Observati
 end
 
 export particle_gibbs
+
+# not really useful, but a sanity check if everyhing works.
+function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; addr2proposal::Addr2Proposal=Addr2Proposal())
+    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+
+    traces = StaticTraces(addresses_to_ix, n_samples)
+
+    # initialise with SMC
+    smc_traces, lps, marginal_lik = smc(model, args, observations, n_particles; addr2proposal=addr2proposal)
+    W = exp.(lps)
+    k = rand(Categorical(W))
+    X_current = smc_traces[:, k]
+    retval_current = smc_traces.retvals[k]
+    marginal_lik_current = marginal_lik
+
+    n_accept = 0
+    @progress for i in 1:n_samples
+        smc_traces, lps, marginal_lik_proposed = _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, nothing; addr2proposal=addr2proposal)
+        W = exp.(lps)
+        k = rand(Categorical(W))
+        X_proposed = smc_traces[:,k]
+        retval_proposed = smc_traces.retvals[k]
+
+        if rand() < marginal_lik_proposed / marginal_lik_current
+            n_accept += 1
+            X_current = X_proposed
+            retval_current = retval_proposed
+            marginal_lik_current = marginal_lik_proposed
+        end
+
+        traces.data[:,i] = X_current
+        traces.retvals[i] = retval_current
+    end
+
+    @info "particle IMH" n_accept/n_samples
+
+    return traces
+end
+
+export particle_IMH

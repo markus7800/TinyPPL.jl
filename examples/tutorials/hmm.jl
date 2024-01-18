@@ -128,6 +128,10 @@ println(mean(traces[:intercept]), " vs true ", map_mu[1])
 println(mean(traces[:slope]), " vs true ", map_mu[2])
 
 
+Random.seed!(0)
+traces = particle_IMH(LinRegStatic, args, observations, 100, 1000)
+
+
 using Plots
 scatter(traces[:intercept], traces[:slope])
 import Distributions
