@@ -105,13 +105,56 @@ W = exp.(lps);
 
 
 Random.seed!(0)
-@time traces, lps = smc(LinRegStatic, args, observations, 10_000); # 5.248353 seconds (7.27 M allocations: 469.391 MiB, 4.32% gc time)
+@time traces, lps = smc(LinRegStatic, args, observations, 10_000);
 W = exp.(lps);
 
 println(W'traces[:intercept], " vs true ", map_mu[1])
 println(W'traces[:slope], " vs true ", map_mu[2])
 
-length(unique(zip(traces[:intercept], traces[:slope])))
+X = Real[W'traces[:intercept], W'traces[:slope]]
+Random.seed!(0)
+traces, lps = conditional_smc(LinRegStatic, args, observations, 1, X);
+traces.data[:,1] == X
+
+Random.seed!(0)
+traces, lps = conditional_smc(LinRegStatic, args, observations, 100, X);
+W = exp.(lps);
+traces.data[:,1] == X
+
+
+Random.seed!(0)
+traces = particle_gibbs(LinRegStatic, args, observations, 100, 1000)
+println(mean(traces[:intercept]), " vs true ", map_mu[1])
+println(mean(traces[:slope]), " vs true ", map_mu[2])
+
+
+using Plots
+scatter(traces[:intercept], traces[:slope])
+import Distributions
+posterior = Distributions.MvNormal(map_mu, map_Σ)
+posterior_sample = rand(posterior, 1000)
+scatter(posterior_sample[1,:], posterior_sample[2,:],)
+
+
+# Random.TaskLocalRNG()
+
+# Any[(:y, 1)]
+# Neff=4681.61187053709
+# Any[(:y, 2)]
+# Neff=9064.870236270977
+# Any[(:y, 3)]
+# Neff=8588.965923415002
+# Any[(:y, 4)]
+# Neff=8423.38368401471
+# Any[(:y, 5)]
+# Neff=8232.574091256161
+# Any[:__BREAK]
+#   5.220231 seconds (8.05 M allocations: 430.802 MiB, 4.89% gc time)
+
+
+# -0.7402298247713963 vs true -0.7714285714285714
+
+# 1.8221096950814604 vs true 1.8679245283018866
 
 
 
