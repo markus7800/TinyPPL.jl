@@ -87,11 +87,11 @@ retvals(traces::StaticTraces) = traces.retvals
 
 Base.length(traces::StaticTraces) = size(traces.data,2)
 
-function Base.getindex(traces::StaticTraces, addr::Address)::Vector{<:RVValue}
+function Base.getindex(traces::StaticTraces, addr::Address)
     return traces.data[traces.addesses_to_ix[addr], :]
 end
 
-function Base.getindex(traces::StaticTraces, addr::Address, i::Int)::RVValue
+function Base.getindex(traces::StaticTraces, addr::Address, i::Int)
     @assert addr in traces.addesses_to_ix
     return traces.data[traces.addesses_to_ix[addr], i]
 end
@@ -100,6 +100,14 @@ function subset(traces::StaticTraces, ixs)
     return StaticTraces(traces.addesses_to_ix, traces.data[:,ixs], traces.retvals[ixs])
 end
 export subset
+
+function Base.getindex(traces::StaticTraces, ::Colon, ix::Int)
+    return traces.data[:,ix]
+end
+
+function Base.getindex(traces::StaticTraces, ::Colon, ixs)
+    return subset(traces::StaticTraces, ixs)
+end
 
 # function Base.getindex(traces::Traces, addrs::Vector{Any}, i::Int)::Real
 #     return traces.data[[traces.addesses_to_ix[addr] for addr in addrs], i]

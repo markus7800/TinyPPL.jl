@@ -32,6 +32,15 @@ function subset(traces::UniversalTraces, ixs)
 end
 export subset
 
+function Base.getindex(traces::UniversalTraces, ::Colon, ix::Int)
+    return traces.data[ix]
+end
+
+function Base.getindex(traces::UniversalTraces, ::Colon, ixs)
+    return subset(traces::UniversalTraces, ixs)
+end
+
+
 export UniversalTraces
 
 
