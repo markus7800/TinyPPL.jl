@@ -3,8 +3,10 @@ struct SymbolicPGM
     V::Set{Symbol} # vertices
     A::Set{Pair{Symbol,Symbol}} # edges
     P::Dict{Symbol, Any} # distributions not pdfs
-    Y::Dict{Symbol, Any} # observations
+    Y::Dict{Symbol, Float64} # observations
 end
+
+isobserved(spgm::SymbolicPGM, sym::Symbol) = haskey(spgm.Y, sym)
 
 function Base.show(io::IO, spgm::SymbolicPGM)
     println(io, "Symbolic PGM")
@@ -27,7 +29,7 @@ function EmptyPGM()
         Set{Symbol}(),
         Set{Pair{Symbol,Symbol}}(),
         Dict{Symbol, Any}(),
-        Dict{Symbol, Any}(),
+        Dict{Symbol, Float64}(),
     )
 end
 
@@ -282,8 +284,11 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         observation = expr.args[3]
 
         G1, E1 = transpile(t, phi, dist)
-        G2, E2 = transpile(t, phi, observation)
-        G = graph_disjoint_union(G1, G2)
+        # G2, E2 = transpile(t, phi, observation)
+        # G = graph_disjoint_union(G1, G2)
+        G = G1
+        @assert observation isa Real "$observation is not static."
+        E2 = observation # static observations
     
         # generate fresh variable
         v = gensym(:observe)
@@ -291,7 +296,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         push!(t.all_let_variables, v)
         t.variable_to_address[v] = addr
 
-        F = :($phi ? $E1 : true) # TODO: relpace with "flat" distribution
+        F = :($phi ? $E1 : Flat())
         G.P[v] = simplify_if(F)  # distribution not score
     
         free_vars = get_free_variables(F) ∩ t.all_let_variables # remove primitives from Julia
@@ -303,10 +308,12 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
     
         push!(G.V, v)
     
-        @assert length(get_free_variables(E2) ∩ t.all_let_variables) == 0
+        # @assert length(get_free_variables(E2) ∩ t.all_let_variables) == 0
     
         G.Y[v] = E2
-    
+        
+        # we return value not symbol, values are injected into source
+        # typicall these values are not used anywhere
         return G, E2
 
     elseif expr.head == :$
@@ -330,16 +337,19 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
     end
 end
 
-function logpdf(b::Bool, x::Real)
+struct Flat end
+function logpdf(::Flat, x::Real)
     return 0.
 end
 
 function transpile_program(expr::Expr)
     t = PGMTranspiler()
     all_let_variables = get_let_variables(expr)
-    # println("all_let_variables:", all_let_variables)
+    
     if !isempty(all_let_variables)
-        push!(t.all_let_variables, all_let_variables...)
+        for var in all_let_variables
+            push!(t.all_let_variables, var)
+        end
     end
 
     main = expr.args[end]

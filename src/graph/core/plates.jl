@@ -165,8 +165,9 @@ function plate_function_name(name::Symbol, kind::Symbol, plate::Plate)
     Symbol("$(name)_$(kind)_plate_$(plate.symbol)")
 end
 
-function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, symbolic_observes, X::Symbol, Y::Symbol, static_observes::Bool, kind)
+function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, symbolic_observes, X::Symbol, X_unconstrained::Symbol, kind)
     @assert kind in (:sample, :lp, :lp_unconstrained, :to_constrained, :to_unconstrained)
+    static_observes = true
     # X is constrained, Y is unconstrained
     # distributions arguments are written in terms of X
     # to = :unconstrained leaves X unchanged, writes into Y
@@ -219,13 +220,13 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                 elseif kind == :lp || (kind == :lp_unconstrained && !should_transform)
                     :($lp += logpdf($iid_d_sym, $X[$loop_var]))
                 elseif kind == :to_constrained && should_transform
-                    :($X[$loop_var] = $iid_d_sym.T_inv($Y[$loop_var]))
+                    :($X[$loop_var] = $iid_d_sym.T_inv($X_unconstrained[$loop_var]))
                 elseif kind == :to_unconstrained && should_transform
-                    :($Y[$loop_var] = $iid_d_sym.T($X[$loop_var]))
+                    :($X_unconstrained[$loop_var] = $iid_d_sym.T($X[$loop_var]))
                 elseif kind == :to_constrained !should_transform
-                    :($X[$loop_var] = $Y[$loop_var])
+                    :($X[$loop_var] = $X_unconstrained[$loop_var])
                 elseif kind == :to_unconstrained !should_transform
-                    :($Y[$loop_var] = $X[$loop_var])
+                    :($X_unconstrained[$loop_var] = $X[$loop_var])
                 elseif kind == :sample
                     :($X[$loop_var] = rand($iid_d_sym))
                 else
@@ -271,17 +272,17 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                 elseif kind == :to_constrained && should_transform
                     :(begin
                         $loop_d_sym = to_unconstrained($loop_d_sym)
-                        $X[$low + $loop_var] = $loop_d_sym.T_inv($Y[$low + $loop_var])
+                        $X[$low + $loop_var] = $loop_d_sym.T_inv($X_unconstrained[$low + $loop_var])
                     end)
                 elseif kind == :to_unconstrained && should_transform
                     :(begin
                         $loop_d_sym = to_unconstrained($loop_d_sym)
-                        $Y[$low + $loop_var] = $loop_d_sym.T($X[$low + $loop_var])
+                        $X_unconstrained[$low + $loop_var] = $loop_d_sym.T($X[$low + $loop_var])
                     end)
                 elseif kind == :to_constrained && !should_transform
-                    :($X[$low + $loop_var] = $Y[$low + $loop_var])
+                    :($X[$low + $loop_var] = $X_unconstrained[$low + $loop_var])
                 elseif kind == :to_unconstrained && !should_transform
-                    :($Y[$low + $loop_var] = $X[$low + $loop_var])
+                    :($X_unconstrained[$low + $loop_var] = $X[$low + $loop_var])
                 elseif kind == :sample
                     :($X[$low + $loop_var] = rand($loop_d_sym))
                 else
@@ -308,13 +309,13 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
                     elseif kind == :lp || kind == :lp_unconstrained
                         push!(block_args, :($lp += logpdf($child_d_sym, $X[$child])))
                     elseif kind == :to_constrained && should_transform
-                        push!(block_args, :($X[$child] = $child_d_sym.T_inv($Y[$child])))
+                        push!(block_args, :($X[$child] = $child_d_sym.T_inv($X_unconstrained[$child])))
                     elseif kind == :to_unconstrained && should_transform
-                        push!(block_args, :($Y[$child] = $child_d_sym.T($X[$child])))
+                        push!(block_args, :($X_unconstrained[$child] = $child_d_sym.T($X[$child])))
                     elseif kind == :to_constrained &&!should_transform
-                        push!(block_args, :($X[$child] = $Y[$child]))
+                        push!(block_args, :($X[$child] = $X_unconstrained[$child]))
                     elseif kind == :to_unconstrained &&!should_transform
-                        push!(block_args, :($Y[$child] = $X[$child]))
+                        push!(block_args, :($X_unconstrained[$child] = $X[$child]))
                     elseif kind == :sample
                         push!(block_args, :($X[$child] = rand($child_d_sym)))   
                     else
@@ -330,7 +331,7 @@ function get_plate_functions(pgm_name, plates, plated_edges, symbolic_dists, sym
         f_name = plate_function_name(pgm_name, kind, plate)
         if kind in (:to_constrained, :to_unconstrained)
             f = rmlines(:(
-                function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
+                function $f_name($X::Vector{Float64}, $X_unconstrained::Vector{Float64})
                     $(Expr(:block, block_args...))
                 end
             ))

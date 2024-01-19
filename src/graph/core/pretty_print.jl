@@ -7,7 +7,7 @@ function Base.show(io::IO, pgm::PGM)
     println(io, E)
     println(io, "Addresses:")
     for (i, addr) in enumerate(pgm.addresses)
-        if !isnothing(pgm.observed_values[i])
+        if isobserved(pgm, i)
             println(io, "y$i -> ", addr)
         else
             println(io, "x$i -> ", addr)

@@ -209,6 +209,16 @@ function simplify_if(expr)
     end
 end
 
+#=
+Applies f n times
+let v = f(x),
+    v = f(v),
+    ...
+    v = f(v)
+    
+    v
+end
+=#
 function repeatf_symbolic(n, f, x)
     v = gensym(:v)
     block_args = [:($v = $f($x))]

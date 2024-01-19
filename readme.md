@@ -136,7 +136,7 @@ Only base Julia functions and distributions are available.
 For example,
 
 ```julia
-model = @ppl simple begin
+model = @pgm simple begin
     let X ~ Normal(0., 1.)
         Normal(X, 1.) ↦ 1.
         X
