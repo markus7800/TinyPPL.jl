@@ -229,6 +229,31 @@ function repeatf_symbolic(n, f, x)
 end
 
 #=
+Applies f n times
+let v = f(x),
+    v = f(v),
+    ...
+    v = f(v)
+    
+    v
+end
+=#
+function loopf_symbolic(n, f, init, args)
+    v = gensym(:v)
+    args_sym = [gensym("a_$i") for (i,arg) in enumerate(args)]
+    block_args = []
+    for (i,arg) in enumerate(args)
+        push!(block_args, :($(args_sym[i]) = $arg))
+    end
+    push!(block_args, :($v = $init))
+
+    for j in 1:n
+        push!(block_args, :($v = $f($j, $v, $(args_sym...))))
+    end
+    return unwrap_let(Expr(:let, Expr(:block, block_args...), Expr(:block, v)))
+end
+
+#=
     extracts names of function calls
 =#
 function get_call_names(expr, names=Symbol[])

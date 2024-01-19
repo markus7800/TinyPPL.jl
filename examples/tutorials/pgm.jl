@@ -79,3 +79,41 @@ model = @pgm ncoins begin
         X
     end
 end
+
+
+model = @pgm ncoins begin
+    function f(x)
+        x + 1
+    end
+    let X ~ Uniform(-1.,1.)
+        @iterate(5, f, X)
+    end
+end
+
+
+model = @pgm ncoins begin
+    function f(count, val, x , y)
+        val * x + y
+    end
+    let X ~ Uniform(-1.,1.)
+        @loop(5, f, X, 2, 1)
+    end
+end
+
+T = 5
+y = randn(T)
+
+model = @pgm plated lgss begin
+    function step(t, x, a, σ_v, σ_e, y)
+        let new_x = {:x => t} ~ Normal(a * x, σ_v)
+            {:y => t} ~ Normal(new_x, σ_e) ↦ y[t]
+            new_x
+        end
+    end
+
+    let T = $(Main.T), y = $(Main.y),
+        a = 0.9, σ_v = 0.32, σ_e = 1.
+
+        @loop(T, step, 0, a, σ_v, σ_e, y)
+    end
+end
