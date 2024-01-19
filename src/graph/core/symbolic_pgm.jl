@@ -287,8 +287,8 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         # G2, E2 = transpile(t, phi, observation)
         # G = graph_disjoint_union(G1, G2)
         G = G1
-        @assert observation isa Real "$observation is not static."
-        E2 = observation # static observations
+        @assert isempty(get_free_variables(observation) ∩ t.all_let_variables) "$observation is not static."
+        E2 = eval(observation) # static observations
     
         # generate fresh variable
         v = gensym(:observe)
@@ -314,6 +314,10 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         
         # we return value not symbol, values are injected into source
         # typicall these values are not used anywhere
+        # it is best practice not to use them (not bind an observe statement to a variable in let)
+        # alternative implemenation: make observations also symbolic:
+        # adv: oberved values are not compiled into distributions, we can use a different set of observed values after compilation
+        # disadv: we have to index into observations in distributions
         return G, E2
 
     elseif expr.head == :$
