@@ -341,6 +341,9 @@ function get_transform(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}
     # but transform_to_unconstrained(X, X) does not work because the constrained values that are used get overwritten
     @assert to in (:constrained, :unconstrained)
     block_args = []
+    if to == :unconstrained
+        push!(block_args, :(@assert $X !== $X_unconstrained))
+    end
 
     ordered_nodes = if isnothing(plate_info)
         get_topolocial_order(n_variables, edges)
@@ -555,7 +558,7 @@ export isobserved
 end
 export get_observed_value
 
-@inline function get_value(pgm::PGM, node::Int, X::Vector{Float64})
+@inline function get_value(pgm::PGM, node::Int, X::INPUT_VECTOR_TYPE)
     if isobserved(pgm, node)
         return get_observed_value(pgm, node)
     else
@@ -564,12 +567,12 @@ export get_observed_value
 end
 export get_value
 
-@inline function get_distribution(pgm::PGM, node::Int, X::Vector{Float64})
+@inline function get_distribution(pgm::PGM, node::Int, X::INPUT_VECTOR_TYPE)
     return pgm.distributions[node](X)
 end
 export get_distribution
 
-@inline function get_retval(pgm::PGM, X::Vector{Float64})
+@inline function get_retval(pgm::PGM, X::INPUT_VECTOR_TYPE)
     return pgm.return_expr(X)
 end
 export get_retval

@@ -3,6 +3,12 @@ using TinyPPL.Distributions
 using TinyPPL.Graph
 import Random
 
+function get_meanfield_parameters(vi_result)
+    mu = [d.base.μ for d in vi_result.Q.dists]
+    sigma = [d.base.σ for d in vi_result.Q.dists]
+    return mu, sigma    
+end
+
 begin
     # xs = [-1., -0.5, 0.0, 0.5, 1.0] .+ 1;
     xs = [-1., -0.5, 0.0, 0.5, 1.0];
@@ -85,3 +91,39 @@ hmc_traces = hmc(model, 10^4, 10, 0.1)
 
 mean(hmc_traces[:intercept])
 mean(hmc_traces[:slope])
+
+
+
+Random.seed!(0)
+vi_result_meanfield = advi_meanfield(model, 10_000, 10, 0.01)
+maximum(abs, map_mu .- vi_result_meanfield.Q.mu)
+maximum(abs, map_sigma .- vi_result_meanfield.Q.sigma)
+
+posterior = sample_posterior(vi_result_meanfield, 1_000_000)
+mean(posterior[:intercept]), mean(posterior[:slope])
+vi_result_meanfield.Q.mu
+
+Random.seed!(0)
+vi_result_meanfield_2 = advi(model, 10_000, 10, 0.01, MeanFieldGaussian(model.n_latents), RelativeEntropyELBO())
+@assert all(vi_result_meanfield.Q.mu .≈ vi_result_meanfield_2.Q.mu)
+@assert all(vi_result_meanfield.Q.sigma .≈ vi_result_meanfield_2.Q.sigma)
+
+
+# ReinforceELBO
+Random.seed!(0)
+vi_result_bbvi = bbvi(model, 10_000, 10, 0.01)
+mu_pd_bbvi, sigma_pd_bbvi = get_meanfield_parameters(vi_result_bbvi)
+maximum(abs, map_mu .- mu_pd_bbvi)
+maximum(abs, map_sigma .- sigma_pd_bbvi)
+
+
+
+Random.seed!(0)
+vi_result_fullrank = advi_fullrank(model, 10_000, 10, 0.01)
+maximum(abs, map_mu .- vi_result_fullrank.Q.mu)
+maximum(abs, map_Σ .- vi_result_fullrank.Q.base.Σ)
+
+Random.seed!(0)
+vi_result_fullrank_2 = advi(model, 10_000, 10, 0.01, FullRankGaussian(model.n_latents), RelativeEntropyELBO())
+@assert all(vi_result_fullrank.Q.mu .≈ vi_result_fullrank_2.Q.base.μ)
+@assert all(vi_result_fullrank.Q.base.Σ .≈ vi_result_fullrank_2.Q.base.Σ)

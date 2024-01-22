@@ -30,3 +30,11 @@ abstract type VIResult end
 function sample_posterior(::VIResult, n::Int)::Tuple{<:AbstractTraces,Vector{Float64}}
     error("Not implemented.")
 end
+
+"""
+Wrapper for VariationalParameters, which maps name to value.
+"""
+abstract type VIParameters end
+function Base.getindex(p::VIParameters, addr::Address)
+    error("Not implemented.")
+end
