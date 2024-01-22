@@ -1,38 +1,37 @@
 import ..TinyPPL.Distributions: logpdf
 
-function smc(pgm::PGM, n_particles::Int)
-    observed = .!isnothing.(pgm.observed_values)
-    
-    particles = [Vector{Float64}(undef, pgm.n_variables) for _ in 1:n_particles]
+function smc(pgm::PGM, n_particles::Int)    
+    particles = [Vector{Float64}(undef, pgm.n_latents) for _ in 1:n_particles]
     log_w = Vector{Float64}(undef, n_particles)
 
     @progress for node in pgm.topological_order
-        if observed[node]
+        if isobserved(pgm, node)
             for i in 1:n_particles
                 X = particles[i]
-                d = pgm.distributions[node](X)
-                value = pgm.observed_values[node](X)
+                d = get_distribution(pgm, node, X)
+                value = get_observed_value(pgm, node)
                 log_w[i] = logpdf(d, value)
-                X[node] = value
             end
             W = exp.(log_w)
             W = W / sum(W)
 
             A = rand(Categorical(W), n_particles)
-            _particles = copy(particles) # shallow copy to reorder
-            for i in 1:n_particles
-                particles[i] = copy(_particles[A[i]])
-            end
+            particles = copy.(particles[A])
         else
             for i in 1:n_particles
                 X = particles[i]
-                d = pgm.distributions[node](X)
+                d = get_distribution(pgm, node, X)
                 X[node] = rand(d)
             end
         end
     end
+    retvals = Vector{Any}(undef, n_particles)
+    for i in 1:n_particles
+        X = particles[i]
+        retvals[i] = get_retval(pgm, X)
+    end
     traces = reduce(hcat, particles)
-    return traces, normalise(log_w)
+    return GraphTraces(pgm, traces, retvals), normalise(log_w)
 end
 
 export smc

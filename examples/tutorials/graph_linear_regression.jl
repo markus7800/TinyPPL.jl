@@ -54,7 +54,7 @@ end
 # try all inference algorithms
 
 Random.seed!(0)
-traces, lps = likelihood_weighting(model, 10^6)
+@time traces, lps = likelihood_weighting(model, 10^6)
 W = exp.(lps);
 
 W'traces[:intercept]
@@ -93,6 +93,13 @@ mean(hmc_traces[:intercept])
 mean(hmc_traces[:slope])
 
 
+Random.seed!(0)
+@time smc_traces, lps = smc(model, 10^6)
+W = exp.(lps);
+
+W'smc_traces[:intercept]
+W'smc_traces[:slope]
+
 
 Random.seed!(0)
 vi_result_meanfield = advi_meanfield(model, 10_000, 10, 0.01)
@@ -119,6 +126,7 @@ maximum(abs, map_sigma .- sigma_bbvi)
 Random.seed!(0)
 vi_result_bbvi_naive = bbvi_naive(model, 10_000, 10, 0.01)
 mu_pd_bbvi_naive, sigma_pd_bbvi_naive = get_meanfield_parameters(vi_result_bbvi_naive)
+# TODO: find out why these are not equivalent
 maximum(abs, mu_bbvi .- mu_pd_bbvi_naive)
 maximum(abs, sigma_bbvi .- sigma_pd_bbvi_naive)
 
