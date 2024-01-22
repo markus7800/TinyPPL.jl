@@ -112,9 +112,22 @@ vi_result_meanfield_2 = advi(model, 10_000, 10, 0.01, MeanFieldGaussian(model.n_
 # ReinforceELBO
 Random.seed!(0)
 vi_result_bbvi = bbvi(model, 10_000, 10, 0.01)
-mu_pd_bbvi, sigma_pd_bbvi = get_meanfield_parameters(vi_result_bbvi)
-maximum(abs, map_mu .- mu_pd_bbvi)
-maximum(abs, map_sigma .- sigma_pd_bbvi)
+mu_bbvi, sigma_bbvi = get_meanfield_parameters(vi_result_bbvi)
+maximum(abs, map_mu .- mu_bbvi)
+maximum(abs, map_sigma .- sigma_bbvi)
+
+Random.seed!(0)
+vi_result_bbvi_naive = bbvi_naive(model, 10_000, 10, 0.01)
+mu_pd_bbvi_naive, sigma_pd_bbvi_naive = get_meanfield_parameters(vi_result_bbvi_naive)
+maximum(abs, mu_bbvi .- mu_pd_bbvi_naive)
+maximum(abs, sigma_bbvi .- sigma_pd_bbvi_naive)
+
+Random.seed!(0)
+vi_result_bbvi_rao = bbvi_rao(model, 10_000, 10, 0.01)
+mu_pd_bbvi_rao, sigma_pd_bbvi_rao = get_meanfield_parameters(vi_result_bbvi_rao)
+maximum(abs, map_mu .- mu_pd_bbvi_rao)
+maximum(abs, map_sigma .- sigma_pd_bbvi_rao)
+
 
 
 
