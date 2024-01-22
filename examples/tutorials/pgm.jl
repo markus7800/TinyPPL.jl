@@ -100,10 +100,10 @@ model = @pgm ncoins begin
     end
 end
 
-T = 5
+T = 400
 y = randn(T)
 
-model = @pgm plated lgss begin
+model = @pgm lgss begin
     function step(t, x, a, σ_v, σ_e, y)
         let new_x = {:x => t} ~ Normal(a * x, σ_v)
             {:y => t} ~ Normal(new_x, σ_e) ↦ y[t]

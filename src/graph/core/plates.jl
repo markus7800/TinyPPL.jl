@@ -182,7 +182,7 @@ function plate_function_name(name::Symbol, kind::Symbol, plate::Plate)
 end
 
 function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edges::Set{PlatedEdge}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, Y::Symbol, X_unconstrained::Symbol, kind::Symbol)
-    n_samples = length(is_observed) - sum(is_observed)
+    n_latents = length(is_observed) - sum(is_observed)
     @assert kind in (:sample, :lp, :lp_unconstrained, :to_constrained, :to_unconstrained)
     static_observes = true
     # X is constrained, Y is unconstrained
@@ -232,7 +232,7 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
                     loop_body = :($X[$loop_var] = rand($iid_d_sym))
 
                 elseif kind == :lp || (kind == :lp_unconstrained && !should_transform) # observed or unobserved
-                    array_access = no_observed ? :($X[$loop_var]) : :($Y[$loop_var - $n_samples])
+                    array_access = no_observed ? :($X[$loop_var]) : :($Y[$loop_var - $n_latents])
                     loop_body = :($lp += logpdf($iid_d_sym, $array_access))
 
                 elseif kind == :lp_unconstrained && should_transform # no_observed
@@ -282,7 +282,7 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
                     end
                 end
                 # all dist expressions have to be the same to put them in loop body
-                @assert allequal(plate_symbolic_dists) unique(plate_symbolic_dists)
+                @assert allequal(plate_symbolic_dists) unique(plate_symbolic_dists) # TODO: make check and fallback to spaghetti otherwise
                 loop_d_sym = gensym("loop_dist")
                 low = first(plate.nodes)-1
                 should_transform = no_observed && should_transform_to_unconstrained(plate_symbolic_dists[1])
@@ -291,7 +291,7 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
                     loop_body = :($X[$low + $loop_var] = rand($loop_d_sym))
 
                 elseif kind == :lp || (kind == :lp_unconstrained && !should_transform) # observed or unobserved
-                    array_access = no_observed ? :($X[$low + $loop_var]) : :($Y[$low + $loop_var - $n_samples])
+                    array_access = no_observed ? :($X[$low + $loop_var]) : :($Y[$low + $loop_var - $n_latents])
                     loop_body = :($lp += logpdf($loop_d_sym, $array_access))
 
                 elseif kind == :lp_unconstrained && should_transform # no_observed
@@ -342,7 +342,7 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
                         push!(block_args, :($X[$child] = rand($child_d_sym))) 
     
                     elseif kind == :lp || (kind == :lp_unconstrained && !should_transform) # observed or unobserved
-                        array_access = no_observed ? :($X[$child]) : :($Y[$child - $n_samples])
+                        array_access = no_observed ? :($X[$child]) : :($Y[$child - $n_latents])
                         push!(block_args, :($lp += logpdf($child_d_sym, $array_access)))
     
                     elseif kind == :lp_unconstrained && should_transform # no_observed

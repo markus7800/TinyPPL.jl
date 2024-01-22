@@ -29,13 +29,13 @@ include("plates.jl")
 struct PGM
     name::Symbol
     n_variables::Int
-    n_samples::Int
+    n_latents::Int
 
     edges::Set{Pair{Int,Int}} # edges
     addresses::Vector{Any}
 
     distributions::Vector{Function} # distributions not pdfs
-    observations::Vector{Real} # observations
+    observations::Vector{Float64} # observations
     return_expr::Function
 
     plate_info::Union{Nothing, PlateInfo}
@@ -180,9 +180,9 @@ end
 #=
     replaces symbols with corresponding vector entry X[j] for each distribution expression in symbolic_pgm.
 =#
-function get_symbolic_distributions(symbolic_pgm::SymbolicPGM, n_samples::Int, ix_to_sym::Dict{Int,Symbol}, var_to_expr::Dict{Symbol,Any}, X::Symbol)
+function get_symbolic_distributions(symbolic_pgm::SymbolicPGM, n_latents::Int, ix_to_sym::Dict{Int,Symbol}, var_to_expr::Dict{Symbol,Any}, X::Symbol)
     symbolic_dists = []
-    for node in 1:n_samples
+    for node in 1:n_latents
         sym = ix_to_sym[node]
         d = symbolic_pgm.P[sym]
         d = subtitute_for_syms(var_to_expr, d, X)
@@ -193,8 +193,8 @@ end
 
 function get_symbolic_distributions(pgm::PGM, X::Symbol)
     ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
-    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:pgm.n_samples)
-    return get_symbolic_distributions(pgm.symbolic_pgm, pgm.n_samples, ix_to_sym, var_to_expr, X)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:pgm.n_latents)
+    return get_symbolic_distributions(pgm.symbolic_pgm, pgm.n_latents, ix_to_sym, var_to_expr, X)
 end
 
 # sort by address
@@ -280,7 +280,7 @@ function get_sample(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
 end
 
 function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, Y::Symbol; unconstrained::Bool=false)
-    n_samples = n_variables - sum(is_observed)
+    n_latents = n_variables - sum(is_observed)
     lp = gensym(:lp)
     lp_block_args = []
 
@@ -301,7 +301,7 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
             
             if is_observed[node]
                 push!(lp_block_args, :($d_sym = $d))
-                push!(lp_block_args, :($lp += logpdf($d_sym, $Y[$(node-n_samples)])))
+                push!(lp_block_args, :($lp += logpdf($d_sym, $Y[$(node-n_latents)])))
             else
                 if unconstrained && should_transform_to_unconstrained(d)
                     push!(lp_block_args, :($d_sym = $d))
@@ -404,7 +404,7 @@ function compile_symbolic_pgm(
 
     n_variables = length(spgm.V)
     n_observes = length(spgm.Y)
-    n_samples = n_variables - n_observes
+    n_latents = n_variables - n_observes
 
     # we map the symbol to index in vector, sorted by address, observes last
     sym_to_ix = Dict(sym => ix for (ix, sym) in enumerate(
@@ -413,8 +413,8 @@ function compile_symbolic_pgm(
     ix_to_sym = Dict(ix => sym for (sym, ix) in sym_to_ix)
     edges = Set([sym_to_ix[x] => sym_to_ix[y] for (x, y) in spgm.A])
     # assert that observations are last
-    @assert all(!isobserved(spgm, ix_to_sym[j]) for j in 1:n_samples)
-    @assert all(isobserved(spgm, ix_to_sym[j]) for j in (n_samples+1):n_variables)
+    @assert all(!isobserved(spgm, ix_to_sym[j]) for j in 1:n_latents)
+    @assert all(isobserved(spgm, ix_to_sym[j]) for j in (n_latents+1):n_variables)
     is_observed = [isobserved(spgm, ix_to_sym[j]) for j in 1:n_variables]
 
     topolical_ordered = get_topolocial_order(n_variables, edges) # includes oberved variables
@@ -422,7 +422,7 @@ function compile_symbolic_pgm(
     X = gensym(:X)
     Y = gensym(:Y)
     # observed variables are never read from X, and since they are static we know the observerations after compilation
-    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:n_samples)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:n_latents)
     symbolic_dists = get_symbolic_distributions(spgm, n_variables, ix_to_sym, var_to_expr, X)
 
     distributions = Vector{Function}(undef, n_variables)
@@ -436,14 +436,14 @@ function compile_symbolic_pgm(
 
         f_name = Symbol("$(name)_dist_$i")
         f = rmlines(:(
-            function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_samples
+            function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_latents
                 $(symbolic_dists[i])
             end
         ))
         # display(f)
         distributions[i] = eval(f)
         if isobserved(spgm, ix_to_sym[i])
-            observations[i-n_samples] = spgm.Y[sym]
+            observations[i-n_latents] = spgm.Y[sym]
         end
     end
 
@@ -451,7 +451,7 @@ function compile_symbolic_pgm(
     f_name = Symbol("$(name)_return")
     new_E = subtitute_for_syms(var_to_expr, deepcopy(E), X)
     f = rmlines(:(
-        function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_samples
+        function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_latents
             $new_E
         end
     ))
@@ -496,13 +496,13 @@ function compile_symbolic_pgm(
 
     if !(:uninvoked in annotations)
         # force compilation
-        X = Vector{Float64}(undef, n_samples)
+        X = Vector{Float64}(undef, n_latents)
         # invokes plate functions as well
         Base.invokelatest(sample!, X)
         Base.invokelatest(logpdf, X, observations)
-        Y = Vector{Float64}(undef, n_samples)
+        Y = Vector{Float64}(undef, n_latents)
         Y = Base.invokelatest(transform_to_unconstrained!, X, Y)
-        Z = Vector{Float64}(undef, n_samples)
+        Z = Vector{Float64}(undef, n_latents)
         Base.invokelatest(transform_to_constrained!, Z, Y)
         @assert all(X .≈ Z) (X,Z)
 
@@ -519,7 +519,7 @@ function compile_symbolic_pgm(
     return PGM(
         name,
         n_variables,
-        n_samples,
+        n_latents,
 
         edges,
         addresses,
@@ -545,7 +545,36 @@ function compile_symbolic_pgm(
     )
 end
 
-function isobserved(pgm::PGM, node::Int)
-    return node > pgm.n_samples
+@inline function isobserved(pgm::PGM, node::Int)
+    return node > pgm.n_latents
 end
 export isobserved
+
+@inline function get_observed_value(pgm::PGM, node::Int)
+    return pgm.observations[node - pgm.n_latents]
+end
+export get_observed_value
+
+@inline function get_value(pgm::PGM, node::Int, X::Vector{Float64})
+    if isobserved(pgm, node)
+        return get_observed_value(pgm, node)
+    else
+        return X[node]
+    end
+end
+export get_value
+
+@inline function get_distribution(pgm::PGM, node::Int, X::Vector{Float64})
+    return pgm.distributions[node](X)
+end
+export get_distribution
+
+@inline function get_retval(pgm::PGM, X::Vector{Float64})
+    return pgm.return_expr(X)
+end
+export get_retval
+
+@inline function get_address(pgm::PGM, node::Int)
+    return pgm.addresses[node]
+end
+export get_address

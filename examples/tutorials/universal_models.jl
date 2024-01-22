@@ -32,15 +32,15 @@ W = exp.(lps);
 posterior_mean = lw_result'W
 
 Random.seed!(0)
-lmh_traces, _ = lmh(pedestrian, args, observations, 1_000_000);
+lmh_traces = lmh(pedestrian, args, observations, 1_000_000);
 posterior_mean = mean(retvals(lmh_traces))
 
 Random.seed!(0)
-rwmh_traces, _ = rwmh(pedestrian, args, observations, 1_000_000, default_var=0.1);
+rwmh_traces = rwmh(pedestrian, args, observations, 1_000_000, default_var=0.1);
 posterior_mean = mean(retvals(rwmh_traces))
 
 Random.seed!(0)
-lmh_traces_2, _ = lmh(pedestrian, args, observations, 1_000_000,
+lmh_traces_2 = lmh(pedestrian, args, observations, 1_000_000,
     addr2proposal = Addr2Proposal(
         :start_position => ContinuousRandomWalkProposal(0.1, 0., 3.),
         :step => ContinuousRandomWalkProposal(0.1, -1., 1.)

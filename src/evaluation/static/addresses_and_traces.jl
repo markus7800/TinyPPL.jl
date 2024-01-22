@@ -63,24 +63,24 @@ Wrapper for the result of sample based inference algorithms, like MH or IS.
 Provides getters for retrieving all values / specific value of a given address.
 """
 struct StaticTraces <: AbstractTraces
-    addesses_to_ix::Addr2Ix
+    addresses_to_ix::Addr2Ix
     data::Array{RVValue} # note: change here for multivariate support to UnitRange{Int}
     retvals::Vector{Any}
-    function StaticTraces(addesses_to_ix::Addr2Ix, n::Int)
-        return new(addesses_to_ix, Array{RVValue}(undef, length(addesses_to_ix), n), Vector{Any}(undef, n))
+    function StaticTraces(addresses_to_ix::Addr2Ix, n::Int)
+        return new(addresses_to_ix, Array{RVValue}(undef, length(addresses_to_ix), n), Vector{Any}(undef, n))
     end
 
-    function StaticTraces(addesses_to_ix::Addr2Ix, k::Int, n::Int)
-        return new(addesses_to_ix, Array{RVValue}(undef, k, n), Vector{Any}(undef, n))
+    function StaticTraces(addresses_to_ix::Addr2Ix, k::Int, n::Int)
+        return new(addresses_to_ix, Array{RVValue}(undef, k, n), Vector{Any}(undef, n))
     end
     
-    function StaticTraces(addesses_to_ix::Addr2Ix, data::AbstractArray{<:RVValue}, retvals::Vector{Any})
-        return new(addesses_to_ix, data, retvals)
+    function StaticTraces(addresses_to_ix::Addr2Ix, data::AbstractArray{<:RVValue}, retvals::Vector{Any})
+        return new(addresses_to_ix, data, retvals)
     end
 end
 
 function Base.show(io::IO, traces::StaticTraces)
-    print(io, "StaticTraces($(size(traces.data,2)) entries for $(length(traces.addesses_to_ix)) addresses)")
+    print(io, "StaticTraces($(size(traces.data,2)) entries for $(length(traces.addresses_to_ix)) addresses)")
 end
 
 retvals(traces::StaticTraces) = traces.retvals
@@ -88,17 +88,17 @@ retvals(traces::StaticTraces) = traces.retvals
 Base.length(traces::StaticTraces) = size(traces.data,2)
 
 function Base.getindex(traces::StaticTraces, addr::Address)
-    @assert haskey(traces.addesses_to_ix, addr) "$addr not in addresses_to_ix"
-    return traces.data[traces.addesses_to_ix[addr], :]
+    @assert haskey(traces.addresses_to_ix, addr) "$addr not in addresses_to_ix"
+    return traces.data[traces.addresses_to_ix[addr], :]
 end
 
 function Base.getindex(traces::StaticTraces, addr::Address, i::Int)
-    @assert haskey(traces.addesses_to_ix, addr) "$addr not in addresses_to_ix"
-    return traces.data[traces.addesses_to_ix[addr], i]
+    @assert haskey(traces.addresses_to_ix, addr) "$addr not in addresses_to_ix"
+    return traces.data[traces.addresses_to_ix[addr], i]
 end
 
 function subset(traces::StaticTraces, ixs)
-    return StaticTraces(traces.addesses_to_ix, traces.data[:,ixs], traces.retvals[ixs])
+    return StaticTraces(traces.addresses_to_ix, traces.data[:,ixs], traces.retvals[ixs])
 end
 export subset
 
@@ -107,11 +107,7 @@ function Base.getindex(traces::StaticTraces, ::Colon, ix::Int)
 end
 
 function Base.getindex(traces::StaticTraces, ::Colon, ixs)
-    return subset(traces::StaticTraces, ixs)
+    return subset(traces, ixs)
 end
-
-# function Base.getindex(traces::Traces, addrs::Vector{Any}, i::Int)::Real
-#     return traces.data[[traces.addesses_to_ix[addr] for addr in addrs], i]
-# end
 
 export StaticTraces

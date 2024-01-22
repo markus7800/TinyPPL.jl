@@ -90,7 +90,8 @@ We have to run the model in different contexts to implement inference algorithms
 ### Graph-Based Approach
 
 For a graph based approach we need to restrict the source language.
-For instance, to avoid an unbounded number of nodes we cannot allow dynamic loops, or recursion.
+For instance, to avoid an unbounded number of nodes we cannot allow dynamic loops, or recursion.  
+And we also assume that each distribution produces `Float64`.
 
 We can write let blocks
 

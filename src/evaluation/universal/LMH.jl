@@ -73,11 +73,11 @@ end
 # else only one resample address is chosen randomly per iteraion
 # this is worker functoin which may be used by any UniversalSingleSiteSampler (LMH or RWMH)
 # returns samples X_i ~ p(X|Y) 
-# returns also `logprobs` log p(X,Y) = log p(X|Y) + log p(Y), which my be used to estimate MAP
+# (does not return also `logprobs` log p(X,Y) = log p(X|Y) + log p(Y), which my be used to estimate MAP
+# but can be computed with make_logjoint afterwards.)
 function single_site_sampler(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, sampler::UniversalSingleSiteSampler, gibbs::Bool)
     traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
-    logprobs = Vector{Float64}(undef, n_samples) # log p(X,Y)
 
     # initialise
     retval_current = model(args, sampler, observations)
@@ -134,12 +134,11 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::O
         end
 
         retvals[i] = retval_current
-        logprobs[i] = W_current
         traces[i] = trace_current
     end
     @info "SingleSite $(typeof(sampler))" n_accepted/(n_samples*length(addresses))
 
-    return UniversalTraces(traces, retvals), logprobs
+    return UniversalTraces(traces, retvals)
 end
 
 function lmh(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int; 

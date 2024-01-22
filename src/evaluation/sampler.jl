@@ -1,8 +1,7 @@
 
-const Address = Any
 const RVValue = Real # currently only univariate distributions are supported
 const Observations = Dict{Address, RVValue}
-export Address, Observations
+export Observations
 
 """
 Samplers facilitate a *contextualised execution* of the probabilistic program.

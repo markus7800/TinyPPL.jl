@@ -3,33 +3,31 @@ import ..TinyPPL.Distributions: logpdf
 function likelihood_weighting(pgm::PGM, n_samples::Int)
 
     retvals = Vector{Any}(undef, n_samples)
+    trace = Array{Float64,2}(undef, pgm.n_latents, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
-    trace = Array{Float64,2}(undef, pgm.n_variables, n_samples)
-
-    observed = .!isnothing.(pgm.observed_values)
     
-    X = Vector{Float64}(undef, pgm.n_variables)
+    X = Vector{Float64}(undef, pgm.n_latents)
     @progress for i in 1:n_samples
         W = 0.
         for node in pgm.topological_order
-            d = pgm.distributions[node](X)
+            d = get_distribution(pgm, node, X)
 
-            if observed[node]
-                value = pgm.observed_values[node](X)
+            if isobserved(pgm, node)
+                value = get_observed_value(pgm, node)
                 W += logpdf(d, value)
             else
                 value = rand(d)
+                X[node] = value
             end
-            X[node] = value
         end
-        r = pgm.return_expr(X)
+        r = get_retval(pgm, X)
 
         logprobs[i] = W
         retvals[i] = r
         trace[:,i] = X
     end
 
-    return trace, retvals, normalise(logprobs)
+    return GraphTraces(pgm, trace, retvals), normalise(logprobs)
 end
 
 export likelihood_weighting
