@@ -52,8 +52,9 @@ struct PGMTranspiler
     all_let_variables::Set{Symbol}
     variables::Set{Symbol}
     variable_to_address::Dict{Symbol, Any}
+    translation_order::Vector{Symbol}
     function PGMTranspiler()
-        return new(Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Dict{Symbol, Any}())
+        return new(Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Dict{Symbol, Any}(), Vector{Symbol}())
     end
 end
 
@@ -264,6 +265,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         push!(t.variables, v)
         push!(t.all_let_variables, v)
         t.variable_to_address[v] = addr
+        push!(t.translation_order, v)
 
         # should only contain vars from sample or observe
         # all other vars should be substituted for their let value
@@ -295,6 +297,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         push!(t.variables, v)
         push!(t.all_let_variables, v)
         t.variable_to_address[v] = addr
+        push!(t.translation_order, v)
 
         F = :($phi ? $E1 : Flat())
         G.P[v] = simplify_if(F)  # distribution not score
@@ -383,5 +386,5 @@ function transpile_program(expr::Expr)
     end
 
     G, E = transpile(t, true, main)
-    return G, E, t.variable_to_address
+    return G, E, t.variable_to_address, t.translation_order
 end

@@ -181,17 +181,44 @@ traces = sample_from_prior(LGSS, args, Observations(), 1)
 observations = Observations((:y => t) => traces[:y => t, 1] for t in 1:T)
 ground_truth = Dict((:x => t) => traces[:x => t, 1] for t in 1:T)
 
+for t in 1:T
+    println(observations[:y => t], ",")
+end
+
+for t in 1:T
+    println(ground_truth[:x => t], ",")
+end
+
 using Plots
-plot([observations[:y => t] for t in 1:T])
+plot([observations[:y => t] for t in 1:T]);
 plot!([ground_truth[:x => t] for t in 1:T])
 
-n_particles = 5
+n_particles = 100
 n_samples = 1000
 Random.seed!(0)
-traces = particle_gibbs(LGSS, args, observations, n_particles, n_samples; ancestral_sampling=true);
+@time traces = particle_gibbs(LGSS, args, observations, n_particles, n_samples; ancestral_sampling=true);
 
 update_freq = [mean(traces[:x=>t, i] != traces[:x=>t, i+1] for i in 1:n_samples-1) for t in 1:T]
-plot(update_freq, ylim=(0,1))
+plot(1:T, fill((n_particles-1) / n_particles, T));
+plot!(update_freq, ylim=(0,1))
+
+# ancestral_sampling=false: 2min and up to 0.4
+
+# ancestral_sampling=true
+# log_γ_T = 
+# 5-element Vector{Float64}:
+#  -684.7778964785467
+#  -686.9382691768948
+#  -684.7216287222828
+#  -684.9658547910293
+#  -684.549959783957
+# log_w_tilde =
+# 5-element Vector{Float64}:
+#  -684.9486457455292
+#  -686.1918004749677
+#  -684.7311251962237
+#  -684.8029881324496
+#  -684.7074209682611
 
 
 import Libtask

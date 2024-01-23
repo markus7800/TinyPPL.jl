@@ -75,6 +75,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
     addresses = Vector{Address}(undef, n_particles)
     log_w = Vector{Float64}(undef, n_particles)
     log_γ = zeros(n_particles)
+    n_obs = 0
     while true
         if conditional
             # reference particle
@@ -115,6 +116,11 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
         if addresses[1] == :__BREAK
             break
         end
+        n_obs += 1
+        if n_obs == length(observations)
+            # no resampling at last observation
+            continue
+        end
 
         # a_{t+1} ~ Categorical(W_t)
         A = rand(Categorical(W), n_particles)
@@ -125,7 +131,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
                 t = particles[1].t
                 # this is very expensive and may be replaced by copying task and running particles to end
                 log_γ_T = [logjoint(vcat(particles[i].trace[1:t], X_ref[t+1:end])) for i in 1:n_particles]
-                log_w_tilde = log_w + log_γ_T - log_γ
+                log_w_tilde = normalise(log_w + log_γ_T - log_γ)
                 W_tilde = exp.(log_w_tilde)
                 A[1] = rand(Categorical(W_tilde / sum(W_tilde)))
             else
@@ -144,6 +150,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
         # TODO: resample if collapse?
     end
 
+    # TODO: handle sample is last
     logprobs = normalise(log_w)
     return traces, logprobs, marginal_lik
 end
@@ -194,7 +201,7 @@ end
 export particle_gibbs
 
 # not really useful, but a sanity check if everyhing works.
-function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; addr2proposal::Addr2Proposal=Addr2Proposal())
+function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
     traces = StaticTraces(addresses_to_ix, n_samples)
@@ -209,7 +216,10 @@ function particle_IMH(model::StaticModel, args::Tuple, observations::Observation
 
     n_accept = 0
     @progress for i in 1:n_samples
-        smc_traces, lps, marginal_lik_proposed = _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, nothing; addr2proposal=addr2proposal)
+        smc_traces, lps, marginal_lik_proposed = _smc_worker(
+            model, args, observations, logjoint, addresses_to_ix, n_particles, nothing;
+            ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal
+        )
         W = exp.(lps)
         k = rand(Categorical(W))
         X_proposed = smc_traces[:,k]

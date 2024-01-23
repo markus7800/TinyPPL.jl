@@ -94,11 +94,38 @@ mean(hmc_traces[:slope])
 
 
 Random.seed!(0)
-@time smc_traces, lps = smc(model, 10^6)
+@time smc_traces, lps, marginal_lik = light_smc(model, 10^6);
 W = exp.(lps);
-
 W'smc_traces[:intercept]
 W'smc_traces[:slope]
+
+
+Random.seed!(0)
+@time smc_traces, lps, marginal_lik = smc(model, 10^6);
+W = exp.(lps);
+W'smc_traces[:intercept]
+W'smc_traces[:slope]
+
+
+Random.seed!(0)
+@time smc_traces, lps, marginal_lik = smc(model, 10^6);
+W = exp.(lps);
+intercept = W'smc_traces[:intercept]
+slope = W'smc_traces[:slope]
+
+X_ref = [intercept, slope]
+
+Random.seed!(0)
+@time smc_traces, lps, marginal_lik = conditional_smc(model, 1, X_ref);
+W = exp.(lps);
+smc_traces[:,1] == X_ref
+
+# acceptance rate increases with more particles
+Random.seed!(0)
+pimh_traces = particle_IMH(model, 100, 1000; ancestral_sampling=false);
+
+mean(pimh_traces[:intercept])
+mean(pimh_traces[:slope])
 
 
 Random.seed!(0)

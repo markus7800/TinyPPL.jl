@@ -87,10 +87,8 @@ function pgm_macro(annotations, name, foppl)
     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
     foppl = unwrap_let(foppl)
 
-    G, E, variable_to_address = transpile_program(foppl);
-    
-    # println(foppl)
-    pgm = compile_symbolic_pgm(name, G, E, variable_to_address, annotations);
+    G, E, variable_to_address, translation_order = transpile_program(foppl);
+    pgm = compile_symbolic_pgm(name, G, E, variable_to_address, translation_order, annotations);
 
     return pgm
 end
@@ -398,10 +396,22 @@ function get_transform(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}
     return transform
 end
 
+function is_topological_order(spgm::SymbolicPGM, order::Vector{Symbol})
+    for i in eachindex(order)
+        for j in (i+1):length(order)
+            if (order[j] => order[i]) in spgm.A
+                return false
+            end
+        end
+    end
+    return true
+end
+
 function compile_symbolic_pgm(
     name::Symbol, 
     spgm::SymbolicPGM, E::Union{Expr, Symbol, Real}, 
     variable_to_address::Dict{Symbol, Any}, 
+    translation_order::Vector{Symbol},
     annotations::Set{Symbol}
     )
 
@@ -420,7 +430,9 @@ function compile_symbolic_pgm(
     @assert all(isobserved(spgm, ix_to_sym[j]) for j in (n_latents+1):n_variables)
     is_observed = [isobserved(spgm, ix_to_sym[j]) for j in 1:n_variables]
 
-    topolical_ordered = get_topolocial_order(n_variables, edges) # includes oberved variables
+    @assert is_topological_order(spgm, translation_order)
+    # topolical_ordered = get_topolocial_order(n_variables, edges) # includes observed variables
+    topolical_ordered = [sym_to_ix[sym] for sym in translation_order]
 
     X = gensym(:X)
     Y = gensym(:Y)
