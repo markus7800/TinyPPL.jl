@@ -31,9 +31,9 @@ function sample(sampler::SMCParticle, addr::Address, dist::Distribution, obs::Un
     proposal_dist = get(sampler.addr2proposal, addr, StaticProposal(dist))
     if sampler.score_only
         value = sampler.trace[ix]
-        lpq = proposal_logpdf(proposal_dist, value, (sampler.trace, sampler.addresses_to_ix))
+        lpq = proposal_logpdf(proposal_dist, value, (addr, sampler.trace, sampler.addresses_to_ix))
     else # sample and score
-        value, lpq = propose_and_logpdf(proposal_dist, (sampler.trace, sampler.addresses_to_ix))
+        value, lpq = propose_and_logpdf(proposal_dist, (addr, sampler.trace, sampler.addresses_to_ix))
         sampler.trace[ix] = value
     end
     sampler.log_Q += lpq

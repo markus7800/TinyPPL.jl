@@ -113,11 +113,11 @@ struct MostSpecificDict{T}
     end
 end
 
-function Base.getindex(d::MostSpecificDict{T}, k::Pair, v) where T
-    d.Q[reverse_pair(k)] = d
+function Base.setindex!(d::MostSpecificDict{T}, v::T, k::Pair) where T
+    d.Q[reverse_pair(k)] = v
 end
-function Base.getindex(d::MostSpecificDict{T}, k, v) where T
-    d.Q[k] = d
+function Base.setindex!(d::MostSpecificDict{T}, v::T, k) where T
+    d.Q[k] = v
 end
 function Base.get(d::MostSpecificDict{T}, k::Any, default::T) where T
     return get(d.Q, k, default)

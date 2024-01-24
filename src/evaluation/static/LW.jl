@@ -51,6 +51,10 @@ function sample_from_prior(model::StaticModel, args::Tuple, observations::Observ
 end
 export sample_from_prior
 
+function sample_from_prior(model::StaticModel, args::Tuple, n_samples::Int)
+    return likelihood_weighting(model, args, Observations(), n_samples)[1]
+end
+
 """
 Sets up addresses_to_ix such that address in `first` are index before other addresses in `all`.
 """

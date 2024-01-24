@@ -10,11 +10,14 @@ function proposal_dist(dist::ProposalDistribution, x_current)
 end
 
 function propose_and_logpdf(dist::ProposalDistribution, x_current)
-    error("Not implemented!")
+    q = proposal_dist(dist, x_current)
+    x_proposed = rand(q)
+    return x_proposed, logpdf(q, x_proposed)
 end
 
 function proposal_logpdf(dist::ProposalDistribution, x_proposed, x_current)
-    error("Not implemented!")
+    q = proposal_dist(dist, x_current)
+    return logpdf(q, x_proposed)
 end
 
 export proposal_dist, propose_and_logpdf, proposal_logpdf
@@ -27,15 +30,6 @@ end
 
 function proposal_dist(dist::StaticProposal, x_current)
     return dist.base
-end
-
-function propose_and_logpdf(dist::StaticProposal, x_current)
-    x_proposed = rand(dist.base)
-    return x_proposed, logpdf(dist.base, x_proposed)
-end
-
-function proposal_logpdf(dist::StaticProposal, x_proposed, x_current)
-    return logpdf(dist.base, x_proposed)
 end
 
 export StaticProposal
@@ -59,17 +53,6 @@ function proposal_dist(dist::ContinuousRandomWalkProposal, x_current)
     return proposer
 end
 
-function propose_and_logpdf(dist::ContinuousRandomWalkProposal, x_current)
-    proposer = proposal_dist(dist, x_current)
-    x_proposed = rand(proposer)
-    return x_proposed, logpdf(proposer, x_proposed)
-end
-
-function proposal_logpdf(dist::ContinuousRandomWalkProposal, x_proposed, x_current)
-    proposer = proposal_dist(dist, x_current)
-    return logpdf(proposer, x_proposed)
-end
-
 export ContinuousRandomWalkProposal
 
 struct DiscreteRandomWalkProposal <: ProposalDistribution
@@ -88,17 +71,6 @@ function proposal_dist(dist::DiscreteRandomWalkProposal, x_current)
         proposer = DiscreteRWProposer(Int(dist.lower), Int(dist.upper), Int(x_current), dist.variance)
     end
     return proposer
-end
-
-function propose_and_logpdf(dist::DiscreteRandomWalkProposal, x_current)
-    proposer = proposal_dist(dist, x_current)
-    x_proposed = rand(proposer)
-    return x_proposed, logpdf(proposer, x_proposed)
-end
-
-function proposal_logpdf(dist::DiscreteRandomWalkProposal, x_proposed, x_current)
-    proposer = proposal_dist(dist, x_current)
-    return logpdf(proposer, x_proposed)
 end
 
 export DiscreteRandomWalkProposal

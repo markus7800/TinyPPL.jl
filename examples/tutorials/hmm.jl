@@ -172,11 +172,23 @@ scatter(posterior_sample[1,:], posterior_sample[2,:],)
         {:y => t} ~ Normal(x, σ_e)
     end
 end
-T = 400
+
+T = 3
 args = (T,)
+a = 0.9
+σ_v = 0.32
+σ_e = 1.
+update_freq(traces, n_samples) = [mean(traces[:x=>t, i] != traces[:x=>t, i+1] for i in 1:n_samples-1) for t in 1:T]
+
 
 Random.seed!(0)
-traces = sample_from_prior(LGSS, args, Observations(), 1)
+traces = sample_from_prior(LGSS, args, 10^7)
+
+import Distributions: var, cov
+samples = convert(Matrix{Float64}, traces.data)
+mean(samples, dims=2)
+var(samples, dims=2)
+C = cov(transpose(samples))
 
 observations = Observations((:y => t) => traces[:y => t, 1] for t in 1:T)
 ground_truth = Dict((:x => t) => traces[:x => t, 1] for t in 1:T)
@@ -193,32 +205,48 @@ using Plots
 plot([observations[:y => t] for t in 1:T]);
 plot!([ground_truth[:x => t] for t in 1:T])
 
-n_particles = 100
+n_particles = 5
 n_samples = 1000
 Random.seed!(0)
-@time traces = particle_gibbs(LGSS, args, observations, n_particles, n_samples; ancestral_sampling=true);
+@time traces = particle_gibbs(LGSS, args, observations, n_particles, n_samples; ancestral_sampling=false);
 
-update_freq = [mean(traces[:x=>t, i] != traces[:x=>t, i+1] for i in 1:n_samples-1) for t in 1:T]
 plot(1:T, fill((n_particles-1) / n_particles, T));
-plot!(update_freq, ylim=(0,1))
+plot!(update_freq(traces, n_samples), ylim=(0,1))
 
-# ancestral_sampling=false: 2min and up to 0.4
 
-# ancestral_sampling=true
-# log_γ_T = 
-# 5-element Vector{Float64}:
-#  -684.7778964785467
-#  -686.9382691768948
-#  -684.7216287222828
-#  -684.9658547910293
-#  -684.549959783957
-# log_w_tilde =
-# 5-element Vector{Float64}:
-#  -684.9486457455292
-#  -686.1918004749677
-#  -684.7311251962237
-#  -684.8029881324496
-#  -684.7074209682611
+struct LGSSProposal <: Distributions.ProposalDistribution
+    a::Float64
+    σ_v::Float64
+    σ_e::Float64
+    observations::Observations
+end
+
+function Distributions.proposal_dist(dist::LGSSProposal, x_current::Tuple{Pair,StaticTrace,Evaluation.Addr2Ix})
+    addr, X, addresses_to_ix  = x_current
+    t::Int = addr[2]
+    a = dist.a
+    σ_v = dist.σ_v
+    σ_e = dist.σ_e
+
+    x_last = X[addresses_to_ix[:x => (t-1)]]
+    y_t = dist.observations[:y => t]
+
+    mu_cond = a*x_last + σ_v^2 / (σ_e^2+σ_v^2) * (y_t - a*x_last)
+    sigma_cond = sqrt(σ_v^2 - (σ_v^2)^2 / (σ_e^2+σ_v^2))
+
+    return Normal(mu_cond, sigma_cond)
+end
+
+addr2proposal = Addr2Proposal((:x => t) => LGSSProposal(a, σ_v, σ_e, observations) for t in 2:T);
+addr2proposal[:x => 1] = StaticProposal(Normal(0, σ_v))
+
+n_particles = 5
+n_samples = 1000
+Random.seed!(0)
+@time traces = particle_gibbs(LGSS, args, observations, n_particles, n_samples; ancestral_sampling=false, addr2proposal=addr2proposal);
+
+plot(1:T, fill((n_particles-1) / n_particles, T));
+plot!(update_freq(traces, n_samples), ylim=(0,1))
 
 
 import Libtask

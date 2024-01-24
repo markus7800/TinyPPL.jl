@@ -65,7 +65,8 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 log_w[i] = log_γ_new[i] - log_γ[i] - log_q[i]
                 # TODO: handle sample is last
             end
-
+            println(t, ": ", get_address(pgm, node))
+            display(log_w)
             W = exp.(log_w)
             sum_W = sum(W)
             marginal_lik *= sum_W / n_particles
@@ -117,10 +118,11 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 # reference particle
                 X = particles[1]
                 d = get_distribution(pgm, node, X)
-                proposal_dist = get(addr2proposal, get_address(pgm, node), StaticProposal(d))
+                addr = get_address(pgm, node)
+                proposal_dist = get(addr2proposal, addr, StaticProposal(d))
 
                 value = X_ref[node]
-                lpq = proposal_logpdf(proposal_dist, value, X)
+                lpq = proposal_logpdf(proposal_dist, value, (addr,X))
                 log_q[1] += lpq
                 log_γ_new[1] += logpdf(d, value)
 
@@ -133,9 +135,10 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
             for i in start:n_particles
                 X = particles[i]
                 d = get_distribution(pgm, node, X)
-                proposal_dist = get(addr2proposal, get_address(pgm, node), StaticProposal(d))
+                addr = get_address(pgm, node)
+                proposal_dist = get(addr2proposal, addr, StaticProposal(d))
 
-                value, lpq = propose_and_logpdf(proposal_dist, X)
+                value, lpq = propose_and_logpdf(proposal_dist, (addr,X))
                 log_q[i] += lpq
                 log_γ_new[i] += logpdf(d, value)
 
