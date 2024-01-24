@@ -65,8 +65,8 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 log_w[i] = log_γ_new[i] - log_γ[i] - log_q[i]
                 # TODO: handle sample is last
             end
-            println(t, ": ", get_address(pgm, node))
-            display(log_w)
+            # println(t, ": ", get_address(pgm, node))
+            # display(log_w)
             W = exp.(log_w)
             sum_W = sum(W)
             marginal_lik *= sum_W / n_particles
@@ -170,15 +170,19 @@ end
 export conditional_smc
 
 
-function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
+function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
 
     pg_traces = Array{Float64}(undef, pgm.n_latents, n_samples)
     retvals = Vector{Any}(undef, n_samples)
 
-    # initialise with SMC
-    smc_traces, lps, _ = smc(pgm, n_particles; addr2proposal=addr2proposal)
-    W = exp.(lps)
-    X = smc_traces[:, rand(Categorical(W))]
+    if init == :SMC
+        # initialise with SMC
+        smc_traces, lps, _ = smc(pgm, n_particles; addr2proposal=addr2proposal)
+        W = exp.(lps)
+        X = smc_traces[:, rand(Categorical(W))]
+    else
+        X = zeros(pgm.n_latents)
+    end
 
     @progress for i in 1:n_samples
         smc_traces, lps, _ = _smc_worker(pgm, n_particles, X;

@@ -175,15 +175,19 @@ end
 export conditional_smc
 
 
-function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
+function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
     traces = StaticTraces(addresses_to_ix, n_samples)
 
-    # initialise with SMC
-    smc_traces, lps, _ = smc(model, args, observations, n_particles; addr2proposal=addr2proposal)
-    W = exp.(lps)
-    X = smc_traces[:, rand(Categorical(W))]
+    if init == :SMC
+        # initialise with SMC
+        smc_traces, lps, _ = smc(model, args, observations, n_particles; addr2proposal=addr2proposal)
+        W = exp.(lps)
+        X = smc_traces[:, rand(Categorical(W))]
+    else
+        X = zeros(length(addresses_to_ix))
+    end
 
     @progress for i in 1:n_samples
         smc_traces, lps, _ = _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
