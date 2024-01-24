@@ -175,7 +175,9 @@ end
 export conditional_smc
 
 
-function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
+function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int;
+    ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
+    
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
     traces = StaticTraces(addresses_to_ix, n_samples)
@@ -205,7 +207,9 @@ end
 export particle_gibbs
 
 # not really useful, but a sanity check if everyhing works.
-function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
+function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int;
+    ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
+
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
     traces = StaticTraces(addresses_to_ix, n_samples)

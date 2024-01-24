@@ -42,7 +42,10 @@ end
 export light_smc
 
 
-function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Float64}}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
+function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Float64}};
+    ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(),
+    relevant_future_nodes::Union{Nothing, Vector{Vector{Int}}} = nothing
+    )
     conditional = !isnothing(X_ref)
     last_observe_node = first(Iterators.reverse(Iterators.filter(node -> isobserved(pgm, node), pgm.topological_order)))
 
@@ -65,8 +68,6 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 log_w[i] = log_γ_new[i] - log_γ[i] - log_q[i]
                 # TODO: handle sample is last
             end
-            # println(t, ": ", get_address(pgm, node))
-            # display(log_w)
             W = exp.(log_w)
             sum_W = sum(W)
             marginal_lik *= sum_W / n_particles
@@ -85,22 +86,36 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 if ancestral_sampling
                     for i in 1:n_particles
                         X = particles[i]
-                        for future_node in pgm.topological_order[t+1:end]
-                            if !isobserved(pgm, future_node)
-                                X[future_node] = X_ref[future_node]
+                        if isnothing(relevant_future_nodes)
+                            for future_node in pgm.topological_order[t+1:end]
+                                if !isobserved(pgm, future_node)
+                                    X[future_node] = X_ref[future_node]
+                                end
                             end
+                            # this takes long because of dispatch
+                            # log_γ_future = sum(
+                            #     logpdf(get_distribution(pgm, future_node, X), get_value(pgm, future_node, X))
+                            #     for future_node in pgm.topological_order[t+1:end]; init=0.
+                            # )
+                            # log_w_tilde[i] = log_w[i] + log_γ_future
+
+                            # @assert log_γ_new[i] + log_γ_future ≈ pgm.logpdf(X, pgm.observations)
+
+                            # this is faster
+                            log_w_tilde[i] = log_w[i] + pgm.logpdf(X, pgm.observations) - log_γ_new[i]
+                        else
+                            # optimisation:
+                            # γ(x_1:T) / γ(x_1:t) = p(xref_t+1:T,y_t+1:T | x:1_t,y_1:t) = p(xref_{relevant_future_nodes[t]} | x:1_t,y_1:t) * C(xref)
+                            # e.g. for x_1 → x_2 → ... → x_T
+                            # p(xref_t+1:T,y_t+1:T | x:1_t,y_1:t) = p(xref_t+1 | x_t) * p(xref_t+2 | xref_t+1) ...
+                            # relevant_future_nodes[t] = {t+1}
+                            # relevant_future_nodes is computed once in particle_gibbs
+                            log_γ_future_relevant = sum(
+                                logpdf(get_distribution(pgm, future_node, X), X_ref[future_node])
+                                for future_node in relevant_future_nodes[t]; init=0.
+                            )
+                            log_w_tilde[i] = log_w[i] + log_γ_future_relevant
                         end
-                        # this takes long because of dispatch
-                        # log_γ_future = sum(
-                        #     logpdf(get_distribution(pgm, future_node, X), get_value(pgm, future_node, X))
-                        #     for future_node in pgm.topological_order[t+1:end]; init=0.
-                        # )
-                        # log_w_tilde[i] = log_w[i] + log_γ_future
-
-                        # @assert log_γ_new[i] + log_γ_future ≈ pgm.logpdf(X, pgm.observations)
-
-                        # this is faster
-                        log_w_tilde[i] = log_w[i] + pgm.logpdf(X, pgm.observations) - log_γ_new[i]
                     end
                     W_tilde = exp.(normalise(log_w_tilde))
                     A[1] = rand(Categorical(W_tilde / sum(W_tilde)))
@@ -169,11 +184,26 @@ end
 
 export conditional_smc
 
+function get_relevant_future_nodes(pgm::PGM)
+    T = length(pgm.topological_order)
+    relevant_future_nodes = [Int[] for _ in 1:T]
+    for t in 1:T
+        for future_node in pgm.topological_order[t+1:end]
+            # better to traverse topological_order backwards
+            if any((past_node => future_node) in pgm.edges for past_node in Iterators.reverse(pgm.topological_order[1:t]))
+                push!(relevant_future_nodes[t], future_node)
+            end
+        end
+    end
+    return relevant_future_nodes
+end
 
 function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
 
     pg_traces = Array{Float64}(undef, pgm.n_latents, n_samples)
     retvals = Vector{Any}(undef, n_samples)
+
+    relevant_future_nodes = ancestral_sampling ? get_relevant_future_nodes(pgm) : nothing
 
     if init == :SMC
         # initialise with SMC
@@ -184,9 +214,11 @@ function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sa
         X = zeros(pgm.n_latents)
     end
 
+        
     @progress for i in 1:n_samples
         smc_traces, lps, _ = _smc_worker(pgm, n_particles, X;
-                                      ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal)
+                                      ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal,
+                                      relevant_future_nodes=relevant_future_nodes)
         W = exp.(lps)
         k = rand(Categorical(W))
         X = smc_traces[:,k]
@@ -205,6 +237,8 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
     pg_traces = Array{Float64}(undef, pgm.n_latents, n_samples)
     retvals = Vector{Any}(undef, n_samples)
 
+    relevant_future_nodes = ancestral_sampling ? get_relevant_future_nodes(pgm) : nothing
+
     # initialise with SMC
     smc_traces, lps, marginal_lik = smc(pgm, n_particles; addr2proposal=addr2proposal)
     W = exp.(lps)
@@ -217,7 +251,8 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
     @progress for i in 1:n_samples
         smc_traces, lps, marginal_lik_proposed = _smc_worker(
             pgm, n_particles, nothing;
-            ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal
+            ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal,
+            relevant_future_nodes=relevant_future_nodes
         )
         W = exp.(lps)
         k = rand(Categorical(W))

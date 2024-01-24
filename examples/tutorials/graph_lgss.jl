@@ -49,7 +49,7 @@ Random.seed!(0)
 # 0.675084 seconds (10.19 M allocations: 1.467 GiB, 45.04% gc time, 0.37% compilation time)
 
 Random.seed!(0)
-@profview smc_traces, lps, marginal_lik = conditional_smc(LGSS, 10^3, X_ref, ancestral_sampling=true);
+@time smc_traces, lps, marginal_lik = conditional_smc(LGSS, 10^3, X_ref, ancestral_sampling=true);
 # 2.487067 seconds (12.79 M allocations: 2.755 GiB, 9.84% gc time)
 
 
@@ -57,10 +57,11 @@ using Plots
 plot(y, label="observed");
 plot!(x_gt, label="ground truth")
 
-n_particles = 5
+n_particles = 10
 n_samples = 1000
 Random.seed!(0)
-traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=false, init=:zeros);
+@profview traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=true, init=:zeros);
+# 24.895788 seconds (123.18 M allocations: 27.692 GiB, 10.48% gc time)
 
 plot(1:T, fill((n_particles-1) / n_particles, T), ylims=(0,1));
 plot!(get_update_freq(traces, n_samples))
@@ -76,7 +77,7 @@ function plot_results(Ns; n_samples, ancestral_sampling, addr2proposal=nothing)
     for (i, N) in enumerate(Ns)
         println("N = $N")
         Random.seed!(0)
-        traces = particle_gibbs(LGSS, N, n_samples; ancestral_sampling=ancestral_sampling, init=:zeros, addr2proposal=addr2proposal)
+        @time traces = particle_gibbs(LGSS, N, n_samples; ancestral_sampling=ancestral_sampling, init=:zeros, addr2proposal=addr2proposal)
         plot!(1:T, fill((N-1)/N, T), ylims=(0,1), lc=i, label=false);
         plot!(get_update_freq(traces, n_samples), lc=i, label="N = $N")
     end
@@ -84,6 +85,8 @@ function plot_results(Ns; n_samples, ancestral_sampling, addr2proposal=nothing)
 end
 #, 500, 1000]
 plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=false)
+
+plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=true)
 
 struct LGSSProposal <: Distributions.ProposalDistribution
     a::Float64
@@ -120,6 +123,9 @@ plot!(get_update_freq(traces, n_samples))
 
 
 plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=false, addr2proposal=addr2proposal)
+
+plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=true, addr2proposal=addr2proposal)
+
 
 
 # compute full joint distribution
@@ -270,9 +276,9 @@ function PGAS_SSM_kernel(x_ref::Vector{Float64}, y::Vector{Float64},
             for i in 1:N
                 x_i_t_minus_1 = particles[t-1,i]
                 log_w_tilde[i] = log_w[i] + logpdf(f(x_i_t_minus_1), x_ref[t])
-                J = rand(Categorical(exp.(normalise(log_w_tilde))))
-                A[1] = J
             end
+            J = rand(Categorical(exp.(normalise(log_w_tilde))))
+            A[1] = J
         else
             A[1] = 1
         end
@@ -283,8 +289,8 @@ function PGAS_SSM_kernel(x_ref::Vector{Float64}, y::Vector{Float64},
         for i in 2:N
             x_i_t_minus_1 = particles[t-1,i]
             q = r(y[t], x_i_t_minus_1, propose_from_posterior=propose_from_posterior)
-            x_i_1 = rand(q)
-            particles[t,i] = x_i_1
+            x_i_t = rand(q)
+            particles[t,i] = x_i_t
         end
         for i in 1:N
             x_i_t = particles[t,i]
@@ -316,7 +322,7 @@ include("lgss_data.jl")
 n_particles = 100
 n_samples = 1000
 Random.seed!(0)
-@time traces = PGAS_SSM(y, T, n_particles, n_samples, ancestral_sampling=false; init=:zeros);
+@time traces = PGAS_SSM(y, T, n_particles, n_samples, ancestral_sampling=false);
 
 get_update_freq(traces, n_samples) = [mean(traces[t, i] != traces[t, i+1] for i in 1:n_samples-1) for t in 1:T]
 plot(1:T, fill((n_particles-1) / n_particles, T), ylims=(0,1), legend=false);
@@ -329,16 +335,33 @@ function plot_ssm_results(Ns; n_samples, ancestral_sampling, propose_from_poster
     else
         s = "prior"
     end
-    p = plot(legend=:bottomleft, title="SSM PGAS r=$r ancestral_sampling=$ancestral_sampling");
+    p = plot(legend=:bottomleft, title="SSM PGAS r=$s ancestral_sampling=$ancestral_sampling");
     for (i, N) in enumerate(Ns)
         println("N = $N")
         Random.seed!(0)
-        traces = PGAS_SSM(y, T, N, n_samples, ancestral_sampling=ancestral_sampling, propose_from_posterior=propose_from_posterior)
+        @time traces = PGAS_SSM(y, T, N, n_samples, ancestral_sampling=ancestral_sampling, propose_from_posterior=propose_from_posterior)
         plot!(1:T, fill((N-1)/N, T), ylims=(0,1), lc=i, label=false);
         plot!(get_update_freq(traces, n_samples), lc=i, label="N = $N")
     end
     display(p)
 end
+
 plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=false, propose_from_posterior=false)
 
 plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=false, propose_from_posterior=true)
+
+
+plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=true, propose_from_posterior=false)
+
+plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=true, propose_from_posterior=true)
+
+
+
+n_particles = 5
+n_samples = 1
+
+Random.seed!(0)
+traces = PGAS_SSM(y, T, n_particles, n_samples, ancestral_sampling=true);
+
+Random.seed!(0)
+traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=true, init=:zeros);
