@@ -2,7 +2,63 @@
 using TinyPPL.Distributions
 using TinyPPL.Graph
 import Random
+import Distributions: mean, var, std, MvNormal
+import LinearAlgebra: diag
 
+# compute full joint distribution
+
+# X_t = v_1 + a v_2 + a^2 v_3 ..., v_i ~ Normal(0,σ_v)
+# cov(X + Y, W + V) = cov(X,W) + cov(X,V) + cov(Y,W) + cov(Y,V)
+# cov(X_t, X_{t+1}) = cov(X_t,a X_t + v_{t+1}) = a cov(X_t, X_t)
+
+# [x_1, y_1, x_2, y_2, ..., x_T, y_T]
+function get_joint_normal(T)
+    Σ = zeros(2*T, 2*T)
+    for t in 1:T
+        x_ix = 2*(t-1) + 1
+        y_ix = x_ix + 1
+        Σ[x_ix, x_ix] = σ_v^2 * ((a^2)^t - 1) / (a^2 - 1) 
+        Σ[y_ix, y_ix] = Σ[x_ix, x_ix] + σ_e^2
+        Σ[x_ix, y_ix] = Σ[x_ix, x_ix]
+
+        for (n,t2) in enumerate(t+1:T)
+            x_ix_2 = 2*(t2-1) + 1
+            y_ix_2 = x_ix_2 + 1
+            Σ[x_ix, x_ix_2] = a^n * Σ[x_ix, x_ix]
+
+            Σ[x_ix, y_ix_2] = Σ[x_ix, x_ix_2]
+
+            Σ[y_ix, x_ix_2] = Σ[x_ix, x_ix_2]
+
+            Σ[y_ix, y_ix_2] = Σ[x_ix, x_ix_2]
+        end
+    end
+    for i in 1:2*T, j in (i+1):2*T
+        Σ[j,i] = Σ[i,j]
+    end
+
+    reorder = vcat([2*(t-1) + 1 for t in 1:T], [2*(t-1) + 1 for t in 1:T] .+ 1)
+    # [x_1, x_2, ..., x_T, y_1, y_2, ..., y_T]
+    mu = zeros(2*T)
+    Σ  = Σ[reorder,reorder]
+    return mu, Σ
+end
+
+function get_true_posterior(T, y)
+    mu, Σ = get_joint_normal(T)
+    mu1 = mu[1:T]
+    mu2 = mu[T+1:end]
+
+    Σ11 = Σ[1:T,1:T]
+    Σ12 = Σ[1:T,T+1:end]
+    Σ21 = Σ[T+1:end,1:T]
+    Σ22 = Σ[T+1:end,T+1:end]
+
+    Σ_post = Σ11 - (Σ12 * (Σ22 \ Σ21))
+    mu_post = (mu1 + Σ12 * (Σ22 \ (y - mu2)))
+
+    return mu_post, Σ_post
+end
 
 include("lgss_data.jl")
 # T = 3
@@ -60,11 +116,22 @@ plot!(x_gt, label="ground truth")
 n_particles = 10
 n_samples = 1000
 Random.seed!(0)
-@profview traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=true, init=:zeros);
-# 24.895788 seconds (123.18 M allocations: 27.692 GiB, 10.48% gc time)
+@time traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=true, init=:zeros);
 
-plot(1:T, fill((n_particles-1) / n_particles, T), ylims=(0,1));
-plot!(get_update_freq(traces, n_samples))
+plot(1:T, fill((n_particles-1) / n_particles, T), ylims=(0,1), lc=1, legend=false);
+plot!(get_update_freq(traces, n_samples), lc=1)
+
+# visualise true posterior
+mu_post, Σ_post = get_true_posterior(T, y)
+
+inferred_mean = mean(traces.data, dims=2)
+inferred_std = std(traces.data, dims=2)
+
+plot(inferred_mean, ribbon=2*inferred_std, label="estimated posterior",fillalpha=0.3);
+plot!(mu_post, ribbon=2*sqrt.(diag(Σ_post)), label="true posterior", fillalpha=0.3)
+plot!(x_gt, label="ground truth")
+# plot!(y, label="observed")
+
 
 function plot_results(Ns; n_samples, ancestral_sampling, addr2proposal=nothing)
     if addr2proposal === nothing
@@ -83,7 +150,7 @@ function plot_results(Ns; n_samples, ancestral_sampling, addr2proposal=nothing)
     end
     display(p)
 end
-#, 500, 1000]
+
 plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=false)
 
 plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=true)
@@ -114,7 +181,7 @@ end
 addr2proposal = Addr2Proposal((:x => t) => LGSSProposal(a, σ_v, σ_e, y) for t in 1:T);
 
 n_particles = 5
-n_samples = 2
+n_samples = 1000
 Random.seed!(0)
 traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=false, addr2proposal=addr2proposal);
 
@@ -123,51 +190,10 @@ plot!(get_update_freq(traces, n_samples))
 
 
 plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=false, addr2proposal=addr2proposal)
-
 plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=true, addr2proposal=addr2proposal)
 
 
-
-# compute full joint distribution
-
-# X_t = v_1 + a v_2 + a^2 v_3 ..., v_i ~ Normal(0,σ_v)
-# cov(X + Y, W + V) = cov(X,W) + cov(X,V) + cov(Y,W) + cov(Y,V)
-# cov(X_t, X_{t+1}) = cov(X_t,a X_t + v_{t+1}) = a cov(X_t, X_t)
-
-# [x_1, y_1, x_2, y_2, ..., x_T, y_T]
-function get_Σ(T)
-    Σ = zeros(2*T, 2*T)
-    for t in 1:T
-        x_ix = 2*(t-1) + 1
-        y_ix = x_ix + 1
-        Σ[x_ix, x_ix] = σ_v^2 * ((a^2)^t - 1) / (a^2 - 1) 
-        Σ[y_ix, y_ix] = Σ[x_ix, x_ix] + σ_e^2
-        Σ[x_ix, y_ix] = Σ[x_ix, x_ix]
-
-        for (n,t2) in enumerate(t+1:T)
-            x_ix_2 = 2*(t2-1) + 1
-            y_ix_2 = x_ix_2 + 1
-            Σ[x_ix, x_ix_2] = a^n * Σ[x_ix, x_ix]
-
-            Σ[x_ix, y_ix_2] = Σ[x_ix, x_ix_2]
-
-            Σ[y_ix, x_ix_2] = Σ[x_ix, x_ix_2]
-
-            Σ[y_ix, y_ix_2] = Σ[x_ix, x_ix_2]
-        end
-    end
-    for i in 1:2*T, j in (i+1):2*T
-        Σ[j,i] = Σ[i,j]
-    end
-
-    reorder = vcat([2*(t-1) + 1 for t in 1:T], [2*(t-1) + 1 for t in 1:T] .+ 1)
-    # [x_1, x_2, ..., x_T, y_1, y_2, ..., y_T]
-    Σ  = Σ[reorder,reorder]
-    return Σ
-end
-
-mu = fill(0,2*T)
-Σ = get_Σ(T)
+mu, Σ = get_joint_normal(T)
 
 # compute conditional x_t | x_1:t-1, y_1:t
 Z = rand(MvNormal(mu, Σ))
@@ -213,7 +239,7 @@ conditional = Normal(mu_cond, sigma_cond)
 
 
 # direct implementation of PGAS for SSM (LGSS)
-import Distributions: Normal, Categorical, logpdf, mean
+import Distributions: Normal, Categorical, logpdf, mean, std, var
 import Random
 using Plots
 import ProgressLogging: @progress
@@ -255,8 +281,8 @@ function PGAS_SSM_kernel(x_ref::Vector{Float64}, y::Vector{Float64},
     T::Int, N::Int; ancestral_sampling::Bool=false, propose_from_posterior=false)
 
     particles = Array{Float64}(undef, T, N)
-    log_w = zeros(N)
-    log_w_tilde = zeros(N)
+    log_w = Vector{Float64}(undef,N)
+    log_w_tilde = Vector{Float64}(undef,N)
     # t = 1
     particles[1,1] = x_ref[1]
     for i in 2:N
@@ -317,16 +343,7 @@ end
 
 
 include("lgss_data.jl")
-
-
-n_particles = 100
-n_samples = 1000
-Random.seed!(0)
-@time traces = PGAS_SSM(y, T, n_particles, n_samples, ancestral_sampling=false);
-
 get_update_freq(traces, n_samples) = [mean(traces[t, i] != traces[t, i+1] for i in 1:n_samples-1) for t in 1:T]
-plot(1:T, fill((n_particles-1) / n_particles, T), ylims=(0,1), legend=false);
-plot!(get_update_freq(traces, n_samples))
 
 
 function plot_ssm_results(Ns; n_samples, ancestral_sampling, propose_from_posterior)
@@ -346,22 +363,36 @@ function plot_ssm_results(Ns; n_samples, ancestral_sampling, propose_from_poster
     display(p)
 end
 
-plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=false, propose_from_posterior=false)
+n_particles = 5
+n_samples = 1000
+Random.seed!(0)
+@time traces = PGAS_SSM(y, T, n_particles, n_samples, ancestral_sampling=true);
 
+plot(1:T, fill((n_particles-1) / n_particles, T), ylims=(0,1), lc=1, legend=false);
+plot!(get_update_freq(traces, n_samples), lc=1)
+
+inferred_mean = mean(traces, dims=2)
+inferred_std = std(traces, dims=2)
+
+plot(inferred_mean, ribbon=2*inferred_std, label="estimated posterior",fillalpha=0.3);
+plot!(mu_post, ribbon=2*sqrt.(diag(Σ_post)), label="true posterior", fillalpha=0.3)
+plot!(x_gt, label="ground truth")
+plot!(y, label="observed")
+
+
+plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=false)
+plot_ssm_results([5,10,100], n_samples=1000, ancestral_sampling=false, propose_from_posterior=false)
+
+plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=true)
+plot_ssm_results([5,10,100], n_samples=1000, ancestral_sampling=true, propose_from_posterior=false)
+
+plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=false, addr2proposal=addr2proposal)
 plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=false, propose_from_posterior=true)
 
-
-plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=true, propose_from_posterior=false)
-
+plot_results([5, 10, 100], n_samples=1000, ancestral_sampling=true, addr2proposal=addr2proposal)
 plot_ssm_results([5,10,100], n_samples = 1000, ancestral_sampling=true, propose_from_posterior=true)
 
 
 
-n_particles = 5
-n_samples = 1
-
-Random.seed!(0)
-traces = PGAS_SSM(y, T, n_particles, n_samples, ancestral_sampling=true);
-
-Random.seed!(0)
-traces = particle_gibbs(LGSS, n_particles, n_samples; ancestral_sampling=true, init=:zeros);
+plot_ssm_results([5,10,100,500,1000], n_samples=1000, ancestral_sampling=false, propose_from_posterior=false)
+plot_ssm_results([5,10,100,500,1000], n_samples=1000, ancestral_sampling=true, propose_from_posterior=false)
