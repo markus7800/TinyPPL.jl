@@ -286,7 +286,7 @@ function evaluate_return_expr_over_factor(pgm::PGM, factor::FactorNode)
             X[node.variable] = node.support[i]
         end
         
-        retval = get_reval(pgm, X) # observed values in return expr are subsituted with their value
+        retval = get_retval(pgm, X) # observed values in return expr are subsituted with their value
         prob = exp(factor.table[indices...]) / Z
         result[indices...] = (retval, prob)  # add return value and its probability to the result
     end

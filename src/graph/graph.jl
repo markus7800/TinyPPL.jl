@@ -73,10 +73,7 @@ module Graph
     include("SMC.jl")
     include("compiled/LW.jl")
     include("compiled/LMH.jl")
-    include("exact/factor_graph.jl")
-    include("exact/variable_elemination.jl")
-    include("exact/belief_propagation.jl")
-    include("exact/junction_tree.jl")
+    include("exact/exact.jl")
 
 
     import Random
