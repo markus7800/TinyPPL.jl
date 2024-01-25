@@ -162,7 +162,7 @@ A linear regression model can be written as
 ```julia
 xs = [1., 2., 3., 4., 5.]
 ys = [2.1, 3.9, 5.3, 7.7, 10.2]
-model = @ppl LinReg begin
+model = @pgm LinReg begin
     function f(slope, intercept, x)
         intercept + slope * x
     end
@@ -216,23 +216,24 @@ Note that the function `model.distributions[node]` returns a distribution which 
 We can sample from the complete model by calling `rand(model.distributions[node](X))` in topological order:
 
 ```julia
+X = Vector{Float64}(undef, pgm.n_latents)
 for node in pgm.topological_order
-    d = pgm.distributions[node](X)
+    d = get_distribution(pgm, node, X)
 
-    if observed[node]
-        value = pgm.observed_values[node](X)
+    if isobserved(pgm, node)
+        value = get_observed_value(pgm, node, X)
     else
         value = rand(d)
     end
     X[node] = value
     W += logpdf(d, value) # joint probability
 end
-r = pgm.return_expr(X)
+r = get_retval(pgm, X)
 ```
 
 ### Inference Algorihms
 
-| Algorithm | Eval-Universal | Eval-Static | Graph | Reference
+| Algorithm | Evaluation-Universal | Evaluation-Static | Graph | Reference
 |-----------|:----------------:|:-------------:|:-------:|----------|
 |Likelihood-Weighting | X | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
 |Single-Site Metropolis Hastings| X |  | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
