@@ -1,10 +1,5 @@
 
 
-function return_expr_variables(pgm::PGM)::Vector{Int}
-    return Int[pgm.sym_to_ix[sym] for sym in get_free_variables(pgm.symbolic_return_expr) ∩ keys(pgm.sym_to_ix)]
-end
-export return_expr_variables
-
 function parse_marginal_variables(pgm::PGM, ::Nothing)::Vector{Int}
     return return_expr_variables(pgm)
 end
