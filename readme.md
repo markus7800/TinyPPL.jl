@@ -243,6 +243,9 @@ r = pgm.return_expr(X)
 |Belief Propapagation|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
 |Junction Tree Message Passing|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
 |Involutive MCMC| X |  |  | [iMCMC](https://arxiv.org/pdf/2006.16653.pdf)|
+|SMC| | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
+|Particle Gibbs| | X | X | [PMCMC](https://www.stats.ox.ac.uk/~doucet/andrieu_doucet_holenstein_PMCMC.pdf)|
+|PGAS| | X | X | [PGAS](https://arxiv.org/abs/1401.0604)|
 
 
 ## Installation
