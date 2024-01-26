@@ -1,5 +1,5 @@
 function get_model()
-    @ppl Burglary begin
+    @pgm Burglary begin
         function or(x, y)
             max(x, y)
         end

@@ -1,5 +1,5 @@
 function get_model()
-    @ppl Evidence begin
+    @pgm Evidence begin
         let evidence ~ Bernoulli(0.5)
             if evidence == 1
                 {:coin} ~ Bernoulli(0.5) ↦ 1.

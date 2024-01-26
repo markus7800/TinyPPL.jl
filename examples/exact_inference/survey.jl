@@ -1,6 +1,6 @@
 
 function get_model()
-    @ppl Survey begin
+    @pgm Survey begin
         let A ~ Categorical([0.3, 0.5, 0.2]), # yound adult old
             S ~ Categorical([0.6, 0.4]), # M, F
             E = if (A == 1 && S == 1) # high, uni

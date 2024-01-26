@@ -165,24 +165,31 @@ function add_tau_to_reduction_score_of_v_and_heapify!(
     end
 end
 
-function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+function get_greedy_elimination_order(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
     factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
 
     # we make heap such that we can simply pop the best node to eliminate
     reduction_size, reduction_size_heap = initialise_reduction_size_heap(variable_nodes, marginal_variables)
 
+    elimination_order = VariableNode[]
     @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
         r = pop!(reduction_size_heap)
         node = r.v
+        push!(elimination_order, node)
         # _, r2 = argmin(t -> get_metric(t[2]), reduction_size)
         # @assert (get_metric(r) == get_metric(r2))
 
         neighbour_factors = factor_nodes[node]
 
         # multiply all neighbouring factors of node
-        psi = reduce(factor_product, neighbour_factors)
+        # psi = reduce(factor_product, neighbour_factors)
         # eliminate node
-        tau = factor_sum(psi, [node])
+        # tau = factor_sum(psi, [node])
+
+        # mock the computation
+        tau_neighbours = reduce(∪, Set(f.neighbours) for f in neighbour_factors)
+        delete!(tau_neighbours, node)
+        tau = FactorNode(sort!(collect(tau_neighbours), lt=(x,y)->x.variable<y.variable), Float64[])
         
         # println(node, ": ", tau)
         # println("neighbour_factors: ", neighbour_factors)
@@ -236,9 +243,64 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
         delete!(reduction_size, node)
     end
     
+    return elimination_order
+end
+export get_greedy_elimination_order
+
+# this is equivalent to variable_elimination(variable_nodes, get_greedy_elimination_order(variable_nodes, marginal_variables))
+# but book-keeping variable and factor nodes has to be done only once.
+# This is usually the fastest variable elimination algorithm.
+function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+
+    # we make heap such that we can simply pop the best node to eliminate
+    reduction_size, reduction_size_heap = initialise_reduction_size_heap(variable_nodes, marginal_variables)
+
+    @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
+        r = pop!(reduction_size_heap)
+        node = r.v
+
+        neighbour_factors = factor_nodes[node]
+
+        # multiply all neighbouring factors of node
+        psi = reduce(factor_product, neighbour_factors)
+        # eliminate node
+        tau = factor_sum(psi, [node])
+        
+        # delete all neighbour_factors ...
+        for f in neighbour_factors
+            for v in f.neighbours
+                (v == node) && continue
+                delete!(factor_nodes[v], f)
+                remove_f_from_reduction_score_of_v!(reduction_size, node, v, f)
+            end
+        end
+
+        for v in tau.neighbours
+            push!(factor_nodes[v], tau)
+            add_tau_to_reduction_score_of_v_and_heapify!(reduction_size, reduction_size_heap, v, tau)
+        end
+
+        delete!(factor_nodes, node)
+        delete!(reduction_size, node)
+    end
+    
     factor_nodes = reduce(∪, values(factor_nodes))
     return reduce(factor_product, factor_nodes)
 end
 
+function greedy_variable_elimination(pgm::PGM; marginal_variables=nothing)
+    variable_nodes, factor_nodes = get_factor_graph(pgm)
+    greedy_variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables=marginal_variables)
+end
+
+function greedy_variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}; marginal_variables=nothing)
+    if isnothing(marginal_variables)
+        marginal_variables = return_expr_variables(pgm)
+    else
+        marginal_variables = parse_marginal_variables(pgm, marginal_variables)
+    end
+    greedy_variable_elimination(variable_nodes, marginal_variables)
+end
 
 export greedy_variable_elimination

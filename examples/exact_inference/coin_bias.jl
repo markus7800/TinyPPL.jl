@@ -1,5 +1,5 @@
 function get_model()
-    @ppl CoinBias begin
+    @pgm CoinBias begin
         function and(x, y)
             min(x, y)
         end

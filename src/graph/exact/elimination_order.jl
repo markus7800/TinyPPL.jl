@@ -44,7 +44,7 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
 
     # this is slow for large graphs
     
-    nodes = Set(node for node in 1:pgm.n_variables if !(node in marginal_variables) && isnothing(pgm.observed_values[node]))
+    nodes = Set(node for node in 1:pgm.n_variables if !(node in marginal_variables) && !isobserved(pgm, node))
     
     undirected_graph = Set(get_undirected_edge(x,y) for (x,y) in pgm.edges if (x in nodes) && (y in nodes))
     if order == :MinNeighbours

@@ -1,5 +1,5 @@
 function get_model()
-    @ppl NoisyOr begin
+    @pgm NoisyOr begin
         function or(x, y)
             max(x, y)
         end

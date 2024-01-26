@@ -70,7 +70,7 @@ end
 
 
 using TinyPPL.Graph
-N = 100
+N = 500
 # model = @ppl Diamond begin
 @time model = Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
     function or(x, y)
@@ -95,3 +95,18 @@ N = 100
     end
     @iterate($(Main.N), func, 1.)
 end));
+
+
+@time f = variable_elimination(model)
+evaluate_return_expr_over_factor(model, f)
+
+
+variable_nodes, factor_nodes = get_factor_graph(model)
+marginal_variables = return_expr_variables(model)
+
+@time f = greedy_variable_elimination(variable_nodes, marginal_variables)
+
+@time begin
+    order = get_greedy_elimination_order(variable_nodes, marginal_variables);
+    variable_elimination(variable_nodes, order)
+end

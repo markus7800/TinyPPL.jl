@@ -1,9 +1,8 @@
 
 using TinyPPL.Graph
-using BenchmarkTools
 
 function get_model()
-    @ppl uninvoked Ladder begin
+    @pgm uninvoked Ladder begin
         function ladder(s1, s2)
             if s1 == 1.
                 let d ~ Bernoulli(0.001)

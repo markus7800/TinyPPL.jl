@@ -1,6 +1,5 @@
 
 using TinyPPL.Graph
-using BenchmarkTools
 
 const P = [0.08167, 0.01492, 0.02782, 0.04253, 0.12702, 0.02228, 0.02015,
     0.06094, 0.06966, 0.00153, 0.00772, 0.04025, 0.02406, 0.06749,
@@ -12,7 +11,7 @@ const msg = [8,5,12,12,15, 23,15,18,12,4, 9, 1,13, 13,1,18,11,21,19]
 const Os = ((msg .+ K) .% 26 .+ 1)
 
 function get_model()
-    @ppl Caesar begin
+    @pgm Caesar begin
         let Os = $(Main.Os),
             n = length(Os),
             K ~ DiscreteUniform(1, 26),
@@ -29,7 +28,7 @@ function get_model()
 end
 
 function get_model_2()
-    @ppl Caesar begin
+    @pgm Caesar begin
         function draw_char(K, i, P, Os)
             let c ~ Categorical(P),
                 f ~ Bernoulli(0.0001)

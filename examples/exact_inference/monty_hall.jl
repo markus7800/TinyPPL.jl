@@ -1,5 +1,5 @@
 function get_model()
-    @ppl MontyHall begin
+    @pgm MontyHall begin
         let C ~ Categorical([1/3, 1/3, 1/3]), # contestant, can be arbitrary
             P ~ Categorical([1/3, 1/3, 1/3]), # prize
             H ~ if C == 1. && P == 1. # host

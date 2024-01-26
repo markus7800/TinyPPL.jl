@@ -1,5 +1,5 @@
 function get_model()
-    @ppl Grass begin
+    @pgm Grass begin
         function or(x, y)
             max(x, y)
         end

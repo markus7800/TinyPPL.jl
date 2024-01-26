@@ -1,5 +1,5 @@
 function get_model()
-    @ppl MurderMystery begin
+    @pgm MurderMystery begin
         function mystery()
             let aliceDunnit ~ Bernoulli(0.3),
                 withGun ~ (aliceDunnit == 1 ? Bernoulli(0.03) : Bernoulli(0.8))

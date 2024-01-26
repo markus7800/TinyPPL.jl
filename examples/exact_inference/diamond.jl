@@ -1,8 +1,7 @@
 
 using TinyPPL.Graph
-using BenchmarkTools
 
-# model = @ppl uninvoked Diamond begin
+# model = @pgm uninvoked Diamond begin
 #     function or(x, y)
 #         max(x, y)
 #     end
@@ -26,7 +25,7 @@ using BenchmarkTools
 #     end
 # end
 function get_model()
-    @ppl uninvoked Diamond begin
+    @pgm uninvoked Diamond begin
         function or(x, y)
             max(x, y)
         end
