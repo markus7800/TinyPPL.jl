@@ -97,7 +97,7 @@ N = 500
 end));
 
 
-@time f = variable_elimination(model)
+@time f = variable_elimination(model, order=:Greedy)
 evaluate_return_expr_over_factor(model, f)
 
 
@@ -109,4 +109,54 @@ marginal_variables = return_expr_variables(model)
 @time begin
     order = get_greedy_elimination_order(variable_nodes, marginal_variables);
     variable_elimination(variable_nodes, order)
+end
+
+
+function inference(show_results=false; algo=:VE, kwargs...)
+    model = get_model()
+
+    if algo == :VE
+        f = variable_elimination(model; kwargs...)
+    elseif algo == :BP
+        t = belief_propagation(model; kwargs...)
+        f = t[1]
+        if show_results && length(t) == 3
+            marginals = t[3]
+            for (_, address, table) in marginals
+                println(address, ": ", table)
+            end
+        end
+    elseif algo == :JT
+        f, _ = junction_tree_message_passing(model; kwargs...)
+    end
+    retvals = evaluate_return_expr_over_factor(model, f)
+
+    if show_results
+        display(retvals)
+    end
+end
+
+begin
+    include("../exact_inference/survey.jl")
+    model = get_model()
+    println(model.name)
+
+    @info "Variable Elimination"
+    inference(true,algo=:VE)
+    print_reference_solution()
+    println()
+
+    if is_tree(model)
+        @info "Belief Propagation"
+        if model.name == :Survey
+            inference(true,algo=:BP,all_marginals=true)
+        else
+            inference(true,algo=:BP)
+        end
+        print_reference_solution()
+        println()
+    else
+        @info "Cannot apply Belief Propagation"
+    end
+
 end

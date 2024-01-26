@@ -1,3 +1,7 @@
+# Greedy Variable Elimination works by eliminating the variable that
+# reduces the cumulative size of all factors the most.
+# We find this node by each variable a ReductionSize struct in a heap,
+# which we update on the fly to be performant.
 
 mutable struct ReductionSize
     # node to eliminate
@@ -187,9 +191,9 @@ function get_greedy_elimination_order(variable_nodes::Vector{VariableNode}, marg
         # tau = factor_sum(psi, [node])
 
         # mock the computation
-        tau_neighbours = reduce(∪, Set(f.neighbours) for f in neighbour_factors)
+        tau_neighbours = reduce(∪, Set(f.neighbours) for f in neighbour_factors; init=Set{VariableNode}())
         delete!(tau_neighbours, node)
-        tau = FactorNode(sort!(collect(tau_neighbours), lt=(x,y)->x.variable<y.variable), Float64[])
+        tau = FactorNode(sort!(collect(tau_neighbours)), Float64[])
         
         # println(node, ": ", tau)
         # println("neighbour_factors: ", neighbour_factors)

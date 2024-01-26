@@ -35,15 +35,15 @@ function min_neighbour(node::Int, node_to_neighbours::Dict{Int,Set{Int}})
     return length(node_to_neighbours[node])
 end
 
-function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)::Vector{VariableNode}
-    if order == :Topological
-        var_to_node = Dict(v.variable => v for v in variable_nodes);
-        ordering = [var_to_node[v] for v in pgm.topological_order if !(v in marginal_variables) && haskey(var_to_node, v)]
-        return ordering
-    end
+function get_topological_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+    var_to_node = Dict(v.variable => v for v in variable_nodes);
+    ordering = [var_to_node[v] for v in pgm.topological_order if !(v in marginal_variables) && haskey(var_to_node, v)]
+    return ordering
+end
+
+function get_min_neighbour_fill_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)
 
     # this is slow for large graphs
-    
     nodes = Set(node for node in 1:pgm.n_variables if !(node in marginal_variables) && !isobserved(pgm, node))
     
     undirected_graph = Set(get_undirected_edge(x,y) for (x,y) in pgm.edges if (x in nodes) && (y in nodes))
@@ -95,5 +95,18 @@ function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, m
     @assert isempty(nodes)
 
     return ordering
+end
+
+function get_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)::Vector{VariableNode}
+    if order == :Topological
+        return get_topological_elimination_order(pgm, variable_nodes, marginal_variables)
+    elseif order == :Greedy
+        return get_greedy_elimination_order(variable_nodes, marginal_variables)
+    elseif order in (:MinFill, :WeightedMinFill, :MinNeighbours)
+        return get_min_neighbour_fill_elimination_order(pgm, variable_nodes, marginal_variables, order)
+    else
+        error("Unsupported elimnation order $order.")
+    end
+    
 end
 export get_elimination_order

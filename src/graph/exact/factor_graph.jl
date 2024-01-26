@@ -18,6 +18,7 @@ export VariableNode
 function Base.show(io::IO, variable_node::VariableNode)
     print(io, "VariableNode(", (variable_node.variable, variable_node.address), "; ", length(variable_node.support), ")")
 end
+Base.isless(x::VariableNode, y::VariableNode) = x.variable < y.variable
  
 # in a PGM a FactorNode corresponds to one CPD
 # p(x | pa(x)) in case of a sample statement (neighbours are pa(x) ∪ {x})
@@ -90,7 +91,7 @@ function get_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNode}, 
     return cpd
 end
 
-function get_factor_graph(pgm::PGM; logscale::Bool=true, sorted::Bool=true)
+function get_factor_graph(pgm::PGM; logscale::Bool=true)
     # create a variable node for each PGM variable
     variable_nodes = [VariableNode(i, pgm.addresses[i]) for i in 1:pgm.n_variables]
     factor_nodes = FactorNode[]
@@ -110,9 +111,8 @@ function get_factor_graph(pgm::PGM; logscale::Bool=true, sorted::Bool=true)
             # factor consists only of parents
             factor_node = FactorNode(parents, cpd)
         end
-        if sorted # have to sort for ops
-            factor_node = factor_permute_vars(factor_node, sort(factor_node.neighbours, lt=(x,y)->x.variable<y.variable))
-        end
+        # have to sort for ops
+        factor_node = factor_permute_vars(factor_node, sort(factor_node.neighbours))
         # connect variable nodes to factor node
         for neighbour in factor_node.neighbours
             push!(neighbour.neighbours, factor_node)
@@ -220,11 +220,11 @@ end
 # factor table is in log-space thus the operation is logsumexp
 function factor_sum(factor_node::FactorNode, dims::Vector{Int})::FactorNode
     variables = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
-    size = [length(v.support) for v in variables]
+    size = Tuple([length(v.support) for v in variables])
     # table = mapslices(sum, factor_node.table, dims=dims)
     # table = mapslices(logsumexp, factor_node.table, dims=dims)
     table = log.(sum(exp, factor_node.table, dims=dims))
-    table = reshape(table, size...)
+    table = reshape(table, size)
     return FactorNode(variables, table)
 end
 
@@ -257,14 +257,14 @@ export return_expr_variables
 
 function add_return_factor!(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
     variable_to_node = Dict(node.variable=>node for node in variable_nodes)
-    return_variables = [variable_to_node[v] for v in return_expr_variables(pgm)]
+    return_variables = sort([variable_to_node[v] for v in return_expr_variables(pgm)])
     return add_return_factor!(factor_nodes, return_variables)
 end
 
 # create a factor which holds all return_variables and initialise it with 0 table
 # connect the return factor to the factor_nodes
 function add_return_factor!(factor_nodes::Vector{FactorNode}, return_variables::Vector{VariableNode})
-    return_factor = FactorNode(return_variables, zeros([length(node.support) for node in return_variables]...))
+    return_factor = FactorNode(return_variables, zeros(Tuple([length(node.support) for node in return_variables])))
     for variable in return_variables
         push!(variable.neighbours, return_factor)
     end

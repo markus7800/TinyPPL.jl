@@ -220,8 +220,6 @@ function junction_tree_message_passing(pgm::PGM, junction_tree::Vector{ClusterNo
 
         return return_factor, evidence
     end
-
-    return evidence
 end
 
 export junction_tree_message_passing
