@@ -1,10 +1,16 @@
 
 mutable struct ReductionSize
+    # node to eliminate
     v::VariableNode
-    nodes::Set{VariableNode} # set of variables connected to node v via some factor
+    # set of variables connected to node v via some factor,
+    # if we eliminate v, tau will be a factor of these nodes
+    nodes::Set{VariableNode}
+
+    # metrics
     individual::Int # sum of sizes of all factors connected to node v
     combined::Int # sum of size of factor resulting from multiplying all factors connected to node v and summing out v
     reduction::Int # individual - combined
+
     position::Int # position in heap
     metric::Int # cached metric
 end
@@ -76,9 +82,7 @@ function Base.pop!(A::Vector{ReductionSize})
     return x
 end
 
-function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
-    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
-
+function initialise_reduction_size_heap(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
     reduction_size = Dict{VariableNode, ReductionSize}()
     reduction_size_heap = Vector{ReductionSize}(undef, length(variable_nodes) - length(marginal_variables))
     i = 1
@@ -86,7 +90,13 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
         (v.variable in marginal_variables) && continue
         r = ReductionSize(v, Set{VariableNode}(), 0, 1, 0, i, 0)
         for f in v.neighbours
+            # sum of size of all neighbouring factors
             r.individual += length(f.table)
+
+            # if we eliminate v, tau will be a factor of with scope r.nodes
+            # r.nodes are all variables that are connected to v via some neighbours factor
+            # the size of tau is the product of the support of all r.nodes
+            # as v is eliminated it does not contribute to the size of tau.
             for n in f.neighbours
                 if !(n in r.nodes) && !(n == v)
                     push!(r.nodes, n)
@@ -94,13 +104,72 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
                 end
             end
         end
+        # we replace all neighbouring factors with one big factor tau
+        # the change in total factor sizes is r.reduction
         r.reduction = r.combined - r.individual
+
         reduction_size[v] = r
         reduction_size_heap[i] = r
         i += 1
+
+        # we choose a metric calculated from r.reduction, r.combined, r.individual
         r.metric = get_metric(r)
     end
+    
+    # make heap 
     heapify!(reduction_size_heap)
+
+    return reduction_size, reduction_size_heap
+end
+
+function remove_f_from_reduction_score_of_v!(reduction_size::Dict{VariableNode, ReductionSize}, node::VariableNode, v::VariableNode, f::FactorNode)
+    if haskey(reduction_size, v) # v is not a marginal variable
+        r = reduction_size[v]
+        # @assert f.neighbours ⊆ r.nodes ∪ [node, v]
+        
+        r.individual -= length(f.table)
+        if node in r.nodes
+            # node can be in multiple f
+            r.combined /= length(node.support)
+            delete!(r.nodes, node)
+        end
+    end
+end
+
+function add_tau_to_reduction_score_of_v_and_heapify!(
+    reduction_size::Dict{VariableNode, ReductionSize}, reduction_size_heap::Vector{ReductionSize},
+    v::VariableNode, tau::FactorNode)
+
+    if haskey(reduction_size, v) # v is not a marginal variable
+        r = reduction_size[v]
+        r.individual += length(tau.table)
+        for n in tau.neighbours
+            if !(n in r.nodes) && !(n == v)
+                push!(r.nodes, n)
+                r.combined *= length(n.support)
+            end
+        end
+        r.reduction = r.combined - r.individual
+
+        before = r.metric
+        after = get_metric(r)
+        r.metric = after
+
+        # resort
+        if before < after
+            heapify_down!(reduction_size_heap, r.position)
+        else
+            heapify_up!(reduction_size_heap, r.position)
+        end
+        # @assert isheap(reduction_size_heap)
+    end
+end
+
+function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+
+    # we make heap such that we can simply pop the best node to eliminate
+    reduction_size, reduction_size_heap = initialise_reduction_size_heap(variable_nodes, marginal_variables)
 
     @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
         r = pop!(reduction_size_heap)
@@ -110,16 +179,19 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
 
         neighbour_factors = factor_nodes[node]
 
+        # multiply all neighbouring factors of node
         psi = reduce(factor_product, neighbour_factors)
+        # eliminate node
         tau = factor_sum(psi, [node])
+        
         # println(node, ": ", tau)
         # println("neighbour_factors: ", neighbour_factors)
         # @assert r.reduction == reduction_size_func(node)
 
         # We add tau to all nodes in tau.neighbours and remove all neighbour_factors f from its neighbours. (1)
-        # After the deletion, the set of variables connected to a node via some factor (reduction_size[v].nodes) is decreased by node.
+        # After the deletion, the set of variables connected to node via some factor (reduction_size[v].nodes) is decreased by node.
         # Proof:
-        # Let v be a variable connected to node via factor f.
+        # Let v be a variable connected to `node` via factor `f`.
 
         # f is in neighbour_factors
         # v is in f.neighbours
@@ -136,57 +208,28 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
         # tau is added to factor_nodes[v] => tau.neighbours ⊆ reduction_size[v].nodes ∪ [v]
         # w ∈ f.neighbours and w ∉ reduction_size[v].nodes ∪ [v] and f.neighbours \ [node] ⊆ reduction_size[v].nodes ∪ [v] implies that w == node
 
+        # delete all neighbour_factors ...
         for f in neighbour_factors
             for v in f.neighbours
                 (v == node) && continue
+                delete!(factor_nodes[v], f)
 
                 # @assert f in factor_nodes[v]
                 # @assert f.neighbours ⊆ (tau.neighbours ∪ [node])
                 # @assert !(f.neighbours ⊆ tau.neighbours)
                 # @assert v in tau.neighbours
 
-                delete!(factor_nodes[v], f)
-
-                if haskey(reduction_size, v) # v is not a marginal variable
-                    r = reduction_size[v]
-                    # @assert f.neighbours ⊆ r.nodes ∪ [node, v]
-                    
-                    r.individual -= length(f.table)
-                    if node in r.nodes
-                        # node can be in multiple f
-                        r.combined /= length(node.support)
-                        delete!(r.nodes, node)
-                    end
-                end
+                # variables of neighbouring factors can be in other factors
+                # we have to update their reduction score
+                # if we elimate them in the future there is not the factor `f` to consider anymore
+                # heap will be updated later for all v in tau.neighbours:  ∪ [v in f.neighbours] ⊆ tau.neighbours ∪ [node]
+                remove_f_from_reduction_score_of_v!(reduction_size, node, v, f)
             end
         end
 
         for v in tau.neighbours
             push!(factor_nodes[v], tau)
-
-            if haskey(reduction_size, v) # v is not a marginal variable
-                r = reduction_size[v]
-                r.individual += length(tau.table)
-                for n in tau.neighbours
-                    if !(n in r.nodes) && !(n == v)
-                        push!(r.nodes, n)
-                        r.combined *= length(n.support)
-                    end
-                end
-                r.reduction = r.combined - r.individual
-
-                before = r.metric
-                after = get_metric(r)
-                r.metric = after
-
-                # resort
-                if before < after
-                    heapify_down!(reduction_size_heap, r.position)
-                else
-                    heapify_up!(reduction_size_heap, r.position)
-                end
-                # @assert isheap(reduction_size_heap)
-            end
+            add_tau_to_reduction_score_of_v_and_heapify!(reduction_size, reduction_size_heap, v, tau)
         end
 
         delete!(factor_nodes, node)

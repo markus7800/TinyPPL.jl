@@ -12,7 +12,8 @@ end
 # marginal_variables default to the variables in the return expression
 # otherwise marginal_variables can be givein in terms of addresses or PGM nodes
 function variable_elimination(pgm::PGM; marginal_variables=nothing, order::Symbol=:Topological)
-    variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables, order)
+    variable_nodes, factor_nodes = get_factor_graph(pgm)
+    variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables=marginal_variables, order=order)
 end
 
 function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}; marginal_variables=nothing, order::Symbol=:Topological)
@@ -21,8 +22,6 @@ function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, fa
     else
         marginal_variables = parse_marginal_variables(pgm, marginal_variables)
     end
-    variable_nodes, factor_nodes = get_factor_graph(pgm)
-
     variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables, order)
 end
 
@@ -40,7 +39,6 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
 
         # multiply all neighbouring factors of node
         psi = reduce(factor_product, neighbour_factors)
-
         # eliminate node
         tau = factor_sum(psi, [node])
         # println(node, ": ", tau)

@@ -67,3 +67,31 @@ model = @ppl Student begin
         J
     end
 end
+
+
+using TinyPPL.Graph
+N = 100
+# model = @ppl Diamond begin
+@time model = Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
+    function or(x, y)
+        max(x, y)
+    end
+    function and(x, y)
+        min(x, y)
+    end
+    function diamond(s1)
+        let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
+            s2 = route == 1. ? s1 : false,
+            s3 = route == 1. ? false : s1,
+            drop ~ Bernoulli(0.001)
+
+            or(s2, and(s3, 1-drop))
+        end
+    end
+    function func(old_net)
+        let net ~ Dirac(diamond(old_net))
+            net
+        end
+    end
+    @iterate($(Main.N), func, 1.)
+end));
