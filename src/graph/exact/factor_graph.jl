@@ -26,7 +26,16 @@ Base.isless(x::VariableNode, y::VariableNode) = x.variable < y.variable
 mutable struct FactorNode <: FactorGraphNode
     neighbours::Vector{VariableNode} # variables
     table::Array{Float64}
+    function FactorNode(neighbours::Vector{VariableNode}, table::Array{Float64})
+        if !issorted(neighbours)
+            perm = sortperm(neighbours)
+            neighbours = neighbours[perm]
+            table = permutedims(table, perm)
+        end
+        return new(neighbours, table)
+    end
 end
+
 function Base.show(io::IO, factor_node::FactorNode)
     print(io, "FactorNode(", [(n.variable, n.address) for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
     # println(io, factor_node.table)
@@ -111,8 +120,6 @@ function get_factor_graph(pgm::PGM; logscale::Bool=true)
             # factor consists only of parents
             factor_node = FactorNode(parents, cpd)
         end
-        # have to sort for ops
-        factor_node = factor_permute_vars(factor_node, sort(factor_node.neighbours))
         # connect variable nodes to factor node
         for neighbour in factor_node.neighbours
             push!(neighbour.neighbours, factor_node)
@@ -193,9 +200,6 @@ function factor_division(A::FactorNode, B::FactorNode)::FactorNode
     b_size = size(B.table)
     @assert B.neighbours ⊆ A.neighbours
 
-    # B = factor_permute_vars(B, [v for v in A.neighbours if v in B.neighbours]) # same factor, but variables are in order of A
-    # b_table = reshape(B.table, size(B.table)..., ones(Int, length(a_size) - length(b_size))...)
-
     # variable_nodes are sorted
     b_size = Int[]
     for v in A.neighbours
@@ -231,22 +235,12 @@ end
 # sums out variables from factor_node
 # resulting factor has variables factor_node.neighbours \ variables
 function factor_sum(factor_node::FactorNode, variables::Vector{VariableNode})::FactorNode
+    @assert variables ⊆ factor_node.neighbours
     dims = [i for (i,v) in enumerate(factor_node.neighbours) if v in variables]
     return factor_sum(factor_node, dims)
 end
 
-function factor_permute_vars(factor_node::FactorNode, perm::Vector{Int})::FactorNode
-    return FactorNode(factor_node.neighbours[perm], permutedims(factor_node.table, perm))
-end
-# reorders factor such that neighbours are in order of variables
-function factor_permute_vars(factor_node::FactorNode, variables::Vector{VariableNode})::FactorNode
-    perm = Int[findfirst(av -> av==v, factor_node.neighbours) for v in variables]
-    permuted_factor = factor_permute_vars(factor_node, perm)
-    @assert variables == permuted_factor.neighbours
-    return permuted_factor
-end
-
-export get_factor_graph, factor_product, factor_division, factor_sum, factor_permute_vars
+export get_factor_graph, factor_product, factor_division, factor_sum
 
 
 # returns all variables the return expression depends on
@@ -257,13 +251,14 @@ export return_expr_variables
 
 function add_return_factor!(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
     variable_to_node = Dict(node.variable=>node for node in variable_nodes)
-    return_variables = sort([variable_to_node[v] for v in return_expr_variables(pgm)])
+    return_variables = [variable_to_node[v] for v in return_expr_variables(pgm)]
     return add_return_factor!(factor_nodes, return_variables)
 end
 
 # create a factor which holds all return_variables and initialise it with 0 table
 # connect the return factor to the factor_nodes
 function add_return_factor!(factor_nodes::Vector{FactorNode}, return_variables::Vector{VariableNode})
+    sort!(return_variables)
     return_factor = FactorNode(return_variables, zeros(Tuple([length(node.support) for node in return_variables])))
     for variable in return_variables
         push!(variable.neighbours, return_factor)

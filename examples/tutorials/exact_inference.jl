@@ -10,8 +10,8 @@ C = factor_product(A,B)
 
 A2 = factor_division(C, B)
 A2.table # constant in one dimension
-
-factor_sum(A, [X])
+factor_sum(A2, [Z]).table
+A.table
 
 model = @pgm Burglary begin
     function or(x, y)
@@ -54,7 +54,7 @@ evaluate_return_expr_over_factor(model, f)
 
 
 
-model = @ppl Student begin
+model = @pgm Student begin
     let C ~ Categorical([1.]),
         D ~ Categorical(C==1. ? 1. : 1.),
         I ~ Categorical([1.]),
@@ -68,6 +68,20 @@ model = @ppl Student begin
     end
 end
 
+variable_nodes, factor_nodes = get_factor_graph(model)
+return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
+
+C = variable_nodes[1]
+D = variable_nodes[2]
+I = variable_nodes[5]
+H = variable_nodes[4]
+G = variable_nodes[3]
+S = variable_nodes[8]
+L = variable_nodes[7]
+J = variable_nodes[6]
+elimination_order = [C, D, I, H, G, S, L, J]
+junction_tree, root_cluster_node, root_factor = get_junction_tree(factor_nodes, elimination_order, return_factor)
+print_junction_tree(root_cluster_node)
 
 using TinyPPL.Graph
 N = 500
@@ -117,8 +131,9 @@ function inference(show_results=false; algo=:VE, kwargs...)
 
     if algo == :VE
         f = variable_elimination(model; kwargs...)
-    elseif algo == :BP
-        t = belief_propagation(model; kwargs...)
+    elseif algo == :BP || algo == :JT
+        func = algo == :BP ? belief_propagation : junction_tree_message_passing
+        t = func(model; kwargs...)
         f = t[1]
         if show_results && length(t) == 3
             marginals = t[3]
@@ -126,8 +141,6 @@ function inference(show_results=false; algo=:VE, kwargs...)
                 println(address, ": ", table)
             end
         end
-    elseif algo == :JT
-        f, _ = junction_tree_message_passing(model; kwargs...)
     end
     retvals = evaluate_return_expr_over_factor(model, f)
 
@@ -146,17 +159,41 @@ begin
     print_reference_solution()
     println()
 
+    all_marginals = (model.name == :Survey)
     if is_tree(model)
         @info "Belief Propagation"
-        if model.name == :Survey
-            inference(true,algo=:BP,all_marginals=true)
-        else
-            inference(true,algo=:BP)
-        end
+        inference(true,algo=:BP,all_marginals=all_marginals)
         print_reference_solution()
         println()
     else
         @info "Cannot apply Belief Propagation"
     end
+    @info "Junction Tree Message Passing"
+    inference(true, algo=:JT, all_marginals=all_marginals)
+    print_reference_solution()
 
 end
+
+variable_nodes, factor_nodes = get_factor_graph(model)
+
+P = reduce(factor_product, factor_nodes)
+
+for (i, v) in enumerate(P.neighbours)
+    marginal = factor_sum(P, deleteat!(collect(1:length(P.neighbours)),i))
+    t = exp.(marginal.table)
+    t /= sum(t)
+    println(v, t)
+end
+
+
+include("../exact_inference/survey.jl")
+model = get_model()
+print_reference_solution()
+
+inference(true,algo=:BP,all_marginals=true)
+
+inference(true, algo=:JT, all_marginals=true)
+
+
+junction_tree, root_factor = get_junction_tree(model)
+print_junction_tree(root_factor)

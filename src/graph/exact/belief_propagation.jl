@@ -170,8 +170,10 @@ function forward(belief_node::BeliefNode)
     # Edge case: belief node with only one variable, has to be parent node
     if length(belief_node.neighbours) == 1 && !isnothing(belief_node.parent)
         if belief_node.node isa VariableNode
+            println("Who am I? ", belief_node) # cant really happen?
             message = zeros(length(belief_node.node.support))
         else
+            # factor node with one variable == parent
             message = belief_node.node.table
             # parent is VariableNode
             @assert length(message) == length(belief_node.parent.node.support)
@@ -259,9 +261,9 @@ function backward(belief_node::BeliefNode)
     # we do the same computations as in forward, but now for every child instead of just the parent
     if belief_node.node isa VariableNode
         # TODO: this can be improved by multiplying all messages,
-        # message .-= belief_node.messages[i], send copy(message), and message .+= belief_node.messages[i]
+        # send copy(message) .-= belief_node.messages[i]
         for (i, child) in enumerate(belief_node.neighbours)
-            child == belief_node.parent && continue # we do not send a message to ourself
+            child == belief_node.parent && continue # we do not send a message to parent
             # message to FactorNode child i 
             message = zeros(length(belief_node.node.support))
             for child_message in belief_node.messages
@@ -280,7 +282,7 @@ function backward(belief_node::BeliefNode)
         # TODO: this can be improved by multiplying all belief_node.neighbours
         # message = factor_division(message, factor_division), send copy(message), and message = factor_product(message, factor_division)
         for child in belief_node.neighbours
-            child == belief_node.parent && continue # we do not send a message to ourself
+            child == belief_node.parent && continue # we do not send a message to parent
             # message to VariableNode child
             message_vars = VariableNode[neighbour.node for neighbour in belief_node.neighbours if neighbour != child]
             # as all factor nodes are sorted and we do not change the order the message_factor is also sorted
@@ -290,6 +292,7 @@ function backward(belief_node::BeliefNode)
             shape = ones(Int, ndims(message_table))
             j = 1
             # same spiel as in forward pass
+            # TODO: for _ in message_vars ...?
             for (i, neighbour) in enumerate(belief_node.neighbours)
                 # child is VariableNode
                 neighbour == child && continue # we do not multiply message of child we now send a message to
