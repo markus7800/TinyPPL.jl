@@ -153,7 +153,7 @@ function inference(show_results=false; algo=:VE, kwargs...)
 end
 
 begin
-    include("../exact_inference/survey.jl")
+    include("../exact_inference/caesar.jl")
     model = get_model()
     println(model.name)
 
@@ -175,6 +175,16 @@ begin
     @info "Junction Tree Message Passing"
     inference(true, algo=:JT, all_marginals=all_marginals)
     print_reference_solution()
-
 end
  
+
+include("../exact_inference/caesar.jl")
+model = get_model()
+println(model.name)
+
+variable_nodes, factor_nodes = get_factor_graph(model)
+
+greedy_variable_elimination(model).table
+
+
+factor_nodes[8].table

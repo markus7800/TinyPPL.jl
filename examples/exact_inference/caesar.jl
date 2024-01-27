@@ -28,7 +28,7 @@ function get_model()
 end
 
 function get_model_2()
-    @pgm Caesar begin
+    @pgm Caesar2 begin
         function draw_char(K, i, P, Os)
             let c ~ Categorical(P),
                 f ~ Bernoulli(0.0001)
