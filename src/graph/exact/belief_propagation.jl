@@ -140,11 +140,13 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
         return_table .+= reshape(message, Tuple(shape)) # broadcasting -> factor product
         shape[i] = 1
     end
-    return_factor.table .= return_table
 
     if all_marginals
         # only need backward pass if we want to evaluate all marginals
         backward(root)
+        # return factor is used in backward pass, we should only modify them now
+        return_factor.table .= return_table
+
         variable_nodes = get_variable_nodes(root)
         marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
         # p(x) = ∑_{X - x} p(X) = ∏_{s ∈ ne(x)} μ_{f_s → x}(x)
@@ -157,7 +159,8 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
 
         return return_factor, evidence, marginals
     else
-
+        
+        return_factor.table .= return_table
         return return_factor, evidence
     end
 end

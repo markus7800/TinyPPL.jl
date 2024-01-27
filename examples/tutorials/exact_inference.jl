@@ -190,7 +190,7 @@ include("../exact_inference/survey.jl")
 model = get_model()
 print_reference_solution()
 
-inference(true,algo=:BP,all_marginals=true)
+inference(true, algo=:BP, all_marginals=true)
 
 inference(true, algo=:JT, all_marginals=true)
 

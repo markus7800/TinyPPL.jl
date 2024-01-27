@@ -132,6 +132,7 @@ function get_factor_graph(pgm::PGM; logscale::Bool=true)
     return variable_nodes, factor_nodes
 end
 
+# PGM Definition 4.2, Algorithm 10.A.1
 # A(X,Y) * B(Y,Z) = C(X,Y,Z)
 function factor_product(A::FactorNode, B::FactorNode)::FactorNode
     # @assert issorted([a.variable for a in A.neighbours])
@@ -194,6 +195,7 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorNode
     return FactorNode(vars, table)
 end
 
+# PGM (Definition 10.7)
 # undos factor product A / B
 function factor_division(A::FactorNode, B::FactorNode)::FactorNode
     a_size = size(A.table)
@@ -219,7 +221,7 @@ function factor_division(A::FactorNode, B::FactorNode)::FactorNode
     return FactorNode(A.neighbours, table)
 end
 
-
+# PGM 9.3.1.1 Factor Marginalisation
 # sums out dims from factor
 # factor table is in log-space thus the operation is logsumexp
 function factor_sum(factor_node::FactorNode, dims::Vector{Int})::FactorNode

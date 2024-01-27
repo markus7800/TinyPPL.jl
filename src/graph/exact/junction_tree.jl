@@ -203,6 +203,7 @@ function backward(node::ClusterNode)
             child_message = factor_product(child_message, node.messages[j])
         end
 
+        # PGM 10.3.1: Message Passing with Division
         # child_message = factor_division(message, node.messages[i])
 
         index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours))

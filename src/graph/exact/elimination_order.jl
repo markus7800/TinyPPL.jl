@@ -41,6 +41,7 @@ function get_topological_elimination_order(pgm::PGM, variable_nodes::Vector{Vari
     return ordering
 end
 
+# PGM 9.4.3.2
 function get_min_neighbour_fill_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)
 
     # this is slow for large graphs
