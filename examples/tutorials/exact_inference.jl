@@ -80,11 +80,11 @@ S = variable_nodes[8]
 L = variable_nodes[7]
 J = variable_nodes[6]
 elimination_order = [C, D, I, H, G, S, L, J]
-junction_tree, root_cluster_node, root_factor = get_junction_tree(factor_nodes, elimination_order, return_factor)
+junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor, true)
 print_junction_tree(root_cluster_node)
 
 using TinyPPL.Graph
-N = 500
+N = 1000
 # model = @ppl Diamond begin
 @time model = Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
     function or(x, y)
@@ -112,8 +112,11 @@ end));
 
 
 @time f = variable_elimination(model, order=:Greedy)
+@time f = variable_elimination(model, order=:MinFill) # almost all time spent getting elimination order
 evaluate_return_expr_over_factor(model, f)
 
+# 1.562772 seconds
+@time [get_junction_tree(model) for _ in 1:10];
 
 variable_nodes, factor_nodes = get_factor_graph(model)
 marginal_variables = return_expr_variables(model)
@@ -167,33 +170,11 @@ begin
         println()
     else
         @info "Cannot apply Belief Propagation"
+        println()
     end
     @info "Junction Tree Message Passing"
     inference(true, algo=:JT, all_marginals=all_marginals)
     print_reference_solution()
 
 end
-
-variable_nodes, factor_nodes = get_factor_graph(model)
-
-P = reduce(factor_product, factor_nodes)
-
-for (i, v) in enumerate(P.neighbours)
-    marginal = factor_sum(P, deleteat!(collect(1:length(P.neighbours)),i))
-    t = exp.(marginal.table)
-    t /= sum(t)
-    println(v, t)
-end
-
-
-include("../exact_inference/survey.jl")
-model = get_model()
-print_reference_solution()
-
-inference(true, algo=:BP, all_marginals=true)
-
-inference(true, algo=:JT, all_marginals=true)
-
-
-junction_tree, root_factor = get_junction_tree(model)
-print_junction_tree(root_factor)
+ 

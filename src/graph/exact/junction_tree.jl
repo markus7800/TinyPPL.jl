@@ -4,7 +4,7 @@ function get_junction_tree(pgm::PGM; order::Symbol = :Topological)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
     return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
     elimination_order = get_elimination_order(pgm, variable_nodes, Int[], order)
-    return get_junction_tree(factor_nodes, elimination_order, return_factor)
+    return get_junction_tree(variable_nodes, elimination_order, return_factor)
 end
 
 # PGM 10.1.1
@@ -39,31 +39,42 @@ function make_directed(node::ClusterNode, parent::Union{ClusterNode, Nothing})
     end
 end
 
+function merge_cluster_node_into_neighbour(cluster_node::ClusterNode, neighbour::ClusterNode)
+    for n in cluster_node.neighbours
+        if n != neighbour
+            # neighbour takes all edges
+            push!(neighbour.neighbours, n)
+            push!(n.neighbours, neighbour)
+        end
+        # remove cluster_node from tree
+        delete!(n.neighbours, cluster_node)
+    end
+    for f in cluster_node.factors
+        push!(neighbour.factors, f)
+    end
+end
+
 # PGM: 10.4
-function get_junction_tree(factor_nodes::Vector{FactorNode}, elimination_order::Vector{VariableNode}, root_factor::FactorNode)
+function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode}, root_factor::FactorNode, maximal_clique::Bool=true)
 
     # The execution of a variable elimination algorithm can be associated with a cluster graph.
     # A cluster C_i corresponds to the factor psi_i generated during the execution of the algorithm.
     # And an undirected edge connects C_i and C_j when tau_i is used (directly) in the computation of psi_j or vice-versa.
 
-    factor_nodes = Set(factor_nodes)
-    # println("factor_nodes: ", factor_nodes)
-    # println()
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+
     tau_to_cluster_node = Dict{FactorNode,ClusterNode}()
     junction_tree = ClusterNode[]
 
     for node in elimination_order
-        neighbour_factors = Set(f for f in factor_nodes if node in f.neighbours)
+        neighbour_factors = factor_nodes[node]
         # println("node to eliminate: ", node)
         # println("neighbour_factors: ", neighbour_factors)
 
-        for f in neighbour_factors
-            delete!(factor_nodes, f)
-        end
-
         # mock variable elimination
         # create psi
-        psi = foldl((x,y) -> x ∪ y.neighbours, neighbour_factors, init=Set{VariableNode}())
+        #psi = foldl((x,y) -> x ∪ y.neighbours, neighbour_factors, init=Set{VariableNode}())
+        psi = reduce(∪, Set(f.neighbours) for f in neighbour_factors; init=Set{VariableNode}())
         cluster_node = ClusterNode(sort!(collect(psi)))
         push!(junction_tree, cluster_node)
 
@@ -86,53 +97,52 @@ function get_junction_tree(factor_nodes::Vector{FactorNode}, elimination_order::
         delete!(psi, node)
         tau = FactorNode(sort!(collect(psi)), Float64[]) # dummy factor
         tau_to_cluster_node[tau] = cluster_node
-        # println("tau: ", tau)
-        push!(factor_nodes, tau)
 
-        # println("factor_nodes: ", factor_nodes)
-        # println()
+        for f in neighbour_factors
+            for v in f.neighbours
+                delete!(factor_nodes[v], f)
+            end
+        end
+
+        # println("tau: ", tau)
+        for v in tau.neighbours
+            push!(factor_nodes[v], tau)
+        end
+
+        # variable successfully eliminated
+        delete!(factor_nodes, node)
     end
 
-    # removes one edge at a time, could be improved
-    # did_change = true
-    # while did_change
-    #     did_change = false
-    #     mask = trues(length(junction_tree))
-    #     for (i, cluster_node) in enumerate(junction_tree)
-    #         for neighbour in cluster_node.neighbours
-    #             if cluster_node.cluster ⊆ neighbour.cluster && length(cluster_node.cluster) < length(neighbour.cluster)
-    #                 # neighbour takes all edges
-    #                 for n in cluster_node.neighbours
-    #                     if n != neighbour
-    #                         push!(neighbour.neighbours, n)
-    #                     end
-    #                 end
-    #                 for f in cluster_node.factors
-    #                     push!(neighbour.factors, f)
-    #                 end
-                        
-    #                 # remove cluster_node from tree
-    #                 for n in cluster_node.neighbours
-    #                     if n != neighbour
-    #                         push!(n.neighbours, neighbour)
-    #                     end
-    #                     delete!(n.neighbours, cluster_node)
-    #                 end
-    #                 # println("merge ", cluster_node, " in ", neighbour)
-    #                 mask[i] = false
-    #                 did_change = true
-    #                 break
-    #             end
-    #         end
-    #         did_change && break
-    #     end
-    #     junction_tree = junction_tree[mask]
-    # end
+    if maximal_clique
+        # PGM 10.4.1
+        # It is standard to reduct the tree to contain only clusters that are maximal cliques.
+        # Specifically, we eliminate from the tree a cluster C_j which is a strict subset of some other cluster.
+        # removes one edge at a time, could be improved
+        did_change = true
+        while did_change
+            did_change = false
+            mask = trues(length(junction_tree))
+            for (i, cluster_node) in enumerate(junction_tree)
+                for neighbour in cluster_node.neighbours
+                    if cluster_node.cluster ⊆ neighbour.cluster && length(cluster_node.cluster) < length(neighbour.cluster)
+                        merge_cluster_node_into_neighbour(cluster_node, neighbour)
+                        # println("merge ", cluster_node, " in ", neighbour)
+                        mask[i] = false
+                        did_change = true
+                        break
+                    end
+                end
+                did_change && break
+            end
+            junction_tree = junction_tree[mask]
+        end
+    end
 
 
+    # PGM 10.1.2 Theorem 10.1
     # The cluster graph induced by an execution of variable elimination is necessarily a tree.
-    # If whenever there is a variable x such that x ∈ C_i and x ∈ C_j then x is als in every cluter
-    # on the unique path from C_i to C_j.
+    # If whenever there is a variable x such that x ∈ C_i and x ∈ C_j then x is also in every cluster
+    # on the unique path from C_i to C_j. In particular, there is a path.
     # This (running intersection) property makes the cluster tree a junction tree.
     root_cluster_node = junction_tree[findfirst(x -> root_factor in x.factors, junction_tree)]
     make_directed(root_cluster_node, nothing)
