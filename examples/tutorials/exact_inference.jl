@@ -186,5 +186,8 @@ variable_nodes, factor_nodes = get_factor_graph(model)
 
 greedy_variable_elimination(model).table
 
+variable_nodes, factor_nodes = get_factor_graph(model)
+return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
 
-factor_nodes[8].table
+elimination_order = get_elimination_order(model, variable_nodes, return_expr_variables(model), :Greedy)
+elimination_order = get_elimination_order(model, variable_nodes, Int[], :Greedy)

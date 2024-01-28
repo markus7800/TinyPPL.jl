@@ -12,11 +12,11 @@ mutable struct ReductionSize
 
     # metrics
     individual::Int # sum of sizes of all factors connected to node v
-    combined::Int # sum of size of factor resulting from multiplying all factors connected to node v and summing out v
-    reduction::Int # individual - combined
+    combined::BigInt # size of factor resulting from multiplying all factors connected to node v and summing out v (size of tau)
+    reduction::BigInt # individual - combined
 
     position::Int # position in heap
-    metric::Int # cached metric
+    metric::BigInt # cached metric
 end
 function get_metric(r::ReductionSize)
     r.combined # r.reduction # combined works better
