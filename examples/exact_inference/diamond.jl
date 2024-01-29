@@ -46,7 +46,7 @@ function get_model()
                 net
             end
         end
-        @iterate(100, func, 1.)
+        @iterate(2, func, 1.)
     end
 end
 
@@ -98,7 +98,7 @@ function get_model_factor_graph(N)
     variable_nodes, factor_nodes, marginal_variables, return_factor
 end
 
-function print_reference_solution(N=100)
+function print_reference_solution(N=2)
     repeatf(n, f, x) = n > 1 ? f(repeatf(n-1, f, x)) : f(x)
     R = 0.5
     D = 0.001

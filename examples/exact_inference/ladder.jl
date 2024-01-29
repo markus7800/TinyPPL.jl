@@ -95,13 +95,13 @@ function get_model_factor_graph(N)
         end
     end
 
-    return_variables = [net]
+    return_variables = [x1, x2]
     return_factor = add_return_factor!(factor_nodes, return_variables)
 
     return variable_nodes, factor_nodes, marginal_variables, return_factor
 end
 
-function print_reference_solution(N=100)
+function print_reference_solution(N=2)
     repeatf(n, f, x) = n > 1 ? f(repeatf(n-1, f, x)) : f(x)
     p_d = 0.001
     p_f = 0.6

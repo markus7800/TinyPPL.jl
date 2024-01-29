@@ -40,6 +40,8 @@ function Base.show(io::IO, factor_node::FactorNode)
     print(io, "FactorNode(", [(n.variable, n.address) for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
     # println(io, factor_node.table)
 end
+
+Base.similar(factor_node::FactorNode) = FactorNode(factor_node.neighbours, similar(factor_node.table))
 export FactorNode
 
 # support is calculated by iterating ofver the product of all parent supports
@@ -196,30 +198,65 @@ function factor_product(A::FactorNode, B::FactorNode)::FactorNode
 end
 
 # PGM (Definition 10.7)
-# undos factor product A / B
-function factor_division(A::FactorNode, B::FactorNode)::FactorNode
-    a_size = size(A.table)
-    b_size = size(B.table)
-    @assert B.neighbours ⊆ A.neighbours
+# !if! A * B = C, this factor_division returns C \ A = B
+#   A   *   B   =    C
+# [X,Y] * [Y,Z] = [X,Y,Z]
+# If you are not sure (do not want to compute) which variables are broadcasted
+# in A * B, then you can always choose B = similar(C), but C will be constant
+# in the dimensions corresponding to variables of A that are not in B.
+function factor_division!(C::FactorNode, A::FactorNode, B::FactorNode)::FactorNode
+    @assert Set(A.neighbours) ∪ Set(B.neighbours) == Set(C.neighbours)
 
-    # variable_nodes are sorted
-    b_size = Int[]
-    for v in A.neighbours
-        if v in B.neighbours
-            push!(b_size, length(v.support))
+    a_size = Int[]
+    table_sel = []
+    for (i,v) in enumerate(C.neighbours)
+        if !(v in B.neighbours)
+            # X was broadcasted from A we can select it
+            push!(table_sel, 1)
         else
-            push!(b_size, 1)
+            # Y
+            push!(table_sel, Colon())
+        end
+        if v in A.neighbours
+            # X, Y
+            push!(a_size, length(v.support))
+        else
+            # Z
+            push!(a_size, 1)
         end
     end
-    b_table = reshape(B.table, Tuple(b_size))
+    # reshape A to match C
+    a_table = reshape(A.table, Tuple(a_size))
 
-    table = A.table .- b_table # -Inf - -Inf = -Inf <-> 0/0 = 0
-    @assert all(table .<= 0)
+    # select away broadcasted dimensions from A
+    # B[:,:] = C[1,:,:] - reshape(A)[1,:,:], where reshape(A) is length(X) x length(Y) x 1
+    B.table .= view(C.table, table_sel...) .- view(a_table, table_sel...) # -Inf - -Inf = -Inf <-> 0/0 = 0
 
-    # we don't know if we can remove variables
-    # table could be constant in some dimensions
-    return FactorNode(A.neighbours, table)
+    return B
 end
+
+# X = VariableNode(1,:X); X.support = [1.,2.];
+# Y = VariableNode(2,:Y); Y.support = [1.,2.,3.];
+# Z = VariableNode(3,:Z); Z.support = [1.,2.,3.,4];
+# A = FactorNode([X, Y], -rand(2,3))
+# B = FactorNode([Y, Z], -rand(3,4))
+# C = factor_product(A,B)
+
+# B2 = factor_division!(C, A, FactorNode(B.neighbours, similar(B.table)))
+# B2.table ≈ B.table
+
+# B2 = factor_division!(C, A, FactorNode(C.neighbours, similar(C.table)))
+# B2.table[1,:,:] ≈ B.table
+# B2.table[2,:,:] ≈ B.table
+
+# A2 = factor_division!(C, B, FactorNode(A.neighbours, similar(A.table)))
+# A2.table ≈ A.table
+
+# A2 = factor_division!(C, B, FactorNode(C.neighbours, similar(C.table)))
+# A2.table[:,:,1] ≈ A.table
+# A2.table[:,:,2] ≈ A.table
+# A2.table[:,:,3] ≈ A.table
+# A2.table[:,:,4] ≈ A.table
 
 # PGM 9.3.1.1 Factor Marginalisation
 # sums out dims from factor

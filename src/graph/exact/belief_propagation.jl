@@ -116,10 +116,19 @@ function belief_propagation(pgm::PGM; all_marginals::Bool=false)
     belief_propagation(return_factor, all_marginals)
 end
 
-function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
+function get_blief_tree(return_factor::FactorNode)
     # we set the return factor as root, as we mainly care about its marginals.
-
     root = BeliefNode(return_factor, nothing)
+    return root
+end
+export get_blief_tree
+
+function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
+    root = BeliefNode(return_factor, nothing)
+    return belief_propagation(root, return_factor, all_marginals)
+end
+
+function belief_propagation(root::BeliefNode, return_factor::FactorNode, all_marginals::Bool)
     # print_belief_tree(root)
     
     # Run forward pass. As the return factor has no parents to send a message to,
@@ -140,12 +149,12 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
         return_table .+= reshape(message, Tuple(shape)) # broadcasting -> factor product
         shape[i] = 1
     end
+    # true return factor is used in backward pass, we should only modify them now
+    _return_factor = FactorNode(return_factor.neighbours, return_table)
 
     if all_marginals
         # only need backward pass if we want to evaluate all marginals
         backward(root)
-        # return factor is used in backward pass, we should only modify them now
-        return_factor.table .= return_table
 
         variable_nodes = get_variable_nodes(root)
         marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
@@ -157,11 +166,9 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
             marginals[i] = (varnode.variable, varnode.address, table)
         end
 
-        return return_factor, evidence, marginals
+        return _return_factor, evidence, marginals
     else
-        
-        return_factor.table .= return_table
-        return return_factor, evidence
+        return _return_factor, evidence
     end
 end
 

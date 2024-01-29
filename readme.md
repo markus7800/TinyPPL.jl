@@ -241,7 +241,7 @@ r = get_retval(pgm, X)
 |ADVI| X | X | X | [ADVI](https://arxiv.org/pdf/1603.00788.pdf)|
 |BBVI| X | X | X | [BBVI](https://arxiv.org/pdf/1401.0118.pdf)|
 |Variable Elimination|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
-|Belief Propapagation|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
+|Belief Propapagation|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/), [Bishop](https://link.springer.com/in/book/9780387310732)|
 |Junction Tree Message Passing|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
 |Involutive MCMC| X |  |  | [iMCMC](https://arxiv.org/pdf/2006.16653.pdf)|
 |SMC| | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|

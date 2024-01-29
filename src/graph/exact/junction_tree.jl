@@ -164,7 +164,7 @@ export print_junction_tree
 
 function junction_tree_message_passing(pgm::PGM; all_marginals::Bool=false)
     junction_tree, root_cluster_node, root_factor = get_junction_tree(pgm)
-    junction_tree_message_passing(pgm, junction_tree, root_cluster_node, root_factor, all_marginals)
+    junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, all_marginals)
 end
 
 
@@ -241,7 +241,7 @@ function get_variable_nodes(junction_tree::Vector{ClusterNode})
     return variable_nodes
 end
 
-function junction_tree_message_passing(pgm::PGM, junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, all_marginals::Bool)
+function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, all_marginals::Bool)
     @assert root_factor in root.factors
     initialise_potentials(root)
 

@@ -8,10 +8,21 @@ A = FactorNode([X, Y], -rand(2,3))
 B = FactorNode([Y, Z], -rand(3,4))
 C = factor_product(A,B)
 
-A2 = factor_division(C, B)
-A2.table # constant in one dimension
-factor_sum(A2, [Z]).table
-A.table
+B2 = factor_division!(C, A, FactorNode(B.neighbours, similar(B.table)))
+B2.table ≈ B.table
+
+B2 = factor_division!(C, A, FactorNode(C.neighbours, similar(C.table)))
+B2.table[1,:,:] ≈ B.table
+B2.table[2,:,:] ≈ B.table
+
+A2 = factor_division!(C, B, FactorNode(A.neighbours, similar(A.table)))
+A2.table ≈ A.table
+
+A2 = factor_division!(C, B, FactorNode(C.neighbours, similar(C.table)))
+A2.table[:,:,1] ≈ A.table
+A2.table[:,:,2] ≈ A.table
+A2.table[:,:,3] ≈ A.table
+A2.table[:,:,4] ≈ A.table
 
 model = @pgm Burglary begin
     function or(x, y)
@@ -83,52 +94,6 @@ elimination_order = [C, D, I, H, G, S, L, J]
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor, true)
 print_junction_tree(root_cluster_node)
 
-using TinyPPL.Graph
-N = 1000
-# model = @ppl Diamond begin
-@time model = Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
-    function or(x, y)
-        max(x, y)
-    end
-    function and(x, y)
-        min(x, y)
-    end
-    function diamond(s1)
-        let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
-            s2 = route == 1. ? s1 : false,
-            s3 = route == 1. ? false : s1,
-            drop ~ Bernoulli(0.001)
-
-            or(s2, and(s3, 1-drop))
-        end
-    end
-    function func(old_net)
-        let net ~ Dirac(diamond(old_net))
-            net
-        end
-    end
-    @iterate($(Main.N), func, 1.)
-end));
-
-
-@time f = variable_elimination(model, order=:Greedy)
-@time f = variable_elimination(model, order=:MinFill) # almost all time spent getting elimination order
-evaluate_return_expr_over_factor(model, f)
-
-# 1.562772 seconds
-@time [get_junction_tree(model) for _ in 1:10];
-
-variable_nodes, factor_nodes = get_factor_graph(model)
-marginal_variables = return_expr_variables(model)
-
-@time f = greedy_variable_elimination(variable_nodes, marginal_variables)
-
-@time begin
-    order = get_greedy_elimination_order(variable_nodes, marginal_variables);
-    variable_elimination(variable_nodes, order)
-end
-
-
 function inference(show_results=false; algo=:VE, kwargs...)
     model = get_model()
 
@@ -176,18 +141,94 @@ begin
     inference(true, algo=:JT, all_marginals=all_marginals)
     print_reference_solution()
 end
- 
 
-include("../exact_inference/caesar.jl")
-model = get_model()
-println(model.name)
+
+
+using TinyPPL.Graph
+N = 1000
+# model = @ppl Diamond begin
+@time model = Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
+    function or(x, y)
+        max(x, y)
+    end
+    function and(x, y)
+        min(x, y)
+    end
+    function diamond(s1)
+        let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
+            s2 = route == 1. ? s1 : false,
+            s3 = route == 1. ? false : s1,
+            drop ~ Bernoulli(0.001)
+
+            or(s2, and(s3, 1-drop))
+        end
+    end
+    function func(old_net)
+        let net ~ Dirac(diamond(old_net))
+            net
+        end
+    end
+    @iterate($(Main.N), func, 1.)
+end));
+
+
+@time f = variable_elimination(model, order=:Greedy)
+@time f = variable_elimination(model, order=:MinFill) # almost all time spent getting elimination order
+evaluate_return_expr_over_factor(model, f)
+
+@time [get_junction_tree(model) for _ in 1:10];
 
 variable_nodes, factor_nodes = get_factor_graph(model)
+marginal_variables = return_expr_variables(model)
 
-greedy_variable_elimination(model).table
+@time f = greedy_variable_elimination(variable_nodes, marginal_variables)
 
-variable_nodes, factor_nodes = get_factor_graph(model)
-return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
+@time begin
+    order = get_greedy_elimination_order(variable_nodes, marginal_variables);
+    variable_elimination(variable_nodes, order)
+end
 
-elimination_order = get_elimination_order(model, variable_nodes, return_expr_variables(model), :Greedy)
-elimination_order = get_elimination_order(model, variable_nodes, Int[], :Greedy)
+# DICE eval
+modelname = "diamond"
+# modelname = "ladder"
+
+N = 5000
+
+include("../exact_inference/$modelname.jl")
+variable_nodes, factor_nodes, marginal_variables, return_factor = get_model_factor_graph(N);
+is_tree(variable_nodes, factor_nodes)
+
+# if modelname == "diamond"
+#     elimination_order = variable_nodes[1:end-1]
+# elseif modelname == "ladder"
+#     elimination_order = variable_nodes[1:end-2]
+# end
+@time elimination_order = get_greedy_elimination_order(variable_nodes, marginal_variables);
+
+@time res = variable_elimination(variable_nodes, elimination_order)
+exp.(res.table)
+print_reference_solution(N)
+
+@time belief_tree = get_blief_tree(return_factor);
+@time res, evidence = belief_propagation(belief_tree, return_factor, false);
+exp.(res.table)
+print_reference_solution(N)
+
+belief_tree = get_blief_tree(return_factor);
+@time res, evidence, marginals = belief_propagation(belief_tree, return_factor, true);
+
+# if modelname == "diamond"
+#     elimination_order = variable_nodes
+# elseif modelname == "ladder"
+#     elimination_order = variable_nodes
+# end
+@time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
+@time junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
+@time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
+exp.(res.table)
+print_reference_solution(N)
+
+
+# 1.639024 seconds for diamond(5000)
+@profview junction_tree, root_cluster_node, root_factor =  get_junction_tree(variable_nodes, elimination_order, return_factor);
+@time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
