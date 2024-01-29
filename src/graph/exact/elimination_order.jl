@@ -44,7 +44,7 @@ end
 # PGM 9.4.3.2
 function get_min_neighbour_fill_elimination_order(pgm::PGM, variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}, order::Symbol)
 
-    # this is slow for large graphs
+    # this is slow for large graphs, we could also rewrite this with heaps / priority queues
     nodes = Set(node for node in 1:pgm.n_variables if !(node in marginal_variables) && !isobserved(pgm, node))
     
     undirected_graph = Set(get_undirected_edge(x,y) for (x,y) in pgm.edges if (x in nodes) && (y in nodes))

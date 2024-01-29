@@ -41,7 +41,11 @@ function light_smc(pgm::PGM, n_particles::Int)
 end
 export light_smc
 
-
+# Same structure as in static/SMC.jl
+# Instead of using Libtask, we exploit the fixed structure of a PGM.
+# We traverse the topological_order for several particles at once.
+# Additionally, we can optimise ancestral_sampling by not computing the full joint,
+# but only those factors that are influenced by the current state.
 function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Float64}};
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(),
     relevant_future_nodes::Union{Nothing, Vector{Vector{Int}}} = nothing
@@ -214,7 +218,6 @@ function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sa
         X = zeros(pgm.n_latents)
     end
 
-        
     @progress for i in 1:n_samples
         smc_traces, lps, _ = _smc_worker(pgm, n_particles, X;
                                       ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal,
@@ -237,8 +240,6 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
     pg_traces = Array{Float64}(undef, pgm.n_latents, n_samples)
     retvals = Vector{Any}(undef, n_samples)
 
-    relevant_future_nodes = ancestral_sampling ? get_relevant_future_nodes(pgm) : nothing
-
     # initialise with SMC
     smc_traces, lps, marginal_lik = smc(pgm, n_particles; addr2proposal=addr2proposal)
     W = exp.(lps)
@@ -251,8 +252,7 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
     @progress for i in 1:n_samples
         smc_traces, lps, marginal_lik_proposed = _smc_worker(
             pgm, n_particles, nothing;
-            ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal,
-            relevant_future_nodes=relevant_future_nodes
+            addr2proposal=addr2proposal
         )
         W = exp.(lps)
         k = rand(Categorical(W))

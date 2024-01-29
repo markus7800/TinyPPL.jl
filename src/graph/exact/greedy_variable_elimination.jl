@@ -14,6 +14,7 @@ mutable struct ReductionSize
     individual::Int # sum of sizes of all factors connected to node v
     combined::BigInt # size of factor resulting from multiplying all factors connected to node v and summing out v (size of tau)
     reduction::BigInt # individual - combined
+    # we could store log(combined)::Float64 instead of BigInt
 
     position::Int # position in heap
     metric::BigInt # cached metric

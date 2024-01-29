@@ -2,7 +2,7 @@
 import Libtask
 import Distributions: Categorical
 
-# Assumptoin observe statements in static order
+# Assumption observe statements in static order
 
 mutable struct SMCParticle <: StaticSampler
     t::Int
@@ -60,6 +60,14 @@ update_particle!(task::Libtask.TapedTask, particle::SMCParticle) = update_partic
 
 # Following Particle Gibbs Ancestral Sampling
 
+# Like importance sampling, SMC also returns a weighted sample in form of particles.
+# But instead of running the model a whole, we stop at each observe statements and resample the particles according to the intermediate likelihood.
+# Thus, we get rid of bad particles early and copy (fork) good particles and continue them with different futures.
+# ∫ f(x',x)p(x',x|y) = ∫ p(x',x|,y)/(q(x'|x)p(x|y)) f(x',x) q(x'|x)p(x|y) = ∫ W f(x',x) q(x'|x)p(x|y)
+# We have to assume that the particles encounter observe statements in the same order.
+# We use Libtask to interrupt / continue asynchronous Julia tasks.
+# If a reference particle X_ref is passed this worker acts a conditional smc.
+# smc can be used to create independent samples, while conditional smc is a kernel with the posterior as stationary distribution.
 function _smc_worker(model::StaticModel, args::Tuple, observations::Observations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
     X_ref::Union{Nothing,StaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
 
@@ -174,7 +182,9 @@ function conditional_smc(model::StaticModel, args::Tuple, observations::Observat
 end
 export conditional_smc
 
-
+# Particle gibbs is the particle version of a Gibbs sampler.
+# Instead of using p(x'|x) we approximate this full conditional with a conditional smc run.
+# Since the conditional smc leaves the posterior invariant, we can accept each sample.
 function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int;
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
     
@@ -206,7 +216,10 @@ end
 
 export particle_gibbs
 
-# not really useful, but a sanity check if everyhing works.
+# Particle IMH is the particle version of an independet Metropolis Hastings algorithm.
+# Instead of producing a single sample from the proposal, we use smc.
+# The more particles we use, the higher the acceptance propoability shouldbe.
+# This algorithm usually does not outperform MH, but serves as a sanity check if everything works.
 function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int;
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
 
