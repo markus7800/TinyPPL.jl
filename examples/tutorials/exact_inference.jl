@@ -56,13 +56,17 @@ end
 function print_reference_solution()
     println("Reference: ", "P(0)=", 989190819/992160802, " P(1)=", 2969983/992160802)
 end
+print_reference_solution()
 
 variable_nodes, factor_nodes = get_factor_graph(model)
 
-f = variable_elimination(model, variable_nodes, factor_nodes)
-evaluate_return_expr_over_factor(model, f)
+res, evidence = variable_elimination(model, variable_nodes, factor_nodes)
+evaluate_return_expr_over_factor(model, res)
 
+res, evidence = variable_elimination(variable_nodes, variable_nodes)
 
+res, evidence = junction_tree_message_passing(model)
+evaluate_return_expr_over_factor(model, res)
 
 
 model = @pgm Student begin
@@ -231,4 +235,123 @@ print_reference_solution(N)
 
 # 1.639024 seconds for diamond(5000)
 @profview junction_tree, root_cluster_node, root_factor =  get_junction_tree(variable_nodes, elimination_order, return_factor);
+@profview res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
+
+
+function read_bif(pathname::String)
+    f = open(pathname, "r")
+    s = read(f, String)
+    blocks = split(s, "}\n")
+
+    variable_nodes = VariableNode[]
+    factor_nodes = FactorNode[]
+    name_to_variable = Dict{String, VariableNode}()
+    name_to_support_map = Dict{String, Dict{String, Int}}()
+
+    for block in blocks
+        if startswith(block, "variable")
+            # variable A {
+            #     type discrete [ 3 ] { young, adult, old };
+            # }
+            components = split(block)
+            # println(components)
+            name = String(components[2])
+            @assert components[4] == "type"
+            @assert components[5] == "discrete"
+            i = 6
+            while components[i] != "{"
+                i += 1
+            end
+            i += 1
+            values = String[] # ["young", "adult", "old"]
+            while components[i] != "};"
+                push!(values, rstrip(components[i], ','))
+                i += 1
+            end
+            node = VariableNode(length(variable_nodes)+1, name)
+            node.support = 1:length(values)
+            push!(variable_nodes, node)
+            name_to_variable[name] = node
+            name_to_support_map[name] = Dict{String, Int}(value => i for (i, value) in enumerate(values))
+
+        elseif startswith(block, "probability")
+            lines = split(block, '\n')
+            header = lines[1] # probability ( A ) {     or      probability ( E | A, S ) {
+            components = split(header)
+            @assert components[2] == "("
+            name = String(components[3])
+            node = name_to_variable[name]
+            if components[4] == ")"
+                # probability ( A ) {
+                #     table 0.3, 0.5, 0.2;
+                # }
+                # unconditional
+                @assert length(lines) == 3
+                table = zeros(length(node.support))
+                table_line = split(lines[2]) # ["table", "0.3,", "0.5,", "0.2;"]
+                for i in 1:length(node.support)
+                    table[i] = log(parse(Float64, rstrip(table_line[i+1], [',',';'])))
+                end
+                factor_node = FactorNode([node], table)
+                push!(factor_nodes, factor_node)
+            else components[4] == "|"
+                # probability ( T | O, R ) {
+                #     (emp, small) 0.48, 0.42, 0.10;
+                #     (self, small) 0.56, 0.36, 0.08;
+                #     (emp, big) 0.58, 0.24, 0.18;
+                #     (self, big) 0.70, 0.21, 0.09;
+                # }
+                i = 5
+                conditionals = VariableNode[] # name_to_variable.(["O", "R"])
+                while components[i] != ")"
+                    push!(conditionals, name_to_variable[rstrip(components[i], ',')])
+                    i += 1
+                end
+                table = zeros(length(node.support), [length(c.support) for c in conditionals]...)
+                @assert prod(length(c.support) for c in conditionals) == length(lines)-2
+                 
+                for line in lines[2:end-1]
+                    l = lstrip(line, [' ', '(']) # emp, small) 0.48, 0.42, 0.10;
+                    named_value_str, value_str = split(l, ") ", limit=2) # ["emp, small", "0.48, 0.42, 0.10;"]
+
+                    ixs = Int[]
+                    for (i,n) in enumerate(split(named_value_str))
+                        n = rstrip(n, ',')
+                        support_map = name_to_support_map[conditionals[i].address] # "emp" => 1, "small" => 1 etc
+                        push!(ixs, support_map[n])
+                    end
+                    values = log.([parse(Float64, rstrip(v, [',',';'])) for v in split(value_str)])
+                    table[:, ixs...] = values
+                end
+                factor_node = FactorNode(append!([node], conditionals), table) # will sort
+                push!(factor_nodes, factor_node)
+            end
+        end
+    end
+    for f in factor_nodes
+        for v in f.neighbours
+            push!(v.neighbours, f)
+        end
+    end
+
+    return variable_nodes, factor_nodes
+end
+
+@time variable_nodes, factor_nodes = read_bif(pwd()*"/examples/tutorials/bif_models/munin.bif");
+is_tree(variable_nodes, factor_nodes)
+return_factor = add_return_factor!(factor_nodes, VariableNode[])
+is_tree(variable_nodes, factor_nodes)
+
+@time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
+@time variable_elimination(variable_nodes, elimination_order)
+
+@time res, evidence = belief_propagation(return_factor, false)
+@time res, evidence, marginals = belief_propagation(return_factor, true)
+
+
+junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
+@time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
+
+junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
 @time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
+

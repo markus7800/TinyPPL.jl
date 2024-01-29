@@ -26,12 +26,19 @@ Base.isless(x::VariableNode, y::VariableNode) = x.variable < y.variable
 mutable struct FactorNode <: FactorGraphNode
     neighbours::Vector{VariableNode} # variables
     table::Array{Float64}
-    function FactorNode(neighbours::Vector{VariableNode}, table::Array{Float64})
+    function FactorNode(neighbours::Vector{VariableNode}, table::Array{Float64})::FactorNode
         if !issorted(neighbours)
             perm = sortperm(neighbours)
             neighbours = neighbours[perm]
             table = permutedims(table, perm)
         end
+        return new(neighbours, table)
+    end
+
+    function FactorNode(neighbours::Vector{VariableNode}, number::Float64)::FactorNode
+        @assert isempty(neighbours)
+        table = Array{Float64,0}(undef)
+        table[] = number
         return new(neighbours, table)
     end
 end
@@ -258,6 +265,8 @@ end
 # A2.table[:,:,3] ≈ A.table
 # A2.table[:,:,4] ≈ A.table
 
+Base.reshape(f::Float64, ::Tuple{}) = f
+ 
 # PGM 9.3.1.1 Factor Marginalisation
 # sums out dims from factor
 # factor table is in log-space thus the operation is logsumexp

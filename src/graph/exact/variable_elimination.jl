@@ -34,6 +34,7 @@ end
 function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode})
     factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
 
+    local tau::FactorNode
     @progress for node in elimination_order
         neighbour_factors = factor_nodes[node]
 
@@ -60,8 +61,15 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
         delete!(factor_nodes, node)
     end
     
-    factor_nodes = reduce(∪, values(factor_nodes))
-    return reduce(factor_product, factor_nodes)
+    if isempty(factor_nodes)
+        evidence = sum(exp, tau.table)
+        return FactorNode(VariableNode[],0.), evidence
+    else
+        factor_nodes = reduce(∪, values(factor_nodes))
+        res = reduce(factor_product, factor_nodes)
+        evidence = sum(exp, res.table)
+        return res, evidence
+    end
 end
 
 export variable_elimination

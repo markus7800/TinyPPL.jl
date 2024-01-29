@@ -144,7 +144,11 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
     # If whenever there is a variable x such that x ∈ C_i and x ∈ C_j then x is also in every cluster
     # on the unique path from C_i to C_j. In particular, there is a path.
     # This (running intersection) property makes the cluster tree a junction tree.
-    root_cluster_node = junction_tree[findfirst(x -> root_factor in x.factors, junction_tree)]
+    if !isempty(root_factor.neighbours)
+        root_cluster_node = junction_tree[findfirst(x -> root_factor in x.factors, junction_tree)]
+    else
+        root_cluster_node = junction_tree[1]
+    end
     make_directed(root_cluster_node, nothing)
 
     return junction_tree, root_cluster_node, root_factor
@@ -242,7 +246,7 @@ function get_variable_nodes(junction_tree::Vector{ClusterNode})
 end
 
 function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, all_marginals::Bool)
-    @assert root_factor in root.factors
+    @assert root_factor in root.factors || isempty(root_factor.neighbours)
     initialise_potentials(root)
 
     res = forward(root)

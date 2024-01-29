@@ -235,7 +235,7 @@ function forward(belief_node::BeliefNode)
         end
         # we put result in FactorNode
         # child_variables = scope(belief_node.node) - x 
-        child_variables = [child.node for child in belief_node.neighbours if child != belief_node.parent]
+        child_variables = VariableNode[child.node for child in belief_node.neighbours if child != belief_node.parent]
         # as all factor nodes are sorted and we do not change the order the message_factor is also sorted
         @assert issorted(child_variables)
 
