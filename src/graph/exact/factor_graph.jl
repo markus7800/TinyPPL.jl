@@ -43,6 +43,11 @@ mutable struct FactorNode <: FactorGraphNode
     end
 end
 
+function EmptyFactorNode(neighbours::Vector{VariableNode})::FactorNode
+    table = Array{Float64}(undef, Tuple([length(v.support) for v in neighbours]))
+    return FactorNode(neighbours, table)
+end
+
 function Base.show(io::IO, factor_node::FactorNode)
     print(io, "FactorNode(", [(n.variable, n.address) for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
     # println(io, factor_node.table)
@@ -211,6 +216,19 @@ end
 # If you are not sure (do not want to compute) which variables are broadcasted
 # in A * B, then you can always choose B = similar(C), but C will be constant
 # in the dimensions corresponding to variables of A that are not in B.
+function factor_div_op(x::Float64, y::Float64)::Float64
+    # x / y
+    if y == -Inf
+        # throw(ArgumentError("Division by 0. (-inf)"))
+        if x == -Inf
+            return -Inf # -Inf - -Inf = NaN -> -Inf <-> 0/0 = 0
+        else
+            throw(ArgumentError("Division by 0. (-inf)"))
+        end
+    else
+        return x - y
+    end
+end
 function factor_division!(C::FactorNode, A::FactorNode, B::FactorNode)::FactorNode
     @assert Set(A.neighbours) ∪ Set(B.neighbours) == Set(C.neighbours)
 
@@ -237,10 +255,11 @@ function factor_division!(C::FactorNode, A::FactorNode, B::FactorNode)::FactorNo
 
     # select away broadcasted dimensions from A
     # B[:,:] = C[1,:,:] - reshape(A)[1,:,:], where reshape(A) is length(X) x length(Y) x 1
-    B.table .= view(C.table, table_sel...) .- view(a_table, table_sel...) # -Inf - -Inf = -Inf <-> 0/0 = 0
-
+    # B.table .= view(C.table, table_sel...) .- view(a_table, table_sel...)
+    broadcast!(factor_div_op, B.table, view(C.table, table_sel...), view(a_table, table_sel...))
     return B
 end
+export factor_division!
 
 # X = VariableNode(1,:X); X.support = [1.,2.];
 # Y = VariableNode(2,:Y); Y.support = [1.,2.,3.];

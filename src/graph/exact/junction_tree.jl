@@ -117,7 +117,7 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
         # PGM 10.4.1
         # It is standard to reduct the tree to contain only clusters that are maximal cliques.
         # Specifically, we eliminate from the tree a cluster C_j which is a strict subset of some other cluster.
-        # removes one edge at a time, could be improved
+        # removes one edge at a time, could be improved, but is fast enough even for large networks
         did_change = true
         while did_change
             did_change = false
@@ -207,7 +207,6 @@ function forward(node::ClusterNode)::FactorNode
 end
 
 function backward(node::ClusterNode)
-    # message = reduce(factor_product, node.messages, init=node.potential)
     for (i, neighbour) in enumerate(node.neighbours)
         neighbour == node.parent && continue
         
@@ -217,13 +216,47 @@ function backward(node::ClusterNode)
             child_message = factor_product(child_message, node.messages[j])
         end
 
-        # PGM 10.3.1: Message Passing with Division
-        # child_message = factor_division(message, node.messages[i])
-
         index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours))
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward(neighbour)
+    end
+end
+
+function backward_with_division(node::ClusterNode)
+    base_message = reduce(factor_product, node.messages, init=node.potential)
+    for (i, neighbour) in enumerate(node.neighbours)
+        neighbour == node.parent && continue
+        
+        # child_message = node.potential
+        # for (j, n) in enumerate(node.neighbours)
+        #     n == neighbour && continue
+        #     child_message = factor_product(child_message, node.messages[j])
+        # end
+
+        # PGM 10.3.1: Message Passing with Division
+        div_vars = reduce(∪,
+            Set(node.messages[j].neighbours) for (j,n) in enumerate(node.neighbours) if n !== neighbour;
+            init=Set{VariableNode}(node.potential.neighbours)
+        )
+        div_vars = sort!(collect(div_vars))
+        # @assert div_vars == child_message.neighbours (div_vars, child_message.neighbours)
+        _child_message = EmptyFactorNode(div_vars)
+        # is it okay to have 0 / 0 = 0 ? 
+        factor_division!(base_message, node.messages[i], _child_message)
+
+        # f1 = isfinite.(_child_message.table)
+        # f2 = isfinite.(child_message.table)
+        # @assert all(f1 .<= f2) # _child_message may have more -inf
+        # @assert _child_message.table[f1] ≈ child_message.table[f1] # should agree on rest
+        # we have not _child_message.table ≈ child_message.table
+
+        child_message = _child_message
+
+        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours))
+        neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
+
+        backward_with_division(neighbour)
     end
 end
 
@@ -245,7 +278,7 @@ function get_variable_nodes(junction_tree::Vector{ClusterNode})
     return variable_nodes
 end
 
-function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, all_marginals::Bool)
+function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, all_marginals::Bool; with_division::Bool=false)
     @assert root_factor in root.factors || isempty(root_factor.neighbours)
     initialise_potentials(root)
 
@@ -260,7 +293,11 @@ function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root:
 
     if all_marginals
         # only need backward pass if we want to evaluate all marginals
-        backward(root)
+        if with_division
+            backward_with_division(root)
+        else
+            backward(root)
+        end
 
         variable_nodes = get_variable_nodes(junction_tree)
        

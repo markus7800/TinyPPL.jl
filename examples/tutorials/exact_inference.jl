@@ -24,6 +24,27 @@ A2.table[:,:,2] ≈ A.table
 A2.table[:,:,3] ≈ A.table
 A2.table[:,:,4] ≈ A.table
 
+C = factor_product(A, A)
+A2 = factor_division!(C, A, FactorNode(A.neighbours, similar(A.table)))
+
+X = VariableNode(1,:X); X.support = [1.,2.];
+Y = VariableNode(2,:Y); Y.support = [1.,2.];
+Z = VariableNode(3,:Z); Z.support = [1.,2.];
+A = FactorNode([X, Y], [-Inf 0; -Inf -Inf])
+factor_sum(A, [X]).table
+B = FactorNode([Y, Z], [-Inf 0; -Inf -Inf])
+factor_sum(B, [Z]).table
+
+C = factor_product(A, B)
+C.table
+A2 = factor_division!(C, B, FactorNode(A.neighbours, similar(A.table)))
+A2.table
+A2 = factor_division!(C, B, FactorNode(C.neighbours, similar(C.table)))
+A2.table
+
+B2 = factor_division!(C, A, FactorNode(C.neighbours, similar(C.table)))
+B2.table
+
 model = @pgm Burglary begin
     function or(x, y)
         max(x, y)
@@ -337,6 +358,7 @@ function read_bif(pathname::String)
     return variable_nodes, factor_nodes
 end
 
+@time variable_nodes, factor_nodes = read_bif(pwd()*"/examples/tutorials/bif_models/survey.bif");
 @time variable_nodes, factor_nodes = read_bif(pwd()*"/examples/tutorials/bif_models/munin.bif");
 is_tree(variable_nodes, factor_nodes)
 return_factor = add_return_factor!(factor_nodes, VariableNode[])
@@ -348,10 +370,20 @@ is_tree(variable_nodes, factor_nodes)
 @time res, evidence = belief_propagation(return_factor, false)
 @time res, evidence, marginals = belief_propagation(return_factor, true)
 
+@time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 
+# 1.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
 @time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
 
+# 16.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
 @time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
 
+junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
+@profview res2, evidence2, marginals2 = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true; with_division=true);
+
+for ((i, _, m1), (j,_,m2)) in zip(marginals, marginals2)
+    @assert i == j
+    @assert m1 ≈ m2
+end
