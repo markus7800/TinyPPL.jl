@@ -81,7 +81,7 @@ function single_site(pgm::PGM, n_samples::Int, kernel::Function)
     retvals = Vector{Any}(undef, n_samples)
     trace = Array{Float64,2}(undef, pgm.n_latents, n_samples)
 
-    nodes = [n => [child for (x,child) in pgm.edges if x == n] for n in pgm.topological_order if !isobserved(pgm, n)]
+    nodes = [n => [child for (x,child) in pgm.edges if x == n] for n in 1:pgm.n_latents]
 
     X = Vector{Float64}(undef, pgm.n_latents)
     Y = pgm.observations

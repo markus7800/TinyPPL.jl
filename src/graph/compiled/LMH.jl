@@ -7,7 +7,7 @@ function compiled_single_site(pgm::PGM, kernels::Vector{Function}, n_samples::In
     trace = Array{Float64,2}(undef, pgm.n_latents, n_samples)
     retvals = Vector{Any}(undef, n_samples)
 
-    n_accepted = 0 
+    n_accepted = 0
     @progress for i in 1:n_samples
         k = rand(kernels) # select update kernel at random
         accepted = k(X, pgm.observations)

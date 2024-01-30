@@ -1,6 +1,5 @@
 using TinyPPL.Graph
 using TinyPPL.Distributions
-import Distributions: mean, std
 import Random
 
 include("gmm/data.jl")
@@ -59,6 +58,7 @@ end
 end
 
 model = unplated_model;
+
 model = plated_model;
 
 @info "LW"
@@ -76,29 +76,33 @@ lps1 ≈ lps2
 
 @info "LMH"
 _ = lmh(model, 100);
-Random.seed!(0); @time traces = lmh(model, 1_000_000);
-mean(traces.data, dims=2)
+Random.seed!(0); @time traces1 = lmh(model, 100_000);
 
 println("Get lps")
-@time lps = [model.logpdf(traces[:,i], model.observations) for i in 1:length(traces)];
+@time lps1 = [model.logpdf(traces1[:,i], model.observations) for i in 1:length(traces1)];
 
 println("Compile LMH")
 @time kernels = compile_lmh(model);
-Random.seed!(0); @time traces2 = compiled_single_site(model, kernels, 1_000_000);
+Random.seed!(0); @time traces2 = compiled_single_site(model, kernels, 100_000);
 println("Get lps")
 @time lps2 = [model.logpdf(traces2[:,i], model.observations) for i in 1:length(traces2)];
+
+lps1 ≈ lps2
 
 
 @info "RWMH"
 addr2var = Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.)
-traces = rwmh(model, 100, addr2var=addr2var);
+_ = rwmh(model, 100, addr2var=addr2var);
 # acceptance rate for z is much worse because we force a move / don't stay at current value
-Random.seed!(0); @time traces = rwmh(model, 1_000_000, addr2var=addr2var);
+Random.seed!(0); @time traces1 = rwmh(model, 100_000, addr2var=addr2var);
 println("Get lps")
-@time lps = [model.logpdf(traces[:,i], model.observations) for i in 1:length(traces)];
+@time lps1 = [model.logpdf(traces1[:,i], model.observations) for i in 1:length(traces1)];
 
 println("Compile RMWH")
 @time kernels = compile_rwmh(model, addr2var=addr2var);
-Random.seed!(0); @time traces2 = compiled_single_site(model, kernels, 1_000_000);
+Random.seed!(0); @time traces2 = compiled_single_site(model, kernels, 100_000);
 println("Get lps")
 @time lps2 = [model.logpdf(traces2[:,i], model.observations) for i in 1:length(traces2)];
+
+lps1 ≈ lps2
+
