@@ -24,12 +24,12 @@ function compile_likelihood_weighting(pgm::PGM)
     for node in ordered_nodes
         if node isa Plate
             if all(isobserved(pgm, child) for child in node.nodes)
-                plate_f_name = plate_function_name(pgm.name, :sample, node)
-                push!(block_args, :($plate_f_name($X)))
-            else
-                @assert all(!isobserved(pgm, child) for child in node.nodes)
                 plate_f_name = plate_function_name(pgm.name, :lp, node)
                 push!(block_args, :($lp += $plate_f_name($X, $Y)))
+            else
+                @assert all(!isobserved(pgm, child) for child in node.nodes)
+                plate_f_name = plate_function_name(pgm.name, :sample, node)
+                push!(block_args, :($plate_f_name($X)))
             end
         else
             push!(block_args, :($d_sym = $(symbolic_dists[node])))
@@ -77,4 +77,4 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
     return GraphTraces(pgm, Xs, retvals), normalise(logprobs)
 end
 
-export compile_likelihood_weighting
+export compile_likelihood_weighting, compiled_likelihood_weighting

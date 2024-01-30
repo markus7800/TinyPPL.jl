@@ -62,19 +62,20 @@ model = unplated_model;
 model = plated_model;
 
 @info "LW"
-traces, lps = likelihood_weighting(model, 100);
-@time traces, lps = likelihood_weighting(model, 100_000);
+_ = likelihood_weighting(model, 100);
+Random.seed!(0); @time traces1, lps1 = likelihood_weighting(model, 100_000);
 
 println("Compile LW")
 @time lw = compile_likelihood_weighting(model)
-traces, lps = compiled_likelihood_weighting(model, lw, 100);
-@time traces, lps = compiled_likelihood_weighting(model, lw, 1_000_000);
+_ = compiled_likelihood_weighting(model, lw, 100);
+Random.seed!(0); @time traces2, lps2 = compiled_likelihood_weighting(model, lw, 100_000);
 
+lps1 ≈ lps2
 
 
 
 @info "LMH"
-traces = lmh(model, 100);
+_ = lmh(model, 100);
 Random.seed!(0); @time traces = lmh(model, 1_000_000);
 mean(traces.data, dims=2)
 
