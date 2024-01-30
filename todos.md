@@ -11,6 +11,7 @@ TODOS:
 - 
 - document everyting
 - truncate output of pgm if too long
+- fix: is_tree should be indicative of whether we can construct belief tree see bnlearn networks (e.g. pigs)
 
 
 - fix func(; a = ..) keyword arguments @ppl eval macro

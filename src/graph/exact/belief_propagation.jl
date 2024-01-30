@@ -378,6 +378,7 @@ function backward_with_division(belief_node::BeliefNode)
             # belief_node.messages[i][selection[i]] isa Float64
             # we select one row in dimension i, `selection[i]`, and substruct the value of belief_node.messages[i][selection[i]]
             # this undos the addition in (1)
+            # if all(belief_node.messages[i] .== -Inf) then all(base_message_table .== -Inf)
             message_factor = FactorNode(message_vars,
                 broadcast(factor_div_op, base_message_table[selection...], belief_node.messages[i][selection[i]])
             )
