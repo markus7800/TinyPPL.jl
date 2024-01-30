@@ -2,7 +2,7 @@
 using TinyPPL.Distributions
 
 import PyPlot
-function visualize_trace(tr; color_shift=0, raw=false, path="plot.pdf")
+function visualize_trace(tr; color_shift=0, raw=false)
     gaussian_pdf(μ, σ², w) = x -> w * exp(logpdf(Normal(μ, sqrt(σ²)), x));
 
     n, k = length(gt_ys), tr[:k]+1
@@ -29,20 +29,20 @@ function visualize_trace(tr; color_shift=0, raw=false, path="plot.pdf")
     if raw
         PyPlot.plot(gt_ys, 0.25 .+ zeros(n), "o", color="black", alpha=0.5)
     end
-    PyPlot.savefig(path)
+    return p
 end
 
-function plot_lps(lps;path="plot.pdf")
+function plot_lps(lps)
     p = PyPlot.figure()
     PyPlot.plot(lps)
     PyPlot.ylabel("Log Probability")
-    PyPlot.savefig(path)
+    return p
 end
 
-function plot_params(params;path="plot.pdf")
+function plot_params(params)
     p = PyPlot.figure()
     for i in 1:size(params,1)
         PyPlot.plot(params[i,:])
     end
-    PyPlot.savefig(path)
+    return p
 end

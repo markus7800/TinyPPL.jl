@@ -293,7 +293,7 @@ function get_sample(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     return sample
 end
 
-function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, Y::Symbol; unconstrained::Bool=false)
+function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists::Vector, is_observed::Vector{Bool}, X::Symbol, Y::Symbol; unconstrained::Bool=false)
     n_latents = n_variables - sum(is_observed)
     lp = gensym(:lp)
     lp_block_args = []

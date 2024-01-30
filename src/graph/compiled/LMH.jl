@@ -1,68 +1,58 @@
 
-function compiled_single_site(pgm::PGM, kernels::Vector{Function}, n_samples::Int; static_observes::Bool=false)
-
-    X = Vector{Float64}(undef, pgm.n_variables)
+function compiled_single_site(pgm::PGM, kernels::Vector{Function}, n_samples::Int)
+    X = Vector{Float64}(undef, pgm.n_latents)
     pgm.sample!(X) # initialise
-    r = pgm.return_expr(X)
+    r = get_retval(pgm, X)
 
-    mask = isnothing.(pgm.observed_values)
-    trace = Array{Float64,2}(undef, static_observes ? sum(mask) : pgm.n_variables, n_samples)
+    trace = Array{Float64,2}(undef, pgm.n_latents, n_samples)
     retvals = Vector{Any}(undef, n_samples)
 
     n_accepted = 0 
     @progress for i in 1:n_samples
-        k = rand(kernels)
-        accepted = k(X)
+        k = rand(kernels) # select update kernel at random
+        accepted = k(X, pgm.observations)
         if accepted
             n_accepted += 1
-            r = pgm.return_expr(X)
+            r = get_retval(pgm, X)
         end
 
         retvals[i] = r
-        if static_observes
-            trace[:,i] = X[mask]
-        else  
-            trace[:,i] = X
-        end
+        trace[:,i] = X
     end
     @info "Compiled Single Site" n_accepted/n_samples
 
-    return trace, retvals
+    return GraphTraces(pgm, trace, retvals)
 end
 
-function get_compute_W_block_args(pgm, plates, children, symbolic_dists, symbolic_observes, static_observes, X, log_α, W)
+"""
+Builds function that only computes W_current / W_proposed by only accumulating relevant factors (children)
+"""
+function get_compute_W_block_args(pgm::PGM, plates::Vector{Plate}, children::Vector, symbolic_dists::Vector, X::Symbol, Y::Symbol, log_α::Symbol, W::Symbol)
+    op = W == :current ? :(-=) : :(+=)
     block_args = []
     for child in children
         if child in plates
             plate_f_name = plate_function_name(pgm.name, :lp, child)
-            if W == :current
-                push!(block_args, :($log_α -= $plate_f_name($X)))
-            else
-                push!(block_args, :($log_α += $plate_f_name($X)))
-            end
+            push!(block_args, Expr(op, log_α, :($plate_f_name($X, $Y))))
         else
             child_d_sym = gensym("child_dist_$child")
             push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
-            if !isnothing(symbolic_observes[child]) && !static_observes
-                # recompute observe, could have changed
-                push!(block_args, :($X[$child] = $(symbolic_observes[child])))
-            end
-            if W == :current
-                push!(block_args, :($log_α -= logpdf($child_d_sym, $X[$child])))
+            if isobserved(pgm, child)
+                push!(block_args, Expr(op, log_α, :(logpdf($child_d_sym, $Y[$child - $(pgm.n_latents)]))))
             else
-                push!(block_args, :($log_α += logpdf($child_d_sym, $X[$child])))
+                push!(block_args, Expr(op, log_α, :(logpdf($child_d_sym, $X[$child]))))
             end
         end
     end
     return block_args
 end
 
-function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
+function compile_lmh(pgm::PGM; addr2Proposal::Addr2Proposal=Addr2Proposal())
     function lmh_kernel(block_args, symbolic_dists, node, X, log_α)
         d_sym = gensym("dist_$node")
         push!(block_args, :($d_sym = $(symbolic_dists[node])))
 
-        if haskey(proposal, pgm.addresses[node])
+        if haskey(addr2Proposal, pgm.addresses[node])
             q_sym = gensym("proposal_$node")
             q = proposal[pgm.addresses[node]]
             push!(block_args, :($q_sym = $(Expr(:call, typeof(q).name.name, params(q)...))))
@@ -75,7 +65,7 @@ function compile_lmh(pgm::PGM; static_observes::Bool=false, proposal=Proposal())
             push!(block_args, :($X[$node] = rand($d_sym)))
         end
     end
-    return compile_single_site(pgm, static_observes, lmh_kernel)
+    return compile_single_site(pgm, lmh_kernel)
 end
 
 function get_rw_dist_expr(d_sym, symbol_dist, value, var)
@@ -108,7 +98,7 @@ function get_rw_dist_expr(d_sym, symbol_dist, value, var)
     return :(random_walk_proposal_dist($d_sym, $value, $var))
 end
 
-function compile_rwmh(pgm::PGM; static_observes::Bool=false, addr2var=Addr2Var(), default_var::Float64=1.)
+function compile_rwmh(pgm::PGM; addr2var=Addr2Var(), default_var::Float64=1.)
     function rwmh_kernel(block_args, symbolic_dists, node, X, log_α)
         dist = symbolic_dists[node]
         d_sym = gensym("dist_$node")
@@ -131,13 +121,20 @@ function compile_rwmh(pgm::PGM; static_observes::Bool=false, addr2var=Addr2Var()
         push!(block_args, :($log_α += logpdf($backward_d_sym, $value_current) - logpdf($d_sym, $value_current)))
         push!(block_args, :($log_α += logpdf($d_sym, $value_proposed) - logpdf($forward_d_sym, $value_proposed)))
     end
-    return compile_single_site(pgm, static_observes, rwmh_kernel)
+    return compile_single_site(pgm, rwmh_kernel)
 end
 
-function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
+"""
+For each latent variable, builds a function that implements a MH update for thi variable.
+Alternative implementation: All in one function and goto statements to go to correct variable based on resample variable.
+"""
+function compile_single_site(pgm::PGM, kernel::Function)
     X = gensym(:X)
-    symbolic_dists = get_symbolic_distributions(pgm, X)
-    symbolic_observes = get_symbolic_observed_values(pgm, X, static_observes)
+    Y = gensym(:Y)
+
+    ix_to_sym = Dict(ix => sym for (sym, ix) in pgm.sym_to_ix)
+    var_to_expr = Dict{Symbol,Any}(ix_to_sym[j] => :($X[$j]) for j in 1:pgm.n_latents)
+    symbolic_dists = get_symbolic_distributions(pgm.symbolic_pgm, pgm.n_variables, ix_to_sym, var_to_expr, X)
 
     if isnothing(pgm.plate_info)
         plates, plated_edges = Plate[], nothing
@@ -145,12 +142,12 @@ function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
         plates, plated_edges = pgm.plate_info.plates, pgm.plate_info.plated_edges
     end
 
+    # compile one update function for each variable
     lmh_functions = Function[]
-    for node in 1:pgm.n_variables
-        !isnothing(pgm.observed_values[node]) && continue
+    value_current = gensym("value_current")
+    for node in 1:pgm.n_latents
 
         block_args = []
-        value_current = gensym("value_current")
         push!(block_args, :($value_current = $X[$node]))
 
         if isnothing(plated_edges)
@@ -164,7 +161,7 @@ function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
 
         # compute W for current value
         append!(block_args, 
-            get_compute_W_block_args(pgm, plates, children, symbolic_dists, symbolic_observes, static_observes, X, log_α, :current)
+            get_compute_W_block_args(pgm, plates, children, symbolic_dists, X, Y, log_α, :current)
         )
 
         # sample proposed value
@@ -172,7 +169,7 @@ function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
 
         # compute W for proposed value
         append!(block_args, 
-            get_compute_W_block_args(pgm, plates, children, symbolic_dists, symbolic_observes, static_observes, X, log_α, :proposed)
+            get_compute_W_block_args(pgm, plates, children, symbolic_dists, X, Y, log_α, :proposed)
         )
 
         # mh step
@@ -186,7 +183,7 @@ function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
 
         f_name = Symbol("$(pgm.name)_lmh_$node")
         f = rmlines(:(
-            function $f_name($X::Vector{Float64})
+            function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
                 $(Expr(:block, block_args...))
             end
         ))
@@ -195,11 +192,11 @@ function compile_single_site(pgm::PGM, static_observes::Bool, kernel::Function)
         push!(lmh_functions, f)
     end
 
-    X = Vector{Float64}(undef, pgm.n_variables);
+    X = Vector{Float64}(undef, pgm.n_latents);
     pgm.sample!(X) # initialise
     for f in lmh_functions
         # println(f)
-        Base.invokelatest(f, X)
+        Base.invokelatest(f, X, pgm.observations)
     end
     return lmh_functions
 end

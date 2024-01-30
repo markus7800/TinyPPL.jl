@@ -1,6 +1,6 @@
 
 import PyPlot
-function visualize_trace(tr; color_shift=0, raw=false, path="plot.pdf")
+function visualize_trace(tr; color_shift=0, raw=false)
     gaussian_pdf(μ, σ², w) = x -> w * exp(logpdf(Normal(μ, sqrt(σ²)), x));
 
     n, k = length(gt_ys), tr[:k]
@@ -32,7 +32,7 @@ function visualize_trace(tr; color_shift=0, raw=false, path="plot.pdf")
     # PyPlot.savefig(path)
 end
 
-function plot_lps(lps;path="plot.pdf")
+function plot_lps(lps)
     p = PyPlot.figure()
     PyPlot.plot(lps)
     PyPlot.ylabel("Log Probability")
