@@ -78,19 +78,35 @@ macro pgm(name, foppl)
     return pgm_macro(Set{Symbol}(), name, foppl)
 end
 
-function pgm_macro(annotations, name, foppl)
-    foppl = rmlines(foppl);
-    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
-    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
-    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ y_) ? Expr(:observe, QuoteNode(:OBSERVED), dist, y) : expr,  foppl);
-    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_) ? Expr(:sample, symbol, dist) : expr,  foppl);
-    foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
-    foppl = unwrap_let(foppl)
+# function pgm_macro(annotations, name, foppl)
+#     foppl = rmlines(foppl);
+#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
+#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
+#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ y_) ? Expr(:observe, QuoteNode(:OBSERVED), dist, y) : expr,  foppl);
+#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_) ? Expr(:sample, symbol, dist) : expr,  foppl);
+#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
+#     foppl = unwrap_let(foppl)
 
-    G, E, variable_to_address, translation_order = transpile_program(foppl);
-    pgm = compile_symbolic_pgm(name, G, E, variable_to_address, translation_order, annotations);
+#     G, E, variable_to_address, translation_order = transpile_program(foppl);
+#     pgm = compile_symbolic_pgm(name, G, E, variable_to_address, translation_order, annotations);
 
-    return pgm
+#     return pgm
+# end
+
+function pgm_macro(annotations, name, _foppl)
+    return quote
+        foppl = $(Expr(:quote, _foppl))
+        foppl = rmlines(foppl);
+        foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
+        foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
+        foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ y_) ? Expr(:observe, QuoteNode(:OBSERVED), dist, y) : expr,  foppl);
+        foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_) ? Expr(:sample, symbol, dist) : expr,  foppl);
+        foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
+        foppl = unwrap_let(foppl)
+
+        G, E, variable_to_address, translation_order = transpile_program(foppl);
+        compile_symbolic_pgm($(QuoteNode(name)), G, E, variable_to_address, translation_order, $annotations);
+    end
 end
 
 export @pgm

@@ -131,6 +131,10 @@ function transpile(t::PGMTranspiler, phi, expr::String)
     return EmptyPGM(), expr
 end
 
+function transpile(t::PGMTranspiler, phi, expr::Vector{<:Real})
+    return EmptyPGM(), expr
+end
+
 function transpile(t::PGMTranspiler, phi, expr::Expr)
     if expr.head == :block
         # @assert length(expr.args) == 1 expr.args
