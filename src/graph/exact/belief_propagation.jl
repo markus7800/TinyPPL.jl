@@ -128,7 +128,7 @@ function belief_propagation(return_factor::FactorNode, all_marginals::Bool)
     return belief_propagation(root, return_factor, all_marginals)
 end
 
-function belief_propagation(root::BeliefNode, return_factor::FactorNode, all_marginals::Bool)
+function belief_propagation(root::BeliefNode, return_factor::FactorNode, all_marginals::Bool; with_division::Bool=false)
     # print_belief_tree(root)
     
     # Run forward pass. As the return factor has no parents to send a message to,
@@ -154,7 +154,11 @@ function belief_propagation(root::BeliefNode, return_factor::FactorNode, all_mar
 
     if all_marginals
         # only need backward pass if we want to evaluate all marginals
-        backward(root)
+        if with_division
+            backward_with_division(root)
+        else
+            backward(root)
+        end
 
         variable_nodes = get_variable_nodes(root)
         marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
@@ -270,8 +274,6 @@ function backward(belief_node::BeliefNode)
 
     # we do the same computations as in forward, but now for every child instead of just the parent
     if belief_node.node isa VariableNode
-        # TODO: this can be improved by multiplying all messages,
-        # send copy(message) .-= belief_node.messages[i]
         for (i, child) in enumerate(belief_node.neighbours)
             child == belief_node.parent && continue # we do not send a message to parent
             # message to FactorNode child i 
@@ -289,8 +291,6 @@ function backward(belief_node::BeliefNode)
             backward(child)
         end
     else
-        # TODO: this can be improved by multiplying all belief_node.neighbours
-        # message = factor_division(message, factor_division), send copy(message), and message = factor_product(message, factor_division)
         for child in belief_node.neighbours
             child == belief_node.parent && continue # we do not send a message to parent
             # message to VariableNode child
@@ -302,11 +302,10 @@ function backward(belief_node::BeliefNode)
             shape = ones(Int, ndims(message_table))
             j = 1
             # same spiel as in forward pass
-            # TODO: for _ in message_vars ...?
             for (i, neighbour) in enumerate(belief_node.neighbours)
                 # child is VariableNode
                 neighbour == child && continue # we do not multiply message of child we now send a message to
-                child_message = belief_node.messages[i]
+                child_message = belief_node.messages[i] # = Factor([child], belief_node.messages[i])
                 shape[j] = length(child_message)
                 message_table .+= reshape(child_message, Tuple(shape)) # broadcasting -> factor product
                 shape[j] = 1
@@ -328,6 +327,76 @@ function backward(belief_node::BeliefNode)
             # put the message into child
             child.messages[child.parent_index] = message
             backward(child)
+        end
+    end
+end
+
+function backward_with_division(belief_node::BeliefNode)
+    @assert belief_node.message_sent
+    # belief_node has received all messages from children !and! parent
+
+    # we do the same computations as in forward, but now for every child instead of just the parent
+    if belief_node.node isa VariableNode
+        base_message = sum(belief_node.messages)
+        for (i, child) in enumerate(belief_node.neighbours)
+            child == belief_node.parent && continue # we do not send a message to parent
+            # message to FactorNode child i 
+            message = copy(base_message)
+            # now instead of summing every message up except from parent,
+            # we some everything up except from the child we send the message to
+            message .-= belief_node.messages[i]
+
+            # put the message into child
+            child.messages[child.parent_index] = message
+            backward_with_division(child)
+        end
+    else
+
+        base_message_table = zeros(Tuple([length(neighbour.node.support) for neighbour in belief_node.neighbours]))
+        shape = ones(Int, ndims(base_message_table))
+        # same spiel as in forward pass
+        for (j, neighbour) in enumerate(belief_node.neighbours)
+            child_message = belief_node.messages[j]
+            shape[j] = length(child_message)
+            base_message_table .+= reshape(child_message, Tuple(shape)) # (1) broadcasting -> factor product
+            shape[j] = 1
+        end
+
+        selection::Vector{Any} = fill(Colon(), ndims(base_message_table))
+        for (i, child) in enumerate(belief_node.neighbours)
+            child == belief_node.parent && continue # we do not send a message to parent
+            # message to VariableNode child
+            message_vars = VariableNode[neighbour.node for neighbour in belief_node.neighbours if neighbour != child]
+            
+            selection[i] = 1
+            for j in eachindex(belief_node.messages[i])
+                if belief_node.messages[i][j] != -Inf
+                    selection[i] = j
+                    break
+                end
+            end
+            # belief_node.messages[i][selection[i]] isa Float64
+            # we select one row in dimension i, `selection[i]`, and substruct the value of belief_node.messages[i][selection[i]]
+            # this undos the addition in (1)
+            message_factor = FactorNode(message_vars,
+                broadcast(factor_div_op, base_message_table[selection...], belief_node.messages[i][selection[i]])
+            )
+
+            message_factor = factor_product(belief_node.node, message_factor)
+            @assert prod(size(message_factor.table)) == prod(size(belief_node.node.table)) (message_factor, belief_node.node)
+            @assert length(message_factor.neighbours ∩ belief_node.node.neighbours) == length(belief_node.node.neighbours)
+
+            message_factor = factor_sum(message_factor, message_vars)
+            @assert length(size(message_factor.table)) == 1
+            @assert length(message_factor.table) == length(child.node.support)
+
+            message = message_factor.table
+
+            # put the message into child
+            child.messages[child.parent_index] = message
+            selection[i] = Colon()
+
+            backward_with_division(child)
         end
     end
 end

@@ -55,7 +55,7 @@ function get_model_2()
     end
 end
 
-function print_reference_solution()
+function print_reference_solution(N::Int=0) # argument to be compatible with ladder / diamond
     p_f = 0.0001
     W = zeros(26)
     for k in 1:26

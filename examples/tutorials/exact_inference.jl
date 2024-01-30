@@ -216,47 +216,57 @@ end
 # DICE eval
 modelname = "diamond"
 # modelname = "ladder"
-
 N = 5000
-
 include("../exact_inference/$modelname.jl")
+model = get_model();
 variable_nodes, factor_nodes, marginal_variables, return_factor = get_model_factor_graph(N);
+
+modelname = "caesar"
+include("../exact_inference/caesar.jl")
+model = get_model();
+variable_nodes, factor_nodes = get_factor_graph(model);
+return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
+marginal_variables = [node.variable for node in return_factor.neighbours]
+
 is_tree(variable_nodes, factor_nodes)
 
 # if modelname == "diamond"
 #     elimination_order = variable_nodes[1:end-1]
 # elseif modelname == "ladder"
 #     elimination_order = variable_nodes[1:end-2]
+# elseif modelname == "caesar"
+#     elimination_order = variable_nodes[2:end]
 # end
 @time elimination_order = get_greedy_elimination_order(variable_nodes, marginal_variables);
 
-@time res = variable_elimination(variable_nodes, elimination_order)
-exp.(res.table)
+@time res, evidence = variable_elimination(variable_nodes, elimination_order)
+evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 
 @time belief_tree = get_blief_tree(return_factor);
 @time res, evidence = belief_propagation(belief_tree, return_factor, false);
-exp.(res.table)
+evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 
 belief_tree = get_blief_tree(return_factor);
 @time res, evidence, marginals = belief_propagation(belief_tree, return_factor, true);
 
-# if modelname == "diamond"
-#     elimination_order = variable_nodes
-# elseif modelname == "ladder"
-#     elimination_order = variable_nodes
-# end
+belief_tree = get_blief_tree(return_factor);
+@time res2, evidence2, marginals2 = belief_propagation(belief_tree, return_factor, true; with_division=true);
+
+for ((i, _, m1), (j,_,m2)) in zip(marginals, marginals2)
+    @assert i == j
+    @assert m1 ≈ m2
+end
+# elimination_order = variable_nodes
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 @time junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
 @time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
-exp.(res.table)
+evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 
-
-# 1.639024 seconds for diamond(5000)
-@profview junction_tree, root_cluster_node, root_factor =  get_junction_tree(variable_nodes, elimination_order, return_factor);
-@profview res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
+@time junction_tree, root_cluster_node, root_factor =  get_junction_tree(variable_nodes, elimination_order, return_factor);
+@time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
 
 
 function read_bif(pathname::String)

@@ -10,6 +10,7 @@ TODOS:
 - AQUA inference for graphsample
 - 
 - document everyting
+- truncate output of pgm if too long
 
 
 - fix func(; a = ..) keyword arguments @ppl eval macro
