@@ -137,6 +137,10 @@ function transpile(t::PGMTranspiler, phi, expr::Vector{<:Real})
     return EmptyPGM(), expr
 end
 
+function transpile(t::PGMTranspiler, phi, expr::Tuple)
+    return EmptyPGM(), expr
+end
+
 function transpile(t::PGMTranspiler, phi, expr::Expr)
     if expr.head == :block
         # @assert length(expr.args) == 1 expr.args
@@ -230,6 +234,9 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         @assert length(expr.args) == 2
 
         G_arr, arr = transpile(t, phi, expr.args[1])
+        if expr.args[2] isa Int && (arr isa AbstractArray || arr isa Tuple)
+            return G_arr, arr[expr.args[2]]
+        end
         if expr.args[2] isa Int && (arr.head == :vect || arr.head == :tuple)
             return G_arr, arr.args[expr.args[2]]
         end

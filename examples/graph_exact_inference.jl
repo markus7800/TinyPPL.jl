@@ -215,14 +215,14 @@ end
 
 # DICE eval
 modelname = "diamond"
-# modelname = "ladder"
+modelname = "ladder"
 N = 5000
-include("../exact_inference/$modelname.jl")
+include("exact_inference/$modelname.jl")
 model = get_model();
 variable_nodes, factor_nodes, marginal_variables, return_factor = get_model_factor_graph(N);
 
 modelname = "caesar"
-include("../exact_inference/caesar.jl")
+include("exact_inference/caesar.jl")
 model = get_model();
 variable_nodes, factor_nodes = get_factor_graph(model);
 return_factor = add_return_factor!(model, variable_nodes, factor_nodes)
@@ -270,9 +270,8 @@ print_reference_solution(N)
 
 
 
-@time variable_nodes, factor_nodes = read_bif(pwd()*"/examples/tutorials/bif_models/survey.bif");
-@time variable_nodes, factor_nodes = read_bif(pwd()*"/examples/tutorials/bif_models/munin.bif");
-@time variable_nodes, factor_nodes = read_bif(pwd()*"/examples/tutorials/bif_models/pigs.bif");
+@time variable_nodes, factor_nodes = read_bif("examples/bif_models/survey.bif");
+@time variable_nodes, factor_nodes = read_bif("examples/bif_models/munin.bif");
 return_factor = add_return_factor!(factor_nodes, VariableNode[])
 is_tree(variable_nodes, factor_nodes)
 
@@ -287,16 +286,17 @@ is_tree(variable_nodes, factor_nodes)
 
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 
-# 1.5 seconds
+# Munin: 1.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
 @time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
 
-# 16.5 seconds
+# Munin 16.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
 @time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
 
+# Munin 6.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
-@profview res2, evidence2, marginals2 = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true; with_division=true);
+@time res2, evidence2, marginals2 = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true; with_division=true);
 
 for ((i, _, m1), (j,_,m2)) in zip(marginals, marginals2)
     @assert i == j

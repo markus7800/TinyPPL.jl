@@ -289,9 +289,16 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
         delete!(factor_nodes, node)
         delete!(reduction_size, node)
     end
-    
-    factor_nodes = reduce(∪, values(factor_nodes))
-    return reduce(factor_product, factor_nodes)
+
+    if isempty(factor_nodes)
+        evidence = sum(exp, tau.table)
+        return FactorNode(VariableNode[],0.), evidence
+    else
+        factor_nodes = reduce(∪, values(factor_nodes))
+        res = reduce(factor_product, factor_nodes)
+        evidence = sum(exp, res.table)
+        return res, evidence
+    end
 end
 
 function greedy_variable_elimination(pgm::PGM; marginal_variables=nothing)
