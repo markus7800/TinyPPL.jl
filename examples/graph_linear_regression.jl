@@ -93,6 +93,7 @@ mean(hmc_traces[:intercept])
 mean(hmc_traces[:slope])
 
 
+# minimal overhead over likelihood_weighting
 Random.seed!(0)
 @time smc_traces, lps, marginal_lik = light_smc(model, 10^6);
 W = exp.(lps);

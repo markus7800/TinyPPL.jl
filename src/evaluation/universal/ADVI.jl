@@ -15,6 +15,7 @@ function Base.getindex(umf::UniversalMeanField, addr::Address)
     return umf.variational_dists[addr]
 end
 
+# TODO: fix, make use of model to instantiate new addresses
 function rand_and_logpdf(umf::UniversalMeanField)
     X = ContinuousUniversalTrace()
     lp = 0.0

@@ -19,7 +19,7 @@ end
 
 @time traces, lps = likelihood_weighting(obsprog, 1_000_000);
 W = exp.(lps);
-traces.retvals'W
+retvals(traces)'W
 p = [0.6, 0.12] / 0.72
 
 # P(X = 1 | X || Y = 1)  = P( X = 1,  X || Y = 1) / P(X || Y = 1) = P(X = 1) / (1 - P(X=0, Y=0))
@@ -46,7 +46,7 @@ end
 
 @time traces, lps = likelihood_weighting(f_model, 1_000_000);
 W = exp.(lps);
-traces.retvals'W
+retvals(traces)'W
 0.1/0.55
 
 g_model = @pgm g_model begin
@@ -62,5 +62,5 @@ end
 
 @time traces, lps = likelihood_weighting(g_model, 1_000_000);
 W = exp.(lps);
-traces.retvals'W
+retvals(traces)'W
 0.1

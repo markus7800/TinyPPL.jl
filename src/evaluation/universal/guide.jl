@@ -61,7 +61,7 @@ import TinyPPL.Distributions: VariationalDistribution
 Wraps `UniversalGuideSampler` and guide program.
 Implements similar interface to VariationalDistribution.
 """
-struct UniversalGuide
+struct UniversalGuide <: VariationalDistribution # need to subtype to reuse estimate_elbo
     sampler::UniversalGuideSampler
     model::UniversalModel
     args::Tuple

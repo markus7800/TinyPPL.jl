@@ -22,5 +22,10 @@ posterior = sample_posterior(vi_result, 1_000_000);
 histogram(posterior[:y], normalize=true, legend=false)
 
 Random.seed!(0)
-@time traces = hmc(unif, args, observations, 100_000, 10, 0.1; ad_backend=:forwarddiff);
+@time traces = hmc(unif, args, observations, 100_000, 10, 0.1; unconstrained=true, ad_backend=:forwarddiff);
+histogram(traces[:y], normalize=true, legend=false)
+
+# unconstrained=false has poor results:
+Random.seed!(0)
+@time traces = hmc(unif, args, observations, 100_000, 10, 0.1; unconstrained=false, ad_backend=:forwarddiff);
 histogram(traces[:y], normalize=true, legend=false)

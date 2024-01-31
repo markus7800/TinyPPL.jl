@@ -27,7 +27,7 @@ args = (100,)
 observations = Observations(:distance => 1.1);
 
 Random.seed!(0)
-lw_result, lps = likelihood_weighting(pedestrian, args, observations, 5_000_000, (trace, retval) -> retval);
+lw_result, lps = likelihood_weighting(pedestrian, args, observations, 5_000_000, Evaluation.retval_completion);
 W = exp.(lps);
 posterior_mean = lw_result'W
 
@@ -60,19 +60,6 @@ histogram!(retvals(rwmh_traces), normalize=true, linewidth=0, alpha=0.5)
 
 
 
-
-
-
-Random.seed!(0)
-vi_result = advi_meanfield(pedestrian, args, observations, 1_000, 10, 0.1);
-length(vi_result.Q.variational_dists)
-traces, lps = sample_posterior(vi_result, 100_000);
-mean(retvals(traces))
-
-histogram(retvals(traces), normalize=true, legend=false)
-
-
-
 @ppl function unif()
     x ~ Uniform(0.,1.)
     y ~ Normal(x < 0.5, 0.1)
@@ -82,7 +69,7 @@ args = ()
 observations = Observations(:y => 1.)
 
 Random.seed!(0)
-lw_result, lps = likelihood_weighting(unif, args, observations, 1_000_000, (trace, retval) -> retval);
+lw_result, lps = likelihood_weighting(unif, args, observations, 1_000_000, Evaluation.retval_completion);
 W = exp.(lps);
 
 histogram(lw_result, weights=W, normalize=true, legend=false)
@@ -91,9 +78,10 @@ Random.seed!(0)
 vi_result = advi_meanfield(unif, args, observations, 10_000, 10, 0.01);
 traces, lps = sample_posterior(vi_result, 100_000);
 mean(retvals(traces))
+# cannot fit posterior
 histogram(retvals(traces), normalize=true, legend=false)
 
-
+# this guide also cannot fit model
 @ppl function unif_guide()
     mu = param("mu")
     sigma = param("sigma", constraint=Positive())
@@ -115,5 +103,3 @@ p["b"]
 
 traces, lps = sample_posterior(vi_result, 100_000);
 histogram(retvals(traces), normalize=true, legend=false)
-
-X, lp = Evaluation.rand_and_logpdf(vi_result.Q)

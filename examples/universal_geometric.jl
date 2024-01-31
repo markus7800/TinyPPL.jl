@@ -44,11 +44,11 @@ _ = likelihood_weighting(geometric, args, observations, 1_000); # for compilatio
 Random.seed!(0); @time traces, lps = likelihood_weighting(geometric, args, observations, 1_000_000);
 
 W = exp.(lps);
-posterior_est = [sum(W[traces.retvals .== i]) for i in 0:10]
+posterior_est = [sum(W[retvals(traces) .== i]) for i in 0:10]
 posterior_diff = maximum(abs.(posterior_true .- posterior_est))
 
 
 @time traces, lps = likelihood_weighting(geometric_recursion, (p, true, 0), observations, 1_000_000);
 W = exp.(lps);
-posterior_est = [sum(W[traces.retvals .== i]) for i in 0:10]
+posterior_est = [sum(W[retvals(traces) .== i]) for i in 0:10]
 posterior_diff = maximum(abs.(posterior_true .- posterior_est))

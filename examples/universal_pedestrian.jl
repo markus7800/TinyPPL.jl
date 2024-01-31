@@ -33,5 +33,5 @@ Random.seed!(0); @time traces = lmh(pedestrian, args, observations, 1_000_000; g
 
 Random.seed!(0); @time traces = rwmh(pedestrian, args, observations, 1_000_000, default_var=0.1);
 
-histogram(traces.retvals, normalize=true, legend=false)
+histogram(retvals(traces), normalize=true, legend=false)
 density!(lw_retvals, weights=W)

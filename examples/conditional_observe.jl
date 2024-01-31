@@ -23,16 +23,16 @@ traces, logprobs = Evaluation.likelihood_weighting(pcond, args, observations, 1_
 
 W = exp.(logprobs);
 
-sum(W[traces.retvals .== 1])
-sum(W[traces.retvals .== 20])
-sum(W[traces.retvals .== 21])
+sum(W[retvals(traces) .== 1])
+sum(W[retvals(traces) .== 20])
+sum(W[retvals(traces) .== 21])
 
 Random.seed!(0)
 traces = Evaluation.lmh(pcond, args, observations, 1_000_000);
 
-mean(traces.retvals .== 1)
-mean(traces.retvals .== 20)
-mean(traces.retvals .== 21)
+mean(retvals(traces) .== 1)
+mean(retvals(traces) .== 20)
+mean(retvals(traces) .== 21)
 
 pcond_pgm = @pgm pcond begin
     let x ~ Bernoulli(0.5)
@@ -53,13 +53,13 @@ traces, logprobs = Graph.likelihood_weighting(pcond_pgm, 1_000_000);
 
 W = exp.(logprobs);
 
-sum(W[traces.retvals .== 1])
-sum(W[traces.retvals .== 20])
-sum(W[traces.retvals .== 21])
+sum(W[retvals(traces) .== 1])
+sum(W[retvals(traces) .== 20])
+sum(W[retvals(traces) .== 21])
 
 Random.seed!(0)
 traces = Graph.lmh(pcond_pgm, 1_000_000);
 
-mean(traces.retvals .== 1)
-mean(traces.retvals .== 20)
-mean(traces.retvals .== 21)
+mean(retvals(traces) .== 1)
+mean(retvals(traces) .== 20)
+mean(retvals(traces) .== 21)

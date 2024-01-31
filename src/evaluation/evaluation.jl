@@ -2,6 +2,7 @@ module Evaluation
     import ..TinyPPL.Distributions: Distribution, logpdf
     import ProgressLogging: @progress
     import TinyPPL: Address, AbstractTraces, VIResult, VIParameters
+    export Address
 
     include("../utils/utils.jl")
     include("sampler.jl")

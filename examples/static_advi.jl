@@ -129,30 +129,6 @@ mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
 @assert all(vi_result_pd.Q.sigma .≈ sigma_guide_pd)
 
 Random.seed!(0)
-vi_result_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, MeanFieldGaussian(K), PathDerivativeELBO(), unconstrained=false)
-Random.seed!(0)
-@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
-mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
-maximum(abs, mu_guide_pd .- vi_result_pd.Q.mu)
-maximum(abs, sigma_guide_pd .- vi_result_pd.Q.sigma)
-
-# deviation starts at 427
-Random.seed!(0)
-vi_result_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, MeanField([VariationalNormal() for _ in 1:K]), PathDerivativeELBO(), unconstrained=false)
-mu_pd, sigma_pd = get_meanfield_parameters(vi_result_pd)
-Random.seed!(0)
-@time vi_result_guide_pd = advi(LinRegStatic, (xs,), observations, 427, 10, 0.01, LinRegGuideStatic, (), PathDerivativeELBO(), unconstrained=false)
-mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
-maximum(abs, mu_guide_pd .- mu_pd)
-maximum(abs, sigma_guide_pd .- sigma_pd)
-
-phi1 = vi_result_guide_pd.Q.sampler.phi
-phi2 = reduce(vcat,d.params for d in vi_result_pd.Q.dists)
-maximum(abs, phi1 .- phi2)
-
-
-
-Random.seed!(0)
 @time vi_result_guide_bbvi = advi(LinRegStatic, (xs,), observations, 10_000, 10, 0.01, LinRegGuideStatic, (), ReinforceELBO(), unconstrained=false)
 mu_guide_bbvi, sigma_guide_bbiv = get_guide_parameters(vi_result_guide_bbvi)
 # is equivalent to bbvi

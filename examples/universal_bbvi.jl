@@ -15,6 +15,7 @@ Random.seed!(0)
 vi_result = bbvi(nunif, (), Observations(),  10_000, 100, 0.01)
 vi_result.Q[:n]
 
+# TODO: fix UniversalMeanField samples values that lead to new addresses
 theta, lps = sample_posterior(vi_result, 100_000);
 
 histogram(theta[:n], normalize=true, legend=false)

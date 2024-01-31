@@ -1,6 +1,7 @@
 module Graph
     import ProgressLogging: @progress
     import TinyPPL: Address, AbstractTraces, VIResult
+    export Address
 
     include("../utils/utils.jl")
     include("core/core.jl")
