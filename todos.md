@@ -7,10 +7,10 @@ TODOS:
 
 - AQUA inference for graphsample
 - 
-- document everyting
 - truncate output of pgm if too long
 - fix: is_tree should be indicative of whether we can construct belief tree see bnlearn networks (e.g. pigs)
 
+- understand HMC with discontinuities see non-parametric hmc efforts. / mass matrix / make golf work
 
 - fix func(; a = ..) keyword arguments @ppl eval macro
 - param transform reuse transform.jl? transform_to RealInterval

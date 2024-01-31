@@ -1,8 +1,10 @@
-using TinyPPL.Graph
 using TinyPPL.Distributions
+using TinyPPL.Graph
+using TinyPPL.Evaluation
 import Random
 
 include("gmm/data.jl")
+include("gmm/common.jl")
 
 @time begin
     println("Compile model")
@@ -56,18 +58,19 @@ end
     end
     println("Compilation Time: ", (time_ns() - t0) / 1e9)
 end
+to_dict(X) = Dict(model.addresses[n] => X[n] for n in 1:model.n_latents)
 
-model = unplated_model;
+# model = unplated_model;
 
 model = plated_model;
 
 @info "LW"
-_ = likelihood_weighting(model, 100);
+_ = Graph.likelihood_weighting(model, 100);
 Random.seed!(0); @time traces1, lps1 = likelihood_weighting(model, 100_000);
 
 println("Compile LW")
 @time lw = compile_likelihood_weighting(model)
-_ = compiled_likelihood_weighting(model, lw, 100);
+_ = Graph.compiled_likelihood_weighting(model, lw, 100);
 Random.seed!(0); @time traces2, lps2 = compiled_likelihood_weighting(model, lw, 100_000);
 
 lps1 ≈ lps2
@@ -75,8 +78,8 @@ lps1 ≈ lps2
 
 
 @info "LMH"
-_ = lmh(model, 100);
-Random.seed!(0); @time traces1 = lmh(model, 100_000);
+_ = Graph.lmh(model, 100);
+Random.seed!(0); @time traces1 = Graph.lmh(model, 100_000);
 
 println("Get lps")
 @time lps1 = [model.logpdf(traces1[:,i], model.observations) for i in 1:length(traces1)];
@@ -92,9 +95,9 @@ lps1 ≈ lps2
 
 @info "RWMH"
 addr2var = Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.)
-_ = rwmh(model, 100, addr2var=addr2var);
+_ = Graph.rwmh(model, 100, addr2var=addr2var);
 # acceptance rate for z is much worse because we force a move / don't stay at current value
-Random.seed!(0); @time traces1 = rwmh(model, 100_000, addr2var=addr2var);
+Random.seed!(0); @time traces1 = Graph.rwmh(model, 100_000, addr2var=addr2var);
 println("Get lps")
 @time lps1 = [model.logpdf(traces1[:,i], model.observations) for i in 1:length(traces1)];
 
@@ -106,3 +109,59 @@ println("Get lps")
 
 lps1 ≈ lps2
 
+maximum(lps2)
+X = traces2[:, argmax(lps2)]
+visualize_trace(to_dict(X))
+
+const λ = 3
+const δ = 5.0
+const ξ = 0.0
+const κ = 0.01
+const α = 2.0
+const β = 10.0
+
+@ppl function dirichlet(δ, k)
+    w = [{:w=>j} ~ Gamma(δ, 1) for j in 1:k]
+    return w / sum(w)
+end
+
+@ppl function gmm(n)
+    k = {:k} ~ Poisson(λ)
+    k = k + 1
+    w = @subppl dirichlet(δ, k)
+
+    means, vars = zeros(k), zeros(k)
+    for j=1:k
+        means[j] = ({:μ=>j} ~ Normal(ξ, 1/sqrt(κ)))
+        vars[j] = ({:σ²=>j} ~ InverseGamma(α, β))
+    end
+    for i=1:n
+        z = {:z=>i} ~ Categorical(w)
+        z > k && continue # then trace has logpdf -Inf anyways
+        {:y=>i} ~ Normal(means[z], sqrt(vars[z]))
+    end
+end
+
+args = (length(gt_ys), )
+
+observations = Observations((:y=>i)=>y for (i, y) in enumerate(gt_ys))
+observations[:k] = gt_k-1
+
+@info("LW")
+Random.seed!(0); @time traces, lps = Evaluation.likelihood_weighting(gmm, (length(gt_ys),), observations, 100_000);
+
+
+@info("LMH")
+_ = Evaluation.lmh(gmm, args, observations, 100);
+Random.seed!(0); @time traces = Evaluation.lmh(gmm, (length(gt_ys),), observations, 100_000);
+
+
+@info("RWMH")
+_ = Evaluation.rwmh(gmm, (length(gt_ys), ), observations, 100);
+# acceptance rate for z is much worse because we force a move / don't stay at current value
+Random.seed!(0); @time traces = Evaluation.rwmh(gmm, args, observations, 100_000, addr2var=Addr2Var(:μ=>0.5, :σ²=>2., :w=>5., :z=>1000.));
+
+logjoint = Evaluation.make_logjoint(gmm, args, observations)
+X = argmax(logjoint, traces.data)
+logjoint(X)
+visualize_trace(X)

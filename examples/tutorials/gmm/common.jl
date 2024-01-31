@@ -1,18 +1,16 @@
 
-using TinyPPL.Distributions
-
 import PyPlot
 function visualize_trace(tr; color_shift=0, raw=false)
     gaussian_pdf(μ, σ², w) = x -> w * exp(logpdf(Normal(μ, sqrt(σ²)), x));
 
-    n, k = length(gt_ys), tr[:k]+1
+    n, k = length(gt_ys), gt_k
     w_sum = sum(tr[:w=>j] for j in 1:k)
 
     cmap = PyPlot.get_cmap("Paired")
     p = PyPlot.figure()
     
     for j=1:k
-        y_js = [tr[:y=>i] for i=1:n if tr[:z=>i] == j]
+        y_js = [gt_ys[i] for i=1:n if tr[:z=>i] == j]
         μ, σ² = tr[:μ=>j], tr[:σ²=>j]
         w = tr[:w=>j] / w_sum
         PyPlot.hist(y_js, density=true, bins=6, color=cmap(2j-2 + 2color_shift), alpha=0.5)
