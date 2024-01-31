@@ -36,24 +36,20 @@ is (essentially) transformed to
 
 ```julia
 function simple(mean::Float64, sampler::Sampler, observations::Observations)
-    function inner()
-        X = let distribution = Normal(mean, 1.),
-                # check if we have observation
-                obs = get(observations, :X, nothing)
-                # let sampler decide what to do
-                value = sample(sampler, :X, distribution, obs)
-                # assign value to X
-                value
-        end
-        let distribution = Normal(X, 1.),
-            obs = get(observations, :Y, nothing)
-            value = sample(sampler, :Y, distribution, obs)
+    X = let distribution = Normal(mean, 1.),
+            # check if we have observation
+            obs = get(observations, :X, nothing)
+            # let sampler decide what to do
+            value = sample(sampler, :X, distribution, obs)
+            # assign value to X
             value
-        end
-        return X
     end
-
-    return inner()
+    let distribution = Normal(X, 1.),
+        obs = get(observations, :Y, nothing)
+        value = sample(sampler, :Y, distribution, obs)
+        value
+    end
+    return X
 end
 ```
 This can be checked with the `@macroexpand` function.
@@ -83,14 +79,16 @@ end
 ```
 This allows more efficient implementation of inference algorithms by assuming that we have a fixed finite number of random variables.
 
-In the evaluation-based approach we have no control over the program structure.
+In the evaluation-based approach we have no information nor control over the program structure.
 
 We have to run the model in different contexts to implement inference algorithms.
 
 ### Graph-Based Approach
 
 For a graph based approach we need to restrict the source language.
+
 For instance, to avoid an unbounded number of nodes we cannot allow dynamic loops, or recursion.  
+
 And we also assume that each distribution produces `Float64`.
 
 We can write let blocks
@@ -131,7 +129,8 @@ distribution(args...) ↦ value
 Data has to be inlined or referenced with `$(Main.data)`, where `data` is a variable in Main which holds data.
 
 All functions have to be defined in the model block.
-Only base Julia functions and distributions are available.
+Only base Julia functions and distributions are available.  
+Functions `f` defined in Main have to be called with `Main.f`.
 
 
 For example,
@@ -261,4 +260,4 @@ Pkg.add("https://github.com/markus7800/TinyPPL.jl")
 
 ## Usage
 
-See [tutorials](examples/).
+See [examples](examples/).
