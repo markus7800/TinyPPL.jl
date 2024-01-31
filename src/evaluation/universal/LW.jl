@@ -58,6 +58,10 @@ function no_op_completion(trace::UniversalTrace, retval::Any)
     return nothing
 end
 
+function retval_completion(trace::UniversalTrace, retval::Any)
+    return retval
+end
+
 """
 The same behavior as likelihood weighting but you may specify a completion handler,
 which takes for each iteration the trace and return value and maps it to an return type.

@@ -117,3 +117,80 @@ model = @pgm lgss begin
         @loop(T, step, 0, a, σ_v, σ_e, y)
     end
 end
+
+
+
+model = @ppl lazyif begin
+    let b ~ Bernoulli(0.5),
+        mu = if b == 1.
+            let x ~ Normal(-1,1)
+                x
+            end
+        else
+            let y ~ Normal(1,1)
+                y
+            end
+        end,
+        z ~ Normal(mu,1)
+
+        z
+    end
+end
+
+
+
+model = @ppl ObsProg begin
+    function or(x, y)
+        max(x, y)
+    end
+    let x ~ Bernoulli(0.6),
+        y ~ Bernoulli(0.3)
+        Dirac(or(x,y)) ↦ 1
+        x
+    end
+end
+
+@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
+W = exp.(lps);
+retvals'W
+p = [0.6, 0.12] / 0.72
+
+# P(X = 1 | X || Y = 1)  = P( X = 1,  X || Y = 1) / P(X || Y = 1) = P(X = 1) / (1 - P(X=0, Y=0))
+0.6 / (1 - 0.4*0.7)
+
+model = @ppl gf begin
+    function or(x, y)
+        max(x, y)
+    end
+    function f(x)
+        let flip ~ Bernoulli(0.5),
+            y = or(x, flip)
+
+            Dirac(y) ↦ 1
+            y
+        end
+    end
+    function g(x)
+        1
+    end
+    let x ~ Bernoulli(0.1),
+        obs = f(x)
+        x
+    end
+end
+
+
+
+model = @ppl normal begin
+    let X ~ Normal(0., 1.)
+        if X < 0
+            let Y ~ Normal(1.,1.)
+                Y
+            end
+        else
+            let Z ~ Normal(2.,1.)
+                Z
+            end
+        end
+    end
+end
