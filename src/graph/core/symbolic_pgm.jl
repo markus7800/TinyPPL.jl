@@ -48,13 +48,15 @@ function graph_disjoint_union(G1::SymbolicPGM, G2::SymbolicPGM)
 end
 
 struct PGMTranspiler
+    # be careful sampling with lazy_ifs, it is fine for logjoint based inference
+    lazy_ifs::Bool
     procs::Dict{Symbol, Expr}
     all_let_variables::Set{Symbol}
     variables::Set{Symbol}
     variable_to_address::Dict{Symbol, Any}
     translation_order::Vector{Symbol}
-    function PGMTranspiler()
-        return new(Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Dict{Symbol, Any}(), Vector{Symbol}())
+    function PGMTranspiler(lazy_ifs::Bool)
+        return new(lazy_ifs, Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Dict{Symbol, Any}(), Vector{Symbol}())
     end
 end
 
@@ -280,7 +282,12 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         end
         push!(G.V, v)
     
-        G.P[v] = E # distribution not score
+        if !t.lazy_ifs
+            G.P[v] = E # distribution not score
+        else
+            F = :($phi ? $E : Flat())
+            G.P[v] = F
+        end
     
         return G, v
 
@@ -364,13 +371,17 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
     end
 end
 
+import Distributions
 struct Flat end
-function logpdf(::Flat, x::Real)
+function Distributions.logpdf(::Flat, x::Real)
     return 0.
 end
+function Distributions.rand(::Flat)
+    return NaN
+end
 
-function transpile_program(expr::Expr)
-    t = PGMTranspiler()
+function transpile_program(expr::Expr, lazy_ifs::Bool)
+    t = PGMTranspiler(lazy_ifs)
     all_let_variables = get_let_variables(expr)
     
     if !isempty(all_let_variables)

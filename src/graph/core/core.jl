@@ -96,6 +96,7 @@ end
 # end
 
 function pgm_macro(annotations, name, _foppl)
+    lazy_ifs = :lazy_ifs in annotations
     return quote
         foppl = $(Expr(:quote, _foppl))
         foppl = rmlines(foppl);
@@ -106,7 +107,7 @@ function pgm_macro(annotations, name, _foppl)
         foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
         foppl = unwrap_let(foppl)
 
-        G, E, variable_to_address, translation_order = transpile_program(foppl);
+        G, E, variable_to_address, translation_order = transpile_program(foppl, $lazy_ifs);
         compile_symbolic_pgm($(QuoteNode(name)), G, E, variable_to_address, translation_order, $annotations);
     end
 end
@@ -425,7 +426,14 @@ function is_topological_order(spgm::SymbolicPGM, order::Vector{Symbol})
     end
     return true
 end
-
+function approx_same_value(x::Float64, y::Float64)
+    if !isnan(x) && !isnan(y)
+        return x ≈ y
+    else
+        # handling sampling from ::Flat
+        return isnan(x) == isnan(y)
+    end
+end
 function compile_symbolic_pgm(
     name::Symbol, 
     spgm::SymbolicPGM, E::Union{Expr, Symbol, Real}, 
@@ -538,7 +546,7 @@ function compile_symbolic_pgm(
         Y = Base.invokelatest(transform_to_unconstrained!, X, Y)
         Z = Vector{Float64}(undef, n_latents)
         Base.invokelatest(transform_to_constrained!, Z, Y)
-        @assert all(X .≈ Z) (X,Z)
+        @assert all(broadcast(approx_same_value, X, Z)) (X,Z)
 
         Base.invokelatest(unconstrained_logpdf, Y, observations)
 

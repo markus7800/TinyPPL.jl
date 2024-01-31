@@ -120,7 +120,7 @@ end
 
 
 
-model = @ppl lazyif begin
+model = @pgm lazy_ifs branching_model begin
     let b ~ Bernoulli(0.5),
         mu = if b == 1.
             let x ~ Normal(-1,1)
@@ -136,52 +136,16 @@ model = @ppl lazyif begin
         z
     end
 end
+# b, x, y, z
+model.addresses
+
+# with lazy_ifs -3.0310242469692907
+# without lazy_ifs -5104.449962780174
+model.logpdf([1., 0., -100., 0.], Float64[])
 
 
 
-model = @ppl ObsProg begin
-    function or(x, y)
-        max(x, y)
-    end
-    let x ~ Bernoulli(0.6),
-        y ~ Bernoulli(0.3)
-        Dirac(or(x,y)) ↦ 1
-        x
-    end
-end
-
-@time traces, retvals, lps = likelihood_weighting(model, 1_000_000);
-W = exp.(lps);
-retvals'W
-p = [0.6, 0.12] / 0.72
-
-# P(X = 1 | X || Y = 1)  = P( X = 1,  X || Y = 1) / P(X || Y = 1) = P(X = 1) / (1 - P(X=0, Y=0))
-0.6 / (1 - 0.4*0.7)
-
-model = @ppl gf begin
-    function or(x, y)
-        max(x, y)
-    end
-    function f(x)
-        let flip ~ Bernoulli(0.5),
-            y = or(x, flip)
-
-            Dirac(y) ↦ 1
-            y
-        end
-    end
-    function g(x)
-        1
-    end
-    let x ~ Bernoulli(0.1),
-        obs = f(x)
-        x
-    end
-end
-
-
-
-model = @ppl normal begin
+model = @pgm normal begin
     let X ~ Normal(0., 1.)
         if X < 0
             let Y ~ Normal(1.,1.)
@@ -194,3 +158,17 @@ model = @ppl normal begin
         end
     end
 end
+
+f_main(x) = x^2
+model = @pgm fcalls begin
+    function f_pgm(x)
+        x^3
+    end
+    let x ~ Normal(0., 1)
+        (Main.f_main(x), f_pgm(x))
+    end
+end
+# Return expression:
+# (Main.f_main(x1), x1 ^ 3)
+
+get_retval(model, [2.])
