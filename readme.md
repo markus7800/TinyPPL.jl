@@ -261,4 +261,4 @@ Pkg.add("https://github.com/markus7800/TinyPPL.jl")
 
 ## Usage
 
-See [tutorials](examples/tutorials).
+See [tutorials](examples/).
