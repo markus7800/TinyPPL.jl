@@ -40,12 +40,14 @@ struct PGM
 
     plate_info::Union{Nothing, PlateInfo}
     
-    sample!::Function # stores samples (incl. observers) in input
-    logpdf::Function
-    unconstrained_logpdf!::Function # transforms input to constrained
+    sample!::Function # (X::INPUT_VECTOR_TYPE,) stores samples in input
+    logpdf::Function # (X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
+    unconstrained_logpdf::Function # (X::INPUT_VECTOR_TYPE, $Y::Vector{Float64}) does not transform input to constrained
 
-    transform_to_constrained!::Function
-    transform_to_unconstrained!::Function
+    # transform_to_constrained!(X,X) does work
+    transform_to_constrained!::Function # (X::INPUT_VECTOR_TYPE, X_unconstrained::INPUT_VECTOR_TYPE)
+    # transform_to_unconstrained!(X,X) does not work, use transform_to_unconstrained!(copy(X), X)
+    transform_to_unconstrained!::Function # (X::INPUT_VECTOR_TYPE, X_unconstrained::INPUT_VECTOR_TYPE)
 
     sym_to_ix::Dict{Symbol, Int}
     symbolic_pgm::SymbolicPGM
@@ -321,7 +323,8 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
                     push!(lp_block_args, :($d_sym = $d))
                     push!(lp_block_args, :($d_sym = to_unconstrained($d_sym)))
                     push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node]))) # unconstrained value
-                    push!(lp_block_args, :($X[$node] = $d_sym.T_inv($X[$node]))) # to constrained value
+                    # setindex! is not differentiable
+                    # push!(lp_block_args, :($X[$node] = $d_sym.T_inv($X[$node]))) # to constrained value
                 else
                     push!(lp_block_args, :($d_sym = $d))
                     push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node])))
@@ -333,7 +336,7 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     push!(lp_block_args, :($lp))
 
     
-    f_name = !unconstrained ? Symbol("$(name)_logpdf") : Symbol("$(name)_logpdf_unconstrained!")
+    f_name = !unconstrained ? Symbol("$(name)_logpdf") : Symbol("$(name)_logpdf_unconstrained")
 
     f = rmlines(:(
         function $f_name($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
@@ -521,7 +524,7 @@ function compile_symbolic_pgm(
 
     sample! = get_sample(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X)
     logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=false)
-    unconstrained_logpdf! = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=true)
+    unconstrained_logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=true)
     transform_to_constrained! = get_transform(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:constrained)
     transform_to_unconstrained! = get_transform(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:unconstrained)
 
@@ -537,9 +540,7 @@ function compile_symbolic_pgm(
         Base.invokelatest(transform_to_constrained!, Z, Y)
         @assert all(X .≈ Z) (X,Z)
 
-        Y = Base.invokelatest(transform_to_unconstrained!, X, Y)
-        Base.invokelatest(unconstrained_logpdf!, Y, observations)
-        @assert all(X .≈ Y) (X, X)
+        Base.invokelatest(unconstrained_logpdf, Y, observations)
 
         Base.invokelatest(return_expr, X)
         for i in 1:n_variables
@@ -563,7 +564,7 @@ function compile_symbolic_pgm(
         sample!,
         logpdf,
 
-        unconstrained_logpdf!,
+        unconstrained_logpdf,
 
         transform_to_constrained!,
         transform_to_unconstrained!,

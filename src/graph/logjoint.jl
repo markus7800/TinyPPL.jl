@@ -8,8 +8,7 @@ end
 
 function make_unconstrained_logjoint(pgm::PGM)
     function logjoint(X::AbstractVector{<:Real})
-        # transforms X automatically to contrained
-        return pgm.unconstrained_logpdf!(X, pgm.observations)
+        return pgm.unconstrained_logpdf(X, pgm.observations)
     end
     return logjoint
 end

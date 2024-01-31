@@ -6,16 +6,18 @@ function hmc(pgm::PGM, n_samples::Int, L::Int, eps::Float64;
     logjoint = unconstrained ? make_unconstrained_logjoint(pgm) : make_logjoint(pgm)
 
     if !isnothing(x_initial) && unconstrained
-        pgm.transform_to_unconstrained!(x_initial)
+        pgm.transform_to_unconstrained!(copy(x_initial), x_initial)
     end
 
 
     K = pgm.n_latents
     result = hmc_logjoint(logjoint, K, n_samples, L, eps, ad_backend=ad_backend, x_initial=x_initial)
-    # unconstrained logjoint automatically transforms to constrained
 
     retvals = Vector{Any}(undef, n_samples)
     for i in 1:n_samples
+        if unconstrained
+            pgm.transform_to_constrained!(view(result, :,i), view(result,:,i))
+        end
         retvals[i] = get_retval(pgm, result[:,i])
     end
     return GraphTraces(pgm, result, retvals)
