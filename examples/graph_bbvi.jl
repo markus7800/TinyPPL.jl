@@ -32,7 +32,10 @@ maximum(abs, map_mu .- Q_mu)
 Random.seed!(0)
 @time vi_result = bbvi_rao(model, 10_000, 100, 0.01);
 Q_mu = [d.base.μ for d in vi_result.Q.dists]
+Q_sigma = [d.base.σ for d in vi_result.Q.dists]
 maximum(abs, map_mu .- Q_mu)
+maximum(abs, map_sigma .- Q_sigma)
+# meanfield approximation cannot model correlations and fails to approximate sigma
 
 import LinearAlgebra: diag
 Random.seed!(0)
@@ -40,3 +43,4 @@ vi_result = advi_fullrank(model, 100_000, 10, 0.01)
 mu, Σ = vi_result.Q.base.μ, vi_result.Q.base.Σ
 maximum(abs, mu .- map_mu) # 0.04
 maximum(abs, diag(Σ) .- map_sigma) # 0.17
+# only in the full rank we can accuaretly approximate sigma
