@@ -64,7 +64,7 @@ function bbvi_naive(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
         end
     end
 
-    return GraphVIResult(pgm, MeanField(var_dists))
+    return GraphVIResult(pgm, MeanField(var_dists), true)
 end
 
 export bbvi_naive
@@ -113,7 +113,7 @@ function bbvi_rao(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
         end
     end
     
-    return GraphVIResult(pgm, MeanField(var_dists))
+    return GraphVIResult(pgm, MeanField(var_dists), true)
 end
 
 export bbvi_rao
