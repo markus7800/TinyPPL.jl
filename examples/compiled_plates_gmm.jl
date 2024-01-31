@@ -58,15 +58,22 @@ end
     end
     println("Compilation Time: ", (time_ns() - t0) / 1e9)
 end
-to_dict(X) = Dict(model.addresses[n] => X[n] for n in 1:model.n_latents)
+function graph_to_plotting_format(X)
+    d = Dict{Any,Real}(model.addresses[n] => X[n] for n in 1:model.n_latents)
+    d[:k] = gt_k
+    w_sum = sum(d[:w => k] for k in 1:gt_k)
+    for k in 1:gt_k
+        d[:w => k] = d[:w => k] / w_sum
+    end
+    return d
+end
 
 # model = unplated_model;
-
 model = plated_model;
 
 @info "LW"
 _ = Graph.likelihood_weighting(model, 100);
-Random.seed!(0); @time traces1, lps1 = likelihood_weighting(model, 100_000);
+Random.seed!(0); @time traces1, lps1 = Graph.likelihood_weighting(model, 100_000);
 
 println("Compile LW")
 @time lw = compile_likelihood_weighting(model)
@@ -111,7 +118,7 @@ lps1 ≈ lps2
 
 maximum(lps2)
 X = traces2[:, argmax(lps2)]
-visualize_trace(to_dict(X))
+visualize_trace(graph_to_plotting_format(X))
 
 const λ = 3
 const δ = 5.0
@@ -142,6 +149,16 @@ end
     end
 end
 
+function universal_to_plotting_format(X)
+    d = copy(X)
+    d[:k] = gt_k
+    w_sum = sum(d[:w => k] for k in 1:gt_k)
+    for k in 1:gt_k
+        d[:w => k] = d[:w => k] / w_sum
+    end
+    return d
+end
+
 args = (length(gt_ys), )
 
 observations = Observations((:y=>i)=>y for (i, y) in enumerate(gt_ys))
@@ -164,4 +181,4 @@ Random.seed!(0); @time traces = Evaluation.rwmh(gmm, args, observations, 100_000
 logjoint = Evaluation.make_logjoint(gmm, args, observations)
 X = argmax(logjoint, traces.data)
 logjoint(X)
-visualize_trace(X)
+visualize_trace(universal_to_plotting_format(X))

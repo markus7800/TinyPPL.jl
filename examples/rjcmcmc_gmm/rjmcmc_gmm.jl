@@ -2,7 +2,7 @@ using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
 
-include("data.jl");
+include("../gmm/data.jl");
 include("model.jl");
 include("helpers.jl");
 include("aux_model.jl");
@@ -16,13 +16,16 @@ Random.seed!(0)
     5000 * 6;
     check_involution=true
 );
+
+# number of times k changes
 sum(traces[:k,i] != traces[:k,i+1] for i in 1:(length(traces)-1))
+
 maximum(lp)
 best_trace = traces.data[argmax(lp)]
 
 include("plotting.jl")
 
-visualize_trace(best_trace)
+visualize_trace(to_plotting_format(best_trace))
 PyPlot.gcf()
 
 for k in sort(unique(traces[:k]))
@@ -30,7 +33,7 @@ for k in sort(unique(traces[:k]))
     amax = argmax(lp[mask])
     println("k=$k, lp=$(lp[mask][amax])")
     best_trace_k = traces.data[mask][amax]
-    visualize_trace(best_trace_k)
+    visualize_trace(to_plotting_format(best_trace_k))
     display(PyPlot.gcf())
 end
 
