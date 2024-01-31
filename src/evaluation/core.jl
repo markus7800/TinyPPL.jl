@@ -60,6 +60,9 @@ function (model::StaticModel)(args::Tuple, sampler::StaticSampler, observations:
     return model.f(args..., sampler, observations)
 end
 
+to_universal(model::StaticModel) = UniversalModel(model.f)
+export to_universal
+
 """
 @ppl function model_name(args...)
     body with sample or parameter statements
@@ -86,7 +89,7 @@ function ppl_macro(annotations::Set{Symbol}, func)
     new_body = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) && !isbraced(var) ? :($var = {$(QuoteNode(var))} ~ $dist) : expr, esc(body));
     new_body = MacroTools.postwalk(ex -> walk_ppl_sytnax(ex, sampler, observations), new_body)
 
-    sampler_type = :static in annotations ? StaticSampler : UniversalSampler
+    sampler_type = Sampler # :static in annotations ? StaticSampler : UniversalSampler
     model_type = :static in annotations ? StaticModel : UniversalModel
 
     julia_fn_name = gensym(f)

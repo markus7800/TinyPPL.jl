@@ -69,7 +69,7 @@ update_particle!(task::Libtask.TapedTask, particle::SMCParticle) = update_partic
 # If a reference particle X_ref is passed this worker acts a conditional smc.
 # smc can be used to create independent samples, while conditional smc is a kernel with the posterior as stationary distribution.
 function _smc_worker(model::StaticModel, args::Tuple, observations::Observations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
-    X_ref::Union{Nothing,StaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+    X_ref::Union{Nothing,AbstractStaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
 
     conditional = !isnothing(X_ref)
 
@@ -174,7 +174,7 @@ end
 export smc
 
 function conditional_smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int,
-    X::StaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+    X::AbstractStaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
     return _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
