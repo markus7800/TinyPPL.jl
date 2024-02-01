@@ -127,23 +127,13 @@ function estimate_elbo_grad_forwarddiff(logjoint::Function, phi::Vector{Float64}
 end
 
 function estimate_elbo_grad_reversediff(logjoint::Function, phi::Vector{Float64}, q::VariationalDistribution, L::Int, estimator::ELBOEstimator)
-    # cfg = ReverseDiff.GradientConfig(phi)
-    # ReverseDiff.track!(cfg.input, phi)
-    # phi_tracked = cfg.input
-
-    # # tape = ReverseDiff.GradientTape(f, x, cfg)
-    # q = update_params(q, cfg.input)
-    # elbo = estimate_elbo(estimator, logjoint, q, L)
-    # tape = ReverseDiff._GradientTape(estimate_elbo, cfg.input, elbo, cfg.tape)
-
-    # grad = ReverseDiff.construct_result(ReverseDiff.input_hook(tape))
-
-    function objective(phi_tracked)
-        q = update_params(q, phi_tracked)
-        elbo = estimate_elbo(estimator, logjoint, q, L)
-        return elbo
-    end
-    grad = ReverseDiff.gradient(objective, phi)
+    cfg = ReverseDiff.GradientConfig(phi)
+    ReverseDiff.track!(cfg.input, phi)
+    q = update_params(q, cfg.input)
+    elbo = estimate_elbo(estimator, logjoint, q, L)
+    tape = ReverseDiff._GradientTape(() -> error("No f"), cfg.input, elbo, cfg.tape)
+    grad = ReverseDiff.construct_result(ReverseDiff.input_hook(tape))
+    ReverseDiff.seeded_reverse_pass!(grad, tape)
     return grad
 end
 
