@@ -2,6 +2,7 @@
 This file includes various ELBO estimators.
 """
 
+import TinyPPL: no_grad
 
 abstract type ELBOEstimator end
 struct MonteCarloELBO <: ELBOEstimator end # requires differentiable model

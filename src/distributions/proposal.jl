@@ -77,6 +77,7 @@ export DiscreteRandomWalkProposal
 
 
 # mapping addresses to proposal distributions
+import TinyPPL: MostSpecificDict
 
 const Addr2Proposal = MostSpecificDict{ProposalDistribution}
 

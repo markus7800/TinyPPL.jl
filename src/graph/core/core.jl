@@ -1,6 +1,7 @@
 import MacroTools
-import ..TinyPPL.Distributions: logpdf
-using ..TinyPPL.Distributions
+import TinyPPL.Distributions: logpdf
+using TinyPPL.Distributions
+import TinyPPL: rmlines, isbraced
 
 import Tracker
 const INPUT_VECTOR_TYPE = Union{

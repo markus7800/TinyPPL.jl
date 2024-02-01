@@ -1,6 +1,7 @@
 import Tracker
 import Distributions
 import TinyPPL.Distributions: VariationalDistribution, VariationalNormal, get_params, update_params
+import TinyPPL: no_grad
 
 const ContinuousUniversalTrace = Dict{Address,Float64}
 

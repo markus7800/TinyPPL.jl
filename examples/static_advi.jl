@@ -127,6 +127,7 @@ Random.seed!(0)
 mu_guide_pd, sigma_guide_pd = get_guide_parameters(vi_result_guide_pd)
 
 # only equivalent in ad_backend = :forwarddiff
+# :reversediff and :tracker are weird for L > 1
 @assert all(vi_result_pd.Q.mu .≈ mu_guide_pd)
 @assert all(vi_result_pd.Q.sigma .≈ sigma_guide_pd)
 

@@ -59,7 +59,7 @@ mutable struct StaticGuideSampler{T,V} <: StaticSampler
     end
 
     function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Tracker.TrackedVector{Float64,Vector{Float64}}
-        return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
     end
     # function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{Tracker.TrackedReal{Float64}}
     #     return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
@@ -167,7 +167,7 @@ mutable struct StaticGuideScorer{T,V} <: StaticSampler
     end
 
     function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Vector{<:ForwardDiff.Dual}}
-        return new{ForwardDiff.Dual,V}(0., params_to_ix, addresses_to_ix, phi, X)
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
 
     function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: ReverseDiff.TrackedArray}
@@ -175,7 +175,7 @@ mutable struct StaticGuideScorer{T,V} <: StaticSampler
     end
 
     function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:ForwardDiff.Dual}) where {V <: Vector{<:ForwardDiff.Dual}}
-        return new{ForwardDiff.Dual,V}(0., params_to_ix, addresses_to_ix, phi, X)
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
 end
 

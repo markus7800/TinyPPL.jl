@@ -45,7 +45,6 @@ no_grad(x::Vector{<:ForwardDiff.Dual}) = ForwardDiff.value.(x)
 import ReverseDiff
 no_grad(x::ReverseDiff.TrackedReal) = ReverseDiff.value(x)
 no_grad(x::ReverseDiff.TrackedArray) = ReverseDiff.value(x)
-no_grad(x::ReverseDiff.TrackedArray) = ReverseDiff.value(x)
 
 import Base, Random
 Base.randn(::Type{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = ReverseDiff.TrackedReal{V,D,O}(randn(V))

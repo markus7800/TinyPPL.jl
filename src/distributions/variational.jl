@@ -1,6 +1,8 @@
 import PDMats
 import LinearAlgebra
 import Distributions: entropy, MultivariateNormal
+import TinyPPL: sigmoid, ∇sigmoid, invsigmoid
+import Tracker, ForwardDiff, ReverseDiff
 
 const VariationalParameters = Union{
     Vector{Float64},

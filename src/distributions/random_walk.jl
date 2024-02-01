@@ -159,6 +159,8 @@ export random_walk_proposal_dist, rw_proposal_dist, ContinuousRWProposer, Discre
 
 # mapping of address to variance
 
+import TinyPPL: MostSpecificDict
+
 const Addr2Var = MostSpecificDict{Float64}
 function Addr2Var(args...)
     return MostSpecificDict(Dict{Any, Float64}(args...))

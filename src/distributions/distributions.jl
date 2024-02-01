@@ -5,7 +5,6 @@ module Distributions
     import Distributions: Beta, Cauchy, Exponential, Gamma, InverseGamma, Laplace, LogNormal, Normal, TDist, Uniform
     import Distributions: Dirac
 
-    include("../utils/utils.jl")
     include("logpdf_grad.jl")
     include("proposal.jl")
     include("random_walk.jl")
