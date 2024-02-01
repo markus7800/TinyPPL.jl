@@ -32,10 +32,10 @@ BBVI, where we fit unconstrained model.
 VariationalDistributions are automatically determined with MeanFieldCollector, which uses init_variational_distribution.
 This method *uses* AD to compute gradient of REINFORCE approximation.
 """
-function bbvi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64)
+function bbvi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64; ad_backend::Symbol=:tracker)
     logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
     q = get_mixed_meanfield(model, args, observations, addresses_to_ix)
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO(), ad_backend=ad_backend)
     _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
     return StaticVIResult(result, addresses_to_ix, _transform_to_constrained!)
 end

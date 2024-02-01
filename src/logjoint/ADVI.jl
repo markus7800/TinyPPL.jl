@@ -107,11 +107,51 @@ function advi_fullrank_logjoint(logjoint::Function, K::Int, n_samples::Int, N::I
     return FullRankGaussian(mu, L)
 end
 
+function estimate_elbo_grad_tracker(logjoint::Function, phi::Vector{Float64}, q::VariationalDistribution, L::Int, estimator::ELBOEstimator)
+    phi_tracked = Tracker.param(phi)
+    q = update_params(q, phi_tracked)
+    elbo = estimate_elbo(estimator, logjoint, q, L)
+    Tracker.back!(elbo)
+    grad = Tracker.grad(phi_tracked)
+    return grad
+end
+
+function estimate_elbo_grad_forwarddiff(logjoint::Function, phi::Vector{Float64}, q::VariationalDistribution, L::Int, estimator::ELBOEstimator)
+    cfg = ForwardDiff.GradientConfig(estimate_elbo, phi)
+    phi_tracked = cfg.duals
+    ForwardDiff.seed!(phi_tracked, phi, cfg.seeds)
+    q = update_params(q, phi_tracked)
+    elbo = estimate_elbo(estimator, logjoint, q, L)
+    grad = ForwardDiff.partials(elbo)
+    return grad
+end
+
+function estimate_elbo_grad_reversediff(logjoint::Function, phi::Vector{Float64}, q::VariationalDistribution, L::Int, estimator::ELBOEstimator)
+    # cfg = ReverseDiff.GradientConfig(phi)
+    # ReverseDiff.track!(cfg.input, phi)
+    # phi_tracked = cfg.input
+
+    # # tape = ReverseDiff.GradientTape(f, x, cfg)
+    # q = update_params(q, cfg.input)
+    # elbo = estimate_elbo(estimator, logjoint, q, L)
+    # tape = ReverseDiff._GradientTape(estimate_elbo, cfg.input, elbo, cfg.tape)
+
+    # grad = ReverseDiff.construct_result(ReverseDiff.input_hook(tape))
+
+    function objective(phi_tracked)
+        q = update_params(q, phi_tracked)
+        elbo = estimate_elbo(estimator, logjoint, q, L)
+        return elbo
+    end
+    grad = ReverseDiff.gradient(objective, phi)
+    return grad
+end
+
 """
 ADVI with arbitary VariationalDistribution approximation, fitted to `logjoint`.
 Approximates ELBO gradient with ELBOEstimator.
 """
-function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator)
+function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator; ad_backend::Symbol=:tracker)
     phi = no_grad(get_params(q))
 
     eps = 1e-8
@@ -119,18 +159,19 @@ function advi_logjoint(logjoint::Function, n_samples::Int, L::Int, learning_rate
     pre = 1.1
     post = 0.9
 
+    # TODO: do ad_backend::Val{:tracker} instead?
+    if ad_backend == :tracker
+        estimate_elbo_grad = estimate_elbo_grad_tracker
+    elseif ad_backend == :forwarddiff
+        estimate_elbo_grad = estimate_elbo_grad_forwarddiff
+    elseif ad_backend == :reversediff
+        estimate_elbo_grad = estimate_elbo_grad_reversediff
+    else
+        error("Unkown ad backend $ad_backend.")
+    end
+
     @progress for i in 1:n_samples
-        # setup for gradient computation
-        phi_tracked = Tracker.param(phi)
-        q = update_params(q, phi_tracked)
-
-        # estimate elbo
-        elbo = estimate_elbo(estimator, logjoint, q, L)
-
-        # automatically compute gradient
-        Tracker.back!(elbo)
-        grad = Tracker.grad(phi_tracked)
-        # println(i, ": ", elbo)
+        grad = estimate_elbo_grad(logjoint, phi, q, L, estimator)
 
         # decayed adagrad update rule
         acc = @. post * acc + pre * grad^2

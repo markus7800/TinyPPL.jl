@@ -2,7 +2,12 @@ import PDMats
 import LinearAlgebra
 import Distributions: entropy, MultivariateNormal
 
-const VariationalParameters = Union{Vector{Float64}, Tracker.TrackedVector{Float64, Vector{Float64}}}
+const VariationalParameters = Union{
+    Vector{Float64},
+    Tracker.TrackedVector{Float64, Vector{Float64}},
+    Vector{<:ForwardDiff.Dual},
+    ReverseDiff.TrackedArray, Vector{Tracker.TrackedReal{Float64}}
+    }
 
 """
 General interface for variational distributions.
@@ -263,7 +268,7 @@ function rand_and_logpdf(q::MeanField)
 end
 function Distributions.rand(q::MeanField)
     # assume univariate q.dists
-    return Tracker.collectmemaybe(Distributions.rand.(q.dists))
+    return Distributions.rand.(q.dists)
 end
 function Distributions.rand(q::MeanField, n::Int)
     K = length(q.dists)

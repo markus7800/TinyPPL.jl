@@ -7,6 +7,7 @@ TODOS:
 - graph: fix bbvi and bbvi_naive different see examples/graph_linear_regression
 - static: fix pathderivative deviation with forwardiff see examples/static_advi
 - universal: fix UniversalMeanField samples values that lead to new addresses see examples/universal_bbvi
+- readme: lazyif + plated
 
 - AQUA inference for graphsample
 - 

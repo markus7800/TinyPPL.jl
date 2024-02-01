@@ -50,9 +50,9 @@ end
 import TinyPPL.Logjoint: advi_logjoint
 import TinyPPL.Distributions: ELBOEstimator, ReinforceELBO
 
-function advi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator; unconstrained::Bool=false)
+function advi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64, q::VariationalDistribution, estimator::ELBOEstimator; unconstrained::Bool=false, ad_backend::Symbol=:tracker)
     logjoint = unconstrained ? make_unconstrained_logjoint : make_logjoint(pgm)
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator, ad_backend=ad_backend)
     return GraphVIResult(pgm, result, unconstrained)
 end
 
@@ -72,10 +72,10 @@ end
 export get_mixed_meanfield
 
 
-function bbvi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
+function bbvi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64; ad_backend::Symbol=:tracker)
     logjoint = make_unconstrained_logjoint(pgm)
     q = get_mixed_meanfield(pgm)
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO())
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO(), ad_backend=ad_backend)
     return GraphVIResult(pgm, result, true)
 end
 export bbvi

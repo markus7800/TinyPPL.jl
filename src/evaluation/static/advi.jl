@@ -54,7 +54,7 @@ ELBO is optimised with automatic differentiation (AD).
 """
 function advi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64,
     q::VariationalDistribution, estimator::ELBOEstimator;
-    unconstrained::Bool=false)
+    unconstrained::Bool=false, ad_backend::Symbol=:tracker)
 
     if unconstrained
         logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
@@ -66,7 +66,7 @@ function advi(model::StaticModel, args::Tuple, observations::Observations, n_sam
         _viresult_map! = _no_transform
     end
 
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator, ad_backend=ad_backend)
     return StaticVIResult(result, addresses_to_ix, _viresult_map!)
 end
 
@@ -80,7 +80,7 @@ ELBO is optimised with automatic differentiation (AD).
 function advi(model::StaticModel, args::Tuple, observations::Observations,
     n_samples::Int, L::Int, learning_rate::Float64,
     guide::StaticModel, guide_args::Tuple, estimator::ELBOEstimator;
-    unconstrained::Bool=false)
+    unconstrained::Bool=false, ad_backend::Symbol=:tracker)
 
     if unconstrained
         logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
@@ -93,7 +93,7 @@ function advi(model::StaticModel, args::Tuple, observations::Observations,
     end
 
     q = make_guide(guide, guide_args, addresses_to_ix)
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator)
+    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, estimator, ad_backend=ad_backend)
     return StaticVIResult(result, addresses_to_ix, _viresult_map!)
 end
 

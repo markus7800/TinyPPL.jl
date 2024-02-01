@@ -38,8 +38,6 @@ function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistri
         zeta = rand(q_)
         lpq = logpdf(q, zeta) # tracked q, untracked zeta
         no_grad_elbo = logjoint(zeta) - no_grad(lpq)
-        @assert !Tracker.istracked(no_grad_elbo) zeta
-        @assert Tracker.istracked(lpq)
         # inject log Q gradient
         elbo += no_grad_elbo * lpq + no_grad_elbo * (1 - no_grad(lpq))
     end

@@ -40,6 +40,8 @@ function get_params_to_ix(model::StaticModel, args::Tuple, observations::Dict)::
 end
 
 import Tracker
+import ForwardDiff
+import ReverseDiff
 
 """
 For given parameteers `phi` this sampler generates a trace into `X`.
@@ -55,8 +57,20 @@ mutable struct StaticGuideSampler{T,V} <: StaticSampler
     function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{Float64}
         return new{Float64,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Float64,length(addresses_to_ix)))
     end
+
     function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Tracker.TrackedVector{Float64,Vector{Float64}}
         return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
+    end
+    # function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{Tracker.TrackedReal{Float64}}
+    #     return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
+    # end
+
+    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{<:ForwardDiff.Dual}
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
+    end
+
+    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: ReverseDiff.TrackedArray
+        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
     end
 end
 
@@ -123,7 +137,7 @@ end
 function Distributions.rand(guide::StaticGuide)
     guide.sampler.W = 0.0
     guide.model(guide.args, guide.sampler, guide.observations)
-    return Tracker.collectmemaybe(guide.sampler.X)
+    return guide.sampler.X
 end
 
 function Distributions.rand(guide::StaticGuide, n::Int)
@@ -144,21 +158,25 @@ mutable struct StaticGuideScorer{T,V} <: StaticSampler
     addresses_to_ix::Addr2Ix
     phi::V
     X::AbstractStaticTrace
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Float64}) where {T <: Real, V <: AbstractVector{T}}
-        # return new{eltype(phi),V}(0., params_to_ix, addresses_to_ix, phi, X)
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Vector{Float64}}
         return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Tracker.TrackedVector{Float64,Vector{Float64}}) where {T <: Real, V <: AbstractVector{T}}
-        # return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
+    
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Tracker.TrackedVector}
+        return new{Tracker.TrackedReal,V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
+
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Vector{<:ForwardDiff.Dual}}
+        return new{ForwardDiff.Dual,V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
+
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: ReverseDiff.TrackedArray}
         return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
     end
-    # function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{Tracker.TrackedReal{Float64}}) where {T <: Real, V <: AbstractVector{T}}
-    #     return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, X)
-    # end
-    # # fall back
-    # function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::AbstractStaticTrace) where {T <: Real, V <: AbstractVector{T}}
-    #     return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
-    # end
+
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:ForwardDiff.Dual}) where {V <: Vector{<:ForwardDiff.Dual}}
+        return new{ForwardDiff.Dual,V}(0., params_to_ix, addresses_to_ix, phi, X)
+    end
 end
 
 function sample(sampler::StaticGuideScorer, addr::Address, dist::Distribution, obs::RVValue)::RVValue
