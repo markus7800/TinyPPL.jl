@@ -5,6 +5,8 @@ Educational implementation of a probabilistic programming language in Julia.
 
 Implementation is inspired by [van de Meent et al.: An Introduction to Probabilistic Programming](https://arxiv.org/abs/1809.10756), [Gen.jl](https://github.com/probcomp/Gen.jl) and [Pyro](https://github.com/pyro-ppl/pyro).
 
+There are not too many abstractions and the implementations of inference algorithms are mostly one file large.
+
 ## Overview
 
 We restrict the distributions to be univariate for the sake of simplicity, but all algorithms can be easily extended to multivariate distributions.
