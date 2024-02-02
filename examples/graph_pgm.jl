@@ -1,6 +1,7 @@
 
 using TinyPPL.Distributions
 using TinyPPL.Graph
+using TinyPPL.Evaluation
 import Random
 
 
@@ -118,6 +119,42 @@ model = @pgm lgss begin
     end
 end
 
+
+model = @pgm eager_branching_model begin
+    let b ~ Bernoulli(0.5)
+        if b == 1.
+            let x ~ Normal(-1,1)
+                x
+            end
+        end
+    end
+end
+model.addresses
+model.logpdf([0., -10.], Float64[])
+model.logpdf([1., -10.], Float64[])
+
+model = @pgm lazy_ifs lazy_branching_model begin
+    let b ~ Bernoulli(0.5)
+        if b == 1.
+            let x ~ Normal(-1,1)
+                x
+            end
+        end
+    end
+end
+model.addresses
+model.logpdf([0., NaN], Float64[])
+model.logpdf([1., -10.], Float64[])
+
+@ppl function eval_model()
+    b ~ Bernoulli(0.5)
+    if b == 1
+        x ~ Normal(-1,1)
+    end
+end
+logjoint = Evaluation.make_logjoint(eval_model, (), Observations())
+logjoint(UniversalTrace(:b => 0., :x => -10.))
+logjoint(UniversalTrace(:b => 1., :x => -10.))
 
 
 model = @pgm lazy_ifs branching_model begin

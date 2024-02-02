@@ -5,8 +5,7 @@ TODOS:
 - get_distribution(node) = get_distribution(plate(node))
 
 - graph: TODO: x[1] = 1 not allowed, immutable, but y = x[1] is allowed
-- readme: lazyif + plated
-
+- 
 - AQUA inference for graphsample
 - 
 - truncate output of pgm if too long

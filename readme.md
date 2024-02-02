@@ -230,6 +230,182 @@ end
 r = get_retval(pgm, X)
 ```
 
+#### Plated Graphical Models
+
+With the `plated` annotation, we tell the compiler that the model has additional structure which can be inferred from the specified addresses.
+
+For example, if we have addresses `:x => i` then all random variables with address prefix `:x` belong to a plate.
+
+This can be used to optimise compilation.
+
+The Gaussian Mixture model
+```julia
+@pgm plated plated_GMM begin
+    function dirichlet(δ, k)
+        let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
+            w / sum(w)
+        end
+    end
+    let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
+        k = ({:k} ~ Poisson(λ) ↦ 3) + 1,
+        y = $(Main.gt_ys),
+        n = length(y),
+        w = dirichlet(δ, k),
+        means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
+        vars = [{:σ²=>j} ~ InverseGamma(α, β) for j in 1:k],
+        z = [{:z=>i} ~ Categorical(w) for i in 1:n]
+
+        [{:y=>i} ~ Normal(means[Int(z[i])], sqrt(vars[Int(z[i])])) ↦ y[i] for i in 1:n]
+        
+        means
+    end
+end
+```
+has plate structure
+```
+plate_symbols: [:w, :z, :μ, :σ², :y]
+Plate(w,1:4)
+Plate(z,5:104)
+Plate(μ,105:108)
+Plate(σ²,109:112)
+Plate(y,114:213)
+InterPlateEdge(Plate(z,5:104)->Plate(y,114:213))
+PlateToPlateEdge(Plate(σ²,109:112)->Plate(y,114:213))
+PlateToPlateEdge(Plate(μ,105:108)->Plate(y,114:213))
+PlateToPlateEdge(Plate(w,1:4)->Plate(z,5:104))
+```
+For instance, from this we know that `:y => i` only depends on `:z => i`.
+
+The compiled logpdf function then looks like
+```julia
+function plated_GMM_logpdf(var"##X#797"::INPUT_VECTOR_TYPE, var"##Y#798"::Vector{Float64})
+    var"##lp#870" = 0.0
+    var"##lp#870" += plated_GMM_lp_plate_w(var"##X#797", var"##Y#798")
+    var"##lp#870" += plated_GMM_lp_plate_μ(var"##X#797", var"##Y#798")
+    var"##dist#871" = Poisson(3)
+    var"##lp#870" += logpdf(var"##dist#871", var"##Y#798"[1])
+    var"##lp#870" += plated_GMM_lp_plate_σ²(var"##X#797", var"##Y#798")
+    var"##lp#870" += plated_GMM_lp_plate_z(var"##X#797", var"##Y#798")
+    var"##lp#870" += plated_GMM_lp_plate_y(var"##X#797", var"##Y#798")
+    var"##lp#870"
+end
+```
+where for instance
+```julia
+function plated_GMM_lp_plate_y(var"##X#1312"::Vector{Float64}, var"##Y#1313"::Vector{Float64})
+    var"##lp#1327" = 0.0
+    for var"##i#1328" = 1:100
+        var"##loop_dist#1329" = Normal(var"##X#1312"[104 + Int(var"##X#1312"[4 + var"##i#1328"])], sqrt(var"##X#1312"[108 + Int(var"##X#1312"[4 + var"##i#1328"])]))
+        var"##lp#1327" += logpdf(var"##loop_dist#1329", var"##Y#1313"[(113 + var"##i#1328") - 112])
+    end
+    var"##lp#1327"
+  end
+``````
+
+Compare this to the usual spaghetti code
+```julia
+function unplated_GMM_logpdf(var"##X#1089"::INPUT_VECTOR_TYPE, var"##Y#1090"::Vector{Float64})
+    var"##lp#1093" = 0.0
+    var"##dist#1094" = InverseGamma(2.0, 10.0)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[112])
+    var"##dist#1094" = Normal(0.0, 1 / sqrt(0.01))
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[105])
+    var"##dist#1094" = InverseGamma(2.0, 10.0)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[110])
+    var"##dist#1094" = Normal(0.0, 1 / sqrt(0.01))
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[107])
+    var"##dist#1094" = Normal(0.0, 1 / sqrt(0.01))
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[108])
+    var"##dist#1094" = Gamma(5.0, 1)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[1])
+    var"##dist#1094" = InverseGamma(2.0, 10.0)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[111])
+    var"##dist#1094" = Gamma(5.0, 1)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[4])
+    var"##dist#1094" = Poisson(3)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##Y#1090"[1])
+    var"##dist#1094" = Gamma(5.0, 1)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[2])
+    var"##dist#1094" = Gamma(5.0, 1)
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[3])
+    var"##dist#1094" = Categorical(var"##X#1089"[1:4] / sum(var"##X#1089"[1:4]))
+    var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[56])
+    var"##dist#1094" = Categorical(var"##X#1089"[1:4] / sum(var"##X#1089"[1:4]))
+    ...
+```
+
+#### Semantics of Graphical Models
+
+By default if statements in the evaluation-based approach are evaluated lazily and in the graph-based approach eagerly.
+
+The annotation `lazyifs` makes the graphical model semantics equivalant to the evaluation-based models.
+
+```julia
+model = @pgm eager_branching_model begin
+    let b ~ Bernoulli(0.5)
+        if b == 1.
+            let x ~ Normal(-1,1)
+                x
+            end
+        end
+    end
+end
+model.logpdf([0., -10.], Float64[]) # == -42.11208571376462
+model.logpdf([1., -10.], Float64[]) # == -42.11208571376462
+```
+
+```julia
+model = @pgm lazy_ifs lazy_branching_model begin
+    let b ~ Bernoulli(0.5)
+        if b == 1.
+            let x ~ Normal(-1,1)
+                x
+            end
+        end
+    end
+end
+model.addresses
+model.logpdf([0., NaN], Float64[])  # == -0.6931471805599453
+model.logpdf([1., -10.], Float64[]) # == -42.11208571376462
+```
+
+```julia
+@ppl function eval_model()
+    b ~ Bernoulli(0.5)
+    if b == 1
+        x ~ Normal(-1,1)
+    end
+end
+logjoint = Evaluation.make_logjoint(eval_model, (), Observations())
+logjoint(UniversalTrace(:b => 0., :x => -10.)) # == -0.6931471805599453
+logjoint(UniversalTrace(:b => 1., :x => -10.)) # == -42.11208571376462
+```
+
+For PGMs this is achieved by using `Flat` distributions 
+```julia
+function Distributions.logpdf(::Flat, x::Real)
+    return 0.
+end
+function Distributions.rand(::Flat)
+    return NaN
+end
+```
+
+```
+Variables:
+x1 ~ if true
+    Bernoulli(0.5)
+else
+    Flat()
+end
+x2 ~ if true && x1 == 1.0
+    Normal(-1, 1)
+else
+    Flat()
+end
+```
+
+
 ### Inference Algorihms
 
 | Algorithm | Evaluation-Universal | Evaluation-Static | Graph | Reference
