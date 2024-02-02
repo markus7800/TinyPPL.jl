@@ -103,7 +103,7 @@ function bbvi(model::UniversalModel, args::Tuple, observations::Observations, n_
     end
 
     _transform_to_constrained(X::AbstractUniversalTrace) = transform_to_constrained(X, model, args, observations)
-    return UniversalVIResult(UniversalMeanField(variational_dists), _transform_to_constrained)
+    return UniversalVIResult(UniversalMeanField(variational_dists, model, args, observations), _transform_to_constrained)
 end
 
 export bbvi

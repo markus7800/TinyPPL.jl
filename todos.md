@@ -2,9 +2,9 @@ TODOS:
 
 - belief propagation with queue instead of recursion
 - reduce compile time in graph by batching distributions, observed_values functions similar to plated
+- get_distribution(node) = get_distribution(plate(node))
 
 - graph: TODO: x[1] = 1 not allowed, immutable, but y = x[1] is allowed
-- universal: fix UniversalMeanField samples values that lead to new addresses see examples/universal_bbvi
 - readme: lazyif + plated
 
 - AQUA inference for graphsample

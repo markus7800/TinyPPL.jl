@@ -11,12 +11,15 @@ It is just a wrapper for ADVI / BBVI results and not <: VariationalDistribution
 """
 struct UniversalMeanField
     variational_dists::Dict{Address,VariationalDistribution}
+    model::UniversalModel
+    args::Tuple
+    observations::Observations
 end
 function Base.getindex(umf::UniversalMeanField, addr::Address)
     return umf.variational_dists[addr]
 end
 
-# TODO: fix, make use of model to instantiate new addresses
+
 function rand_and_logpdf(umf::UniversalMeanField)
     X = ContinuousUniversalTrace()
     lp = 0.0
@@ -25,7 +28,9 @@ function rand_and_logpdf(umf::UniversalMeanField)
         lp += xlp
         X[addr] = x
     end
-    return X, lp
+    sampler = TraceSampler(X)
+    umf.model(umf.args, sampler, umf.observations) # instantiate missing addresses for UniversalTraceTransformer
+    return sampler.X, lp # lp only of samples from umf.variational_dists
 end
 
 # function rand_and_logpdf(umf::UniversalMeanField, n::Int)
@@ -170,7 +175,7 @@ function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observ
     end
 
     _transform_to_constrained(X::AbstractUniversalTrace) = transform_to_constrained(X, model, args, observations)
-    return UniversalVIResult(UniversalMeanField(sampler.variational_dists), _transform_to_constrained)
+    return UniversalVIResult(UniversalMeanField(sampler.variational_dists, model, args, observations), _transform_to_constrained)
 end
 export advi_meanfield
 
