@@ -133,8 +133,8 @@ vi_result_meanfield.Q.mu
 
 Random.seed!(0)
 vi_result_meanfield_2 = advi(model, 10_000, 10, 0.01, MeanFieldGaussian(model.n_latents), RelativeEntropyELBO())
-@assert all(vi_result_meanfield.Q.mu .≈ vi_result_meanfield_2.Q.mu)
-@assert all(vi_result_meanfield.Q.sigma .≈ vi_result_meanfield_2.Q.sigma)
+@assert vi_result_meanfield.Q.mu ≈ vi_result_meanfield_2.Q.mu
+@assert vi_result_meanfield.Q.sigma ≈ vi_result_meanfield_2.Q.sigma
 
 
 # ReinforceELBO
@@ -147,9 +147,8 @@ maximum(abs, map_sigma .- sigma_bbvi)
 Random.seed!(0)
 vi_result_bbvi_naive = bbvi_naive(model, 10_000, 10, 0.01)
 mu_bbvi_naive, sigma_bbvi_naive = get_meanfield_parameters(vi_result_bbvi_naive)
-# TODO: find out why these are not equivalent
-maximum(abs, mu_bbvi .- mu_bbvi_naive)
-maximum(abs, sigma_bbvi .- sigma_bbvi_naive)
+@assert mu_bbvi ≈ mu_bbvi_naive
+@assert sigma_bbvi ≈ sigma_bbvi_naive
 
 Random.seed!(0)
 vi_result_bbvi_rao = bbvi_rao(model, 10_000, 10, 0.01)
@@ -167,5 +166,5 @@ maximum(abs, map_Σ .- vi_result_fullrank.Q.base.Σ)
 
 Random.seed!(0)
 vi_result_fullrank_2 = advi(model, 10_000, 10, 0.01, FullRankGaussian(model.n_latents), RelativeEntropyELBO())
-@assert all(vi_result_fullrank.Q.mu .≈ vi_result_fullrank_2.Q.base.μ)
-@assert all(vi_result_fullrank.Q.base.Σ .≈ vi_result_fullrank_2.Q.base.Σ)
+@assert vi_result_fullrank.Q.mu ≈ vi_result_fullrank_2.Q.base.μ
+@assert vi_result_fullrank.Q.base.Σ ≈ vi_result_fullrank_2.Q.base.Σ

@@ -4,8 +4,6 @@ TODOS:
 - reduce compile time in graph by batching distributions, observed_values functions similar to plated
 
 - graph: TODO: x[1] = 1 not allowed, immutable, but y = x[1] is allowed
-- graph: fix bbvi and bbvi_naive different see examples/graph_linear_regression
-- static: fix pathderivative deviation with forwardiff see examples/static_advi
 - universal: fix UniversalMeanField samples values that lead to new addresses see examples/universal_bbvi
 - readme: lazyif + plated
 

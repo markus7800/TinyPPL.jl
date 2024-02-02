@@ -57,25 +57,3 @@ function advi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64, q::Varia
 end
 
 export advi_meanfield, advi_fullrank, advi
-
-
-import TinyPPL.Distributions: MeanField, init_variational_distribution
-
-# assumes static distributions types
-function get_mixed_meanfield(pgm::PGM)::MeanField
-    X = Vector{Float64}(undef, pgm.n_latents)
-    pgm.sample!(X)
-    K = pgm.n_latents
-    dists = [init_variational_distribution(get_distribution(pgm, node, X)) for node in 1:K]
-    return MeanField(dists)
-end
-export get_mixed_meanfield
-
-
-function bbvi(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64; ad_backend::Symbol=:tracker)
-    logjoint = make_unconstrained_logjoint(pgm)
-    q = get_mixed_meanfield(pgm)
-    result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO(), ad_backend=ad_backend)
-    return GraphVIResult(pgm, result, true)
-end
-export bbvi
