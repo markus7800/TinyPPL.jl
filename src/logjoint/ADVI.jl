@@ -10,6 +10,8 @@ import TinyPPL: no_grad
 #     @eval Random.$f(rng::Random.AbstractRNG,::Type{Tracker.TrackedReal{T}}) where {T} = Tracker.param(Random.$f(rng,T))
 # end
 
+# TODO: backend for meanfield and fullrank
+
 """
 ADVI with Gaussian meanfield approximation, fitted to `logjoint`.
 Approximates ELBO gradient with closed form entropy.

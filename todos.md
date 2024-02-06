@@ -19,6 +19,7 @@ TODOS:
 - HMC find eps ala mcmcgallery
 
 - param syntax: p = {:p => i} ∈ ℝ^n = init (0,∞)^n etc \bbR
+- init params
 
 - logjoint -> logdensity
 

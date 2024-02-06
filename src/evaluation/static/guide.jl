@@ -143,7 +143,7 @@ end
 function Distributions.rand(guide::StaticGuide, n::Int)
     K = length(guide.sampler.addresses_to_ix)
     X = Array{Real}(undef, K, n) # TODO: Real here is ugly
-    for i in 1:N
+    for i in 1:n
         X[:,i] = Distributions.rand(guide)
     end
     return X

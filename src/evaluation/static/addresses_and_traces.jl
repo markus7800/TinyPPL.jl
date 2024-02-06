@@ -111,3 +111,20 @@ function Base.getindex(traces::StaticTraces, ::Colon, ixs)
 end
 
 export StaticTraces
+
+
+mutable struct StaticForward <: StaticSampler
+    addresses_to_ixs::Addr2Ix
+    X::AbstractStaticTrace   # trace to evaluate model at
+    function StaticForward(addresses_to_ixs::Addr2Ix, X::AbstractStaticTrace)
+        return new(addresses_to_ixs, X)
+    end
+end
+
+function sample(sampler::StaticForward, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        return obs
+    end
+    value = sampler.X[sampler.addresses_to_ixs[addr]]
+    return value
+end
