@@ -137,3 +137,24 @@ Turing.Random.seed!(1)
 res = Turing.sample(discontinuous(), HMC(0.1, 10), 100000);
 histogram(res[:X])
 histogram(res[:Y])
+
+
+
+@ppl static function test()
+    X ~ Normal(0.,1.)
+    if X < 0.
+        Y ~ Uniform(-1,1)
+    else
+        Y ~ Uniform(-0.5,0.5)
+    end
+end
+args = ()
+observations = Observations()
+
+Random.seed!(0)
+result, _ = likelihood_weighting(test, args, observations, 10^6)
+histogram(result[:Y], normalize=true)
+
+Random.seed!(0)
+result = hmc(test, args, observations, 10^6, 10, 0.01, ad_backend=:forwarddiff, unconstrained=false)
+histogram(result[:Y], normalize=true)

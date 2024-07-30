@@ -33,6 +33,12 @@ end;
 @assert all(get_address(LGSS, t) == (:x => t) for t in 1:T)
 get_update_freq(traces, n_samples) = [mean(traces[t, i] != traces[t, i+1] for i in 1:n_samples-1) for t in 1:T]
 
+
+mu, Σ = get_joint_normal(T);
+mu_y, Σ_y = mu[T+1:end], Σ[T+1:end,T+1:end]
+marginal = MvNormal(mu_y, Σ_y)
+exp(logpdf(marginal, y))
+
 Random.seed!(0)
 @time traces, lps = likelihood_weighting(LGSS, 10^5);
 # 21.807279 seconds (240.53 M allocations: 5.098 GiB, 3.00% gc time, 0.82% compilation time)

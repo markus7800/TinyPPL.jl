@@ -6,8 +6,8 @@
 
 
 
-# [x_1, y_1, x_2, y_2, ..., x_T, y_T]
 function get_joint_normal(T)
+    # [x_1, y_1, x_2, y_2, ..., x_T, y_T]
     Σ = zeros(2*T, 2*T)
     for t in 1:T
         x_ix = 2*(t-1) + 1
