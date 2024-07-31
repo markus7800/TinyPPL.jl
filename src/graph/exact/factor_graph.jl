@@ -56,7 +56,7 @@ end
 Base.similar(factor_node::FactorNode) = FactorNode(factor_node.neighbours, similar(factor_node.table))
 export FactorNode
 
-# support is calculated by iterating ofver the product of all parent supports
+# support is calculated by iterating over the product of all parent supports
 # thus, parents must already have support
 function get_support(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
     X = Vector{Float64}(undef, pgm.n_variables)

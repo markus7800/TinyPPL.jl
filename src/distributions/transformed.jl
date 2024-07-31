@@ -46,8 +46,10 @@ image(t::IdentityTransform, domain::RealInterval) = RealInterval(t(domain.lb), t
 
 struct ExpTransform <: Transform
 end
+export ExpTransform
 struct LogTransform <: Transform
 end
+export LogTransform
 function (::ExpTransform)(x::Real)::Real
     return exp(x)
 end
@@ -76,8 +78,10 @@ image(t::LogTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(doma
 
 struct SigmoidTransform <: Transform
 end
+export SigmoidTransform
 struct InverseSigmoidTransform <: Transform
 end
+export InverseSigmoidTransform
 function (::SigmoidTransform)(x::Real)::Real
     return 1 / (1 + exp(-x))
 end
@@ -108,6 +112,7 @@ struct AffineTransform <: Transform
     k::Real
     d::Real
 end
+export AffineTransform
 function (t::AffineTransform)(x::Real)::Real
     return t.k * x + t.d
 end
@@ -126,6 +131,7 @@ struct ComposeTransform <: Transform
     t1::Transform
     t2::Transform
 end
+export ComposeTransform
 function (t::ComposeTransform)(x::Real)::Real
     return t.t2(t.t1(x))
 end
@@ -160,6 +166,10 @@ export TransformedDistribution
 
 function Base.rand(t::TransformedDistribution)::Real
     return t.T(Base.rand(t.base))
+end
+
+function Base.rand(t::TransformedDistribution, n::Int)::Vector{<:Real}
+    return t.T.(Base.rand(t.base, n))
 end
 
 function logpdf(t::TransformedDistribution, y::Real)::Real
