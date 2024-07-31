@@ -108,6 +108,8 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                 Δ = (xs[2] - xs[1])
                 is_discrete = Δ ≈ 1 # hack, but should work
 
+                should_try_shrink = true
+
                 # first we try to find an interval such that the ends are below density_thresh
                 if 0 < l_prec && l_prec < 10 || 0 < r_prec && r_prec < 10
                     if ps[1] > density_thresh && l_prec < 10
@@ -133,36 +135,38 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                         # println("old support: ", xs[1], " ... ", xs[end], " ", largest_bounds[node.address])
                         # println("new support: ", node.support[1], " ... ", node.support[end], " ($l_prec, $r_prec)")
                         largest_bounds[node.address] = (l_prec, r_prec)
-                        continue
+
+                        should_try_shrink = false
                     end
                 end
 
-                # now we try to shrink interval to area where density > density_thresh
-                i = 1
-                while ps[i] < density_thresh && i < length(xs) / 2
-                    i += 1
-                end
-                x0 = xs[i]
+                if should_try_shrink
+                    # now we try to shrink interval to area where density > density_thresh
+                    i = 1
+                    while ps[i] < density_thresh && i < length(xs) / 2
+                        i += 1
+                    end
+                    x0 = xs[i]
 
-                j = length(xs)
-                while ps[j] < density_thresh && j > length(xs) / 2
-                    j -= 1
-                end
-                x1 = xs[j]
+                    j = length(xs)
+                    while ps[j] < density_thresh && j > length(xs) / 2
+                        j -= 1
+                    end
+                    x1 = xs[j]
 
-                if is_discrete
-                    xs_new = Vector{Float64}(x0:x1)
-                else
-                    xs_new = Vector{Float64}(LinRange(x0, x1, N))
-                end
+                    if is_discrete
+                        xs_new = Vector{Float64}(x0:x1)
+                    else
+                        xs_new = Vector{Float64}(LinRange(x0, x1, N))
+                    end
 
-                # println(node.address)
-                # println("old support: ", xs[1], " ... ", xs[end])
-                # println("new support: ", xs_new[1], " ... ", xs_new[end])
-                
-                node.support = xs_new
-                @assert length(node.support) >= 2
-                did_update_support = did_update_support || 1 < i || j < length(xs)
+                    # println(node.address)
+                    # println("old support: ", xs[1], " ... ", xs[end])
+                    # println("new support: ", xs_new[1], " ... ", xs_new[end])
+                    
+                    node.support = xs_new
+                    did_update_support = did_update_support || 1 < i || j < length(xs)
+                end
             end
             # create factor node that represents CPD p(v | pa(v))
             cpd = get_aqua_table(pgm, node, parents, logscale)
@@ -186,7 +190,9 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
     return variable_nodes, factor_nodes, did_update_support
 end
 
-function aqua_ve(pgm::PGM, N::Int)
+function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
+    @assert method in (:ve, :bp, :jt) # variable elimination or belief propagation  
+
     result = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}()
     largest_bounds = Dict{Symbol,Tuple{Int,Int}}()
 
@@ -198,13 +204,30 @@ function aqua_ve(pgm::PGM, N::Int)
         variable_nodes, factor_nodes, did_update_support = get_aqua_factor_graph(pgm, N, result, largest_bounds)
         !did_update_support && break
         
-        for node in variable_nodes
-            f, Z = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
-            Δ = node.support[2] - node.support[1] # is not observed variable_node
-            result[node.address] =  (node.support, exp.(f.table) / (Z * Δ))
+        if method == :ve
+            for node in variable_nodes
+                f, Z = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
+                Δ = node.support[2] - node.support[1] # is not observed variable_node
+                result[node.address] =  (node.support, exp.(f.table) / (Z * Δ))
+            end
+        elseif method == :bp
+            @assert is_tree(variable_nodes, factor_nodes)
+            f, evidence, marginals = belief_propagation(factor_nodes[1], true)
+            for (node, ps) in marginals
+                Δ = node.support[2] - node.support[1]
+                result[node.address] = (node.support, ps / Δ)
+            end
+        elseif method == :jt
+            elimination_order = get_elimination_order(pgm, variable_nodes, Int[], :Greedy)
+            junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1])
+            f, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true)
+            for (node, ps) in marginals
+                Δ = node.support[2] - node.support[1]
+                result[node.address] = (node.support, ps / Δ)
+            end
         end
     end
 
     return result
 end
-export aqua_ve
+export aqua

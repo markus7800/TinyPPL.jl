@@ -301,7 +301,7 @@ function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root:
 
         variable_nodes = get_variable_nodes(junction_tree)
        
-        marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
+        marginals = Vector{Tuple{VariableNode, Vector{Float64}}}(undef, length(variable_nodes))
         cached_factors = Dict{ClusterNode, FactorNode}()
         for (i, (v,cluster_node)) in enumerate(variable_nodes)
             # cluster is the smallest cluster that v belongs to
@@ -317,7 +317,7 @@ function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root:
 
             table = exp.(factor.table)
             table /= sum(table)
-            marginals[i] = (v.variable, v.address, table)
+            marginals[i] = (v, table)
         end
 
         return return_factor, evidence, marginals

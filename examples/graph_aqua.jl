@@ -24,7 +24,9 @@ model = @pgm PriorMix begin
     end
 end
 
-result = aqua_ve(model, 500);
+@time result = aqua(model, 500, method=:ve);
+@time result = aqua(model, 500, method=:bp);
+@time result = aqua(model, 500, method=:jt);
 
 xs, x_ps = result[:mu]
 plot(xs, x_ps)
@@ -57,6 +59,8 @@ traces[:u]
 
 
 
+
+
 model = @pgm Model begin
     let X ~ Normal(0.,1.),
         Y ~ Normal(X, 1.)
@@ -84,9 +88,6 @@ plot(xs, ps)
 
 
 result = aqua_ve(model, 500);
-
-xs, x_ps = result[:mu]
-plot(xs, x_ps)
 
 xs, x_ps = result[:X]
 ys, y_ps = result[:Y]

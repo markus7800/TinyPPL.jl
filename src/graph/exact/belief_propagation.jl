@@ -75,11 +75,13 @@ function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{Fact
     
     visited = Dict(v => false for v in vcat(variable_nodes, factor_nodes))
     if is_cycle(factor_nodes[end], visited, nothing)
+        println(factor_nodes[end], " visited: ", visited)
         return false
     end
 
-    for (_, b) in visited
+    for (n, b) in visited
         if !b
+            println(factor_nodes[end], " not connected: ", n)
             # not connected
             return false
         end
@@ -161,13 +163,13 @@ function belief_propagation(root::BeliefNode, return_factor::FactorNode, all_mar
         end
 
         variable_nodes = get_variable_nodes(root)
-        marginals = Vector{Tuple{Int, Any, Vector{Float64}}}(undef, length(variable_nodes))
+        marginals = Vector{Tuple{VariableNode, Vector{Float64}}}(undef, length(variable_nodes))
         # p(x) = ∑_{X - x} p(X) = ∏_{s ∈ ne(x)} μ_{f_s → x}(x)
         for (i,v) in enumerate(variable_nodes)
             varnode = v.node
             table = exp.(sum(v.messages))
             table /= sum(table)
-            marginals[i] = (varnode.variable, varnode.address, table)
+            marginals[i] = (varnode, table)
         end
 
         return _return_factor, evidence, marginals
