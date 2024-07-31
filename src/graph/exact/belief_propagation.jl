@@ -75,7 +75,7 @@ function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{Fact
     
     visited = Dict(v => false for v in vcat(variable_nodes, factor_nodes))
     if is_cycle(factor_nodes[end], visited, nothing)
-        println(factor_nodes[end], " visited: ", visited)
+        println(factor_nodes[end], " visited: ", [f for (f,b) in visited if b])
         return false
     end
 

@@ -549,7 +549,7 @@ function compile_symbolic_pgm(
         Base.invokelatest(transform_to_constrained!, Z, Y)
         @assert all(broadcast(approx_same_value, X, Z)) (X,Z)
 
-        Base.invokelatest(unconstrained_logpdf, Y, observations)
+        # Base.invokelatest(unconstrained_logpdf, Y, observations) # TODO: need to transform to constrained if variables are parameters of distributions!
 
         Base.invokelatest(return_expr, X)
         for i in 1:n_variables

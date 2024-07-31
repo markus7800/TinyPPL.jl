@@ -56,6 +56,18 @@ end
 Base.similar(factor_node::FactorNode) = FactorNode(factor_node.neighbours, similar(factor_node.table))
 export FactorNode
 
+function print_dot(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
+    println("graph {")
+    println("  node[shape=box]")
+    for v in variable_nodes
+        for f in v.neighbours
+            println("  \"$(v)\\n@$(objectid(v))\" -- \"$(f)\\n@$(objectid(f))\"")
+        end
+    end
+    println("}")
+end
+export print_dot
+
 # support is calculated by iterating over the product of all parent supports
 # thus, parents must already have support
 function get_support(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})

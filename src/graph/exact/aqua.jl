@@ -82,8 +82,8 @@ function get_aqua_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNo
 end
 
 function get_aqua_factor_graph(pgm::PGM, N::Int,
-    marginal_density_cubes::Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}},
-    largest_bounds::Dict{Symbol,Tuple{Int,Int}};
+    marginal_density_cubes::Dict{Any,Tuple{Vector{Float64},Vector{Float64}}},
+    largest_bounds::Dict{Any,Tuple{Int,Int}};
     logscale::Bool=true, density_thresh::Float64=1e-5)
 
     # create a variable node for each PGM variable
@@ -102,6 +102,7 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                 did_update_support = true
             else
                 xs, ps = marginal_density_cubes[node.address]
+                @assert !any(isnan.(ps))
                 l_prec, r_prec = largest_bounds[node.address]
 
                 x0, x1 = xs[1], xs[end]
@@ -131,9 +132,9 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                             node.support = Vector{Float64}(LinRange(x0, x1, N))
                         end
                         did_update_support = true
-                        # println(node.address)
-                        # println("old support: ", xs[1], " ... ", xs[end], " ", largest_bounds[node.address])
-                        # println("new support: ", node.support[1], " ... ", node.support[end], " ($l_prec, $r_prec)")
+                        println(node.address)
+                        println("old support: ", xs[1], " ... ", xs[end])#, " ", largest_bounds[node.address])
+                        println("new support: ", node.support[1], " ... ", node.support[end])#, " ($l_prec, $r_prec)")
                         largest_bounds[node.address] = (l_prec, r_prec)
 
                         should_try_shrink = false
@@ -160,12 +161,15 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                         xs_new = Vector{Float64}(LinRange(x0, x1, N))
                     end
 
-                    # println(node.address)
-                    # println("old support: ", xs[1], " ... ", xs[end])
-                    # println("new support: ", xs_new[1], " ... ", xs_new[end])
                     
                     node.support = xs_new
                     did_update_support = did_update_support || 1 < i || j < length(xs)
+
+                    if did_update_support
+                        println(node.address)
+                        println("old support: ", xs[1], " ... ", xs[end])
+                        println("new support: ", xs_new[1], " ... ", xs_new[end])
+                    end
                 end
             end
             # create factor node that represents CPD p(v | pa(v))
@@ -193,8 +197,8 @@ end
 function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
     @assert method in (:ve, :bp, :jt) # variable elimination or belief propagation  
 
-    result = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}()
-    largest_bounds = Dict{Symbol,Tuple{Int,Int}}()
+    result = Dict{Any,Tuple{Vector{Float64},Vector{Float64}}}()
+    largest_bounds = Dict{Any,Tuple{Int,Int}}()
 
     count = 0
     while true
@@ -211,7 +215,11 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
                 result[node.address] =  (node.support, exp.(f.table) / (Z * Δ))
             end
         elseif method == :bp
-            @assert is_tree(variable_nodes, factor_nodes)
+            
+            if !is_tree(variable_nodes, factor_nodes)
+                print_dot(variable_nodes, factor_nodes)
+                error("Factor graph is not a tree :(")
+            end
             f, evidence, marginals = belief_propagation(factor_nodes[1], true)
             for (node, ps) in marginals
                 Δ = node.support[2] - node.support[1]
