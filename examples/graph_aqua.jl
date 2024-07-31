@@ -24,9 +24,11 @@ model = @pgm PriorMix begin
     end
 end
 
-@time result = aqua(model, 500, method=:ve);
-@time result = aqua(model, 500, method=:bp);
-@time result = aqua(model, 500, method=:jt);
+N = 40400
+
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
 
 xs, ps = result[:mu]
 plot(xs, ps)
@@ -77,10 +79,10 @@ end
 f = π
 logpdf(Exponential(1/exp(f)),0.)
 
-
-@time result = aqua(model, 200, method=:ve);
-# @time result = aqua(model, 200, method=:bp);
-@time result = aqua(model, 500, method=:jt);
+N = 200
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
 
 xs, ps = result[:w2]
 plot(xs, ps)
