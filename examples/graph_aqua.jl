@@ -3,28 +3,39 @@ using TinyPPL.Graph
 import TinyPPL.Graph: Graph
 
 import Distributions as Dists
+using Plots
 
 
 model = @pgm PriorMix begin
     let N = 10,
         y = [1.6024, 0.880643, -0.792556, -1.02184, -0.530578, 0.494777, -1.51075, -0.630318, -1.18208, 0.187967],
-        #b ~ Bernoulli(0.8),
-        u ~ Uniform(0.,1.),
-        m = if u < 0.8
-            4
-        else
-            -4
-        end,
+        
+        b ~ Bernoulli(0.8),
+        m = (2 * b - 1) * 4,
+        
+        # u ~ Uniform(0.,1.),
+        # m = (2 * (u < 0.8) - 1) * 4,
+
         mu ~ Main.Dists.truncated(Normal(m,0.5),-5.,5)
-        # mu ~ Normal(0,0.5)
 
         [{:y => i} ~ TransformedDistribution(TDist(5), AffineTransform(2., mu)) ↦ y[i] for i in 1:N]
-        #[{:y => i} ~ Normal(mu, 1.) ↦ y[i] for i in 1:N]
 
         mu
     end
 end
-using Plots
+
+result = aqua_ve(model, 500);
+
+xs, x_ps = result[:mu]
+plot(xs, x_ps)
+
+xs, x_ps = result[:u]
+plot(xs, x_ps, ylim=(0,5))
+sum(x_ps[xs .< 0.8]) / sum(x_ps) # u < 0.8 == true
+sum(x_ps[xs .> 0.8]) / sum(x_ps) # u < 0.8 == false
+
+xs, x_ps = result[:b]
+
 
 ys = [1.6024, 0.880643, -0.792556, -1.02184, -0.530578, 0.494777, -1.51075, -0.630318, -1.18208, 0.187967]
 mus = LinRange(-5,5,1000)
@@ -37,7 +48,6 @@ plot(mus, exp.(prior .+ lik))
 
 Random.seed!(0)
 @time traces, lps = likelihood_weighting(model, 10^6)
-# histogram(traces[:mu], normalize=true, legend=false, lc=1)
 histogram(traces[:mu], weights=exp.(lps), normalize=true, legend=false, lc=1)
 
 Random.seed!(0)
@@ -75,15 +85,16 @@ plot(xs, ps)
 
 result = aqua_ve(model, 500);
 
+xs, x_ps = result[:mu]
+plot(xs, x_ps)
+
 xs, x_ps = result[:X]
 ys, y_ps = result[:Y]
 plot(xs, x_ps)
 plot!(ys, y_ps)
 
-xs, x_ps = result[:mu]
-plot(xs, x_ps)
 
-result[:u][2]
+result[:b][2]
 
 Random.seed!(0)
 @time traces, lps = likelihood_weighting(model, 10^6)

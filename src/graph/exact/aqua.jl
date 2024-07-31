@@ -12,6 +12,9 @@ function get_initial_aqua_support(pgm::PGM, node::VariableNode, parents::Vector{
         return Float64[get_observed_value(pgm, node.variable)]
     end
 
+    # we assume that distributions are either discrete or continuous we do not check however
+    is_discrete = false
+
     x0 = Inf
     x1 = -Inf
 
@@ -22,12 +25,27 @@ function get_initial_aqua_support(pgm::PGM, node::VariableNode, parents::Vector{
             X[parent.variable] = value
         end
         d = dist(X)
-        @assert d isa Distributions.ContinuousUnivariateDistribution
-        # TODO: allow discrete again
-        x0 = min(x0, Distributions.quantile(d, l_prec))
-        x1 = max(x1, Distributions.quantile(d, 1-r_prec))
+        if d isa Distributions.ContinuousUnivariateDistribution
+            x0 = min(x0, Distributions.quantile(d, l_prec))
+            x1 = max(x1, Distributions.quantile(d, 1-r_prec))
+        elseif d isa Distributions.DiscreteUnivariateDistribution
+            is_discrete = true
+            if Distributions.hasfinitesupport(d)
+                x0 = min(x0, minimum(d))
+                x1 = max(x1, maximum(d))
+            else
+                x0 = min(x0, Distributions.quantile(d, l_prec))
+                x1 = max(x1, Distributions.quantile(d, 1-r_prec))
+            end
+        else
+            error("Distribution must be continuous")
+        end
     end
-    return Vector{Float64}(LinRange(x0, x1, N))
+    if is_discrete
+        return Vector{Float64}(x0:x1) # stepsize == 1 always
+    else
+        return Vector{Float64}(LinRange(x0, x1, N))
+    end
 end
 
 # conditional probability distribution p(x|parents(x)) for unobserved
@@ -86,23 +104,34 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                 xs, ps = marginal_density_cubes[node.address]
                 l_prec, r_prec = largest_bounds[node.address]
 
+                x0, x1 = xs[1], xs[end]
+                Δ = (xs[2] - xs[1])
+                is_discrete = Δ ≈ 1 # hack, but should work
+
                 # first we try to find an interval such that the ends are below density_thresh
                 if 0 < l_prec && l_prec < 10 || 0 < r_prec && r_prec < 10
-                    if ps[1] > density_thresh
-                        l_prec += 1 # change left quantile bound by order of magnitude
+                    if ps[1] > density_thresh && l_prec < 10
+                        l_prec += 1 # use as counter
+                        x0 -= Δ * max(1, (length(xs) ÷ 10)) # increase interval ~10%
                     end
-                    if ps[end] > density_thresh
-                        r_prec += 1 # change right quantile bound by order of magnitude
+                    if ps[end] > density_thresh && r_prec < 10
+                        r_prec += 1 # use as counter
+                        x1 += Δ * max(1,(length(xs) ÷ 10))
                     end
                     if ps[1] < density_thresh && ps[end] < density_thresh
                         # we are finished with expanding interval -> set to 0
                         largest_bounds[node.address] = (0, 0)
                     else
-                        node.support = get_initial_aqua_support(pgm, node, parents, N, 10.0^(-l_prec), 10.0^(-r_prec))
+                        # node.support = get_initial_aqua_support(pgm, node, parents, N, 10.0^(-l_prec), 10.0^(-r_prec))
+                        if is_discrete
+                            node.support = Vector{Float64}(x0:x1)
+                        else
+                            node.support = Vector{Float64}(LinRange(x0, x1, N))
+                        end
                         did_update_support = true
-                        println(node.address)
-                        println("old support: ", xs[1], " ... ", xs[end], " ", largest_bounds[node.address])
-                        println("new support: ", node.support[1], " ... ", node.support[end], " ($l_prec, $r_prec)")
+                        # println(node.address)
+                        # println("old support: ", xs[1], " ... ", xs[end], " ", largest_bounds[node.address])
+                        # println("new support: ", node.support[1], " ... ", node.support[end], " ($l_prec, $r_prec)")
                         largest_bounds[node.address] = (l_prec, r_prec)
                         continue
                     end
@@ -121,12 +150,15 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                 end
                 x1 = xs[j]
 
+                if is_discrete
+                    xs_new = Vector{Float64}(x0:x1)
+                else
+                    xs_new = Vector{Float64}(LinRange(x0, x1, N))
+                end
 
-                xs_new = Vector{Float64}(LinRange(x0, x1, N))
-
-                println(node.address)
-                println("old support: ", xs[1], " ... ", xs[end])
-                println("new support: ", xs_new[1], " ... ", xs_new[end])
+                # println(node.address)
+                # println("old support: ", xs[1], " ... ", xs[end])
+                # println("new support: ", xs_new[1], " ... ", xs_new[end])
                 
                 node.support = xs_new
                 @assert length(node.support) >= 2
