@@ -2,6 +2,7 @@ using TinyPPL.Distributions
 using TinyPPL.Graph
 import TinyPPL.Graph: Graph
 
+import Pkg; Pkg.activate("test")
 import Distributions as Dists
 using Plots
 
@@ -104,10 +105,10 @@ model = @pgm Tug begin
     end
 end
 
-
-@time result = aqua(model, 200, method=:ve);
-# @time result = aqua(model, 200, method=:bp);
-@time result = aqua(model, 200, method=:jt);
+N = 60
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
 
 xs, ps = result[:alice]
 plot(xs, ps)
@@ -136,9 +137,10 @@ model = @pgm AlterMu begin
 end
 
 
-@time result = aqua(model, 60, method=:ve);
-# @time result = aqua(model, 60, method=:bp);
-@time result = aqua(model, 60, method=:jt);
+N = 60
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
 
 xs, ps = result[:mu1]
 plot(xs, ps)
@@ -165,10 +167,10 @@ model = @pgm AlterMu2 begin
     end
 end
 
-
-@time result = aqua(model, 60, method=:ve);
-# @time result = aqua(model, 60, method=:bp);
-@time result = aqua(model, 60, method=:jt);
+N = 200
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
 
 xs, ps = result[:mu1]
 plot(xs, ps)
@@ -198,7 +200,6 @@ model = @pgm AnovaRP begin
         sigma_y ~ Uniform(0.,100),
         robust_local_tau = [{:tau => i} ~ Uniform(0, 10) for i in 1:N]
 
-        #[Normal(a, sigma_y) ↦ y[i] for i in 1:N]
         [Normal(a, sigma_y / sqrt(max(1e-5,robust_local_tau[i]))) ↦ y[i] for i in 1:N]
 
         
@@ -206,10 +207,10 @@ model = @pgm AnovaRP begin
     end
 end
 
-
-@time result = aqua(model, 60, method=:ve);
-# @time result = aqua(model, 60, method=:bp);
-@time result = aqua(model, 60, method=:jt);
+N = 60
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
 
 xs, ps = result[:a]
 plot(xs, ps)
@@ -219,6 +220,8 @@ Random.seed!(0)
 histogram(traces[:a], normalize=true, legend=false, lc=1,bins=100)
 plot!(xs, ps)
 
+
+
 model = @pgm Model begin
     let X ~ Normal(0.,1.),
         Y ~ Normal(X, 1.)
@@ -227,25 +230,7 @@ model = @pgm Model begin
     end
 end
 
-variable_nodes, factor_nodes = Graph.get_aqua_factor_graph(model)
-
-variable_nodes[1].support
-factor_nodes[1].table
-sum(exp, factor_nodes[1].table)
-
-v = variable_nodes[2]
-f, Z = variable_elimination(model, variable_nodes, factor_nodes, [v.variable], :Greedy)
-ps = exp.(f.table)
-xs = v.support
-
-Δ = xs[2] - xs[1]
-ps = exp.(f.table) / (Z * Δ)
-sum(ps) * Δ ≈ 1
-
-plot(xs, ps)
-
-
-result = aqua_ve(model, 500);
+result = aqua(model, 500);
 
 xs, x_ps = result[:X]
 ys, y_ps = result[:Y]
@@ -259,3 +244,89 @@ Random.seed!(0)
 @time traces, lps = likelihood_weighting(model, 10^6)
 histogram(traces[:X], weights=exp.(lps), normalize=true, legend=false, lc=1)
 plot!(xs, x_ps)
+
+
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Normal(0, 1.),
+        Z ~ Normal(X + Y, 1e-1)
+
+        Z
+    end
+end
+
+result = aqua(model, 100, method=:ve);
+
+xs, x_ps = result[:X]
+ys, y_ps = result[:Y]
+zs, z_ps = result[:Z]
+plot(xs, x_ps)
+plot!(ys, y_ps)
+plot!(zs, z_ps)
+
+
+
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Normal(0, 1.)
+        
+        Normal(X + Y, 1.) ↦ 1.
+    end
+end
+
+result = aqua(model, 100, method=:ve);
+
+
+xs, x_ps = result[:X]
+ys, y_ps = result[:Y]
+plot(xs, x_ps)
+plot!(ys, y_ps)
+
+support, joint = aqua_get_joint(model, result, Address[:X,:Y])
+sum(joint) * (xs[2]-xs[1]) * (ys[2]-ys[1])
+
+heatmap(support[1], support[2], joint)
+
+
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Normal(0, 1.)
+        X + Y
+    end
+end
+
+result = aqua(model, 100, method=:ve);
+
+xs, x_ps = result[:X]
+ys, y_ps = result[:Y]
+plot(xs, x_ps)
+plot!(ys, y_ps)
+
+zs, zps = aqua_get_return_distribution(model, result)
+plot(zs, zps)
+plot!(z -> exp(logpdf(Normal(0,sqrt(2.)),z)))
+
+
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Uniform(0, 1.)
+        X + Y
+    end
+end
+result = aqua(model, 100, method=:ve);
+zs, zps = aqua_get_return_distribution(model, result)
+plot(zs, zps)
+plot!(z -> exp(logpdf(Normal(0.5,sqrt(1+Dists.var(Uniform(0,1)))),z)))
+
+
+
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Normal(0, 1.)
+        X / Y
+    end
+end
+result = aqua(model, 100, method=:ve);
+zs, zps = aqua_get_return_distribution(model, result)
+plot(zs, zps)
+plot!(z -> exp(logpdf(Cauchy(),z)))
