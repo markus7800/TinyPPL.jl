@@ -319,6 +319,17 @@ plot(zs, zps)
 plot!(z -> exp(logpdf(Normal(0.5,sqrt(1+Dists.var(Uniform(0,1)))),z)))
 
 
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Normal(0, 1.)
+        X * Y
+    end
+end
+result = aqua(model, 100, method=:ve);
+zs, zps = aqua_get_return_distribution(model, result, density_thresh=1e-5)
+plot(zs, zps)
+plot!(z -> exp(logpdf(Cauchy(),z)))
+
 
 model = @pgm Model begin
     let X ~ Normal(0.,1.),
@@ -327,6 +338,37 @@ model = @pgm Model begin
     end
 end
 result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result)
+zs, zps = aqua_get_return_distribution(model, result, density_thresh=1e-3)
 plot(zs, zps)
 plot!(z -> exp(logpdf(Cauchy(),z)))
+
+
+
+model = @pgm Model begin
+    let X ~ Bernoulli(0.2),
+        Y ~ Bernoulli(0.5)
+        X + Y
+    end
+end
+result = aqua(model, 100, method=:ve);
+zs, zps = aqua_get_return_distribution(model, result, mode=:cdf)
+
+model = @pgm Model begin
+    let X ~ Normal(0.,1.),
+        Y ~ Bernoulli(0.5)
+        X + Y
+    end
+end
+result = aqua(model, 200, method=:ve);
+zs, zps = aqua_get_return_distribution(model, result, mode=:cdf)
+plot(zs, zps)
+plot!(z -> Dists.cdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
+
+
+result = aqua(model, 200, method=:ve);
+zs, zps = aqua_get_return_distribution(model, result, mode=:pdf, kernel=:sigmoid, kernel_smoothing=0.1)
+plot(zs, zps)
+plot!(z -> Dists.pdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
+
+histogram(randn(10^6) .+ (rand(10^6) .< 0.5), lc=1, normalize=true)
+plot!(z -> exp(logpdf(Normal(0.5, sqrt(1 + 0.5^2)),z)))

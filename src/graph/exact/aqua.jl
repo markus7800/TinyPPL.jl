@@ -308,7 +308,8 @@ function ∇sigmoid_kernel(t, z, c)
     return E / (c * (1 + E)^2)
 end
 
-function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Vector{Float64},Vector{Float64}}}, kernel::Symbol=:linear, kernel_smoothing::Union{Nothing,Float64}=nothing)
+function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Vector{Float64},Vector{Float64}}}; mode::Symbol=:pdf, kernel::Symbol=:linear, kernel_smoothing::Union{Nothing,Float64}=nothing, density_thresh::Float64=1e-5)
+    @assert mode in (:pdf, :cdf)
     @assert kernel in (:linear, :sigmoid)
 
     return_variables = return_expr_variables(pgm)
@@ -332,31 +333,107 @@ function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Ve
     joint = reshape(joint, :)
     retvals = reshape(retvals, :)
 
-    # this is a trick to estimate pdf of return expression by "smoothing" with kernel
-
-    # P(f(X,Y) ≤ z) = ∫ [f(x,y) ≤ z] p(x,y) dx dy
-    #               ≈ ∫ kernel(z, f(x,y)) p(x,y) dx dy
-    # p(z) = ∂/∂z P(f(X,Y) ≤ z) ≈ ∫ ∂/∂z kernel(z, f(x,y)) p(x,y) dx dy
-
     N = length(first(marginals)[2][1])
 
-    zs = Vector{Float64}(LinRange(minimum(retvals), maximum(retvals), N))
-    Δz = zs[2] - zs[1]
-    kernel_smoothing = isnothing(kernel_smoothing) ? (zs[end] - zs[1]) / 100 : kernel_smoothing
-    
-    kernel_func = kernel == :linear ? ∇linear_kernel : ∇sigmoid_kernel
-    zps = zeros(N)
-    for i in eachindex(zps)
-        z = zs[i]
-        # this can be sped up by sorting retvals and only summing over neighbourhood of z
-        for j in eachindex(retvals)
-            f = retvals[j]
-            p = joint[j]
+    z0 = minimum(retvals)
+    z1 = maximum(retvals)
+    is_discrete = all(isinteger.(retvals))
 
-            zps[i] += kernel_func(f, z, kernel_smoothing) * p
+    if mode == :pdf
+        # this is a trick to estimate pdf of return expression by "smoothing" with kernel
+
+        # P(f(X,Y) ≤ z) = ∫ [f(x,y) ≤ z] p(x,y) dx dy
+        #               ≈ ∫ kernel(z, f(x,y)) p(x,y) dx dy
+        # p(z) = ∂/∂z P(f(X,Y) ≤ z) ≈ ∫ ∂/∂z kernel(z, f(x,y)) p(x,y) dx dy
+
+        while true
+            if is_discrete
+                zs = Vector{Float64}(z0:z1)
+            else
+                zs = Vector{Float64}(LinRange(z0, z1, N))
+            end
+            println("new support: ", z0, " ... ", z1)
+
+            kernel_smoothing = isnothing(kernel_smoothing) ? (zs[end] - zs[1]) / 100 : kernel_smoothing
+            kernel_func = kernel == :linear ? ∇linear_kernel : ∇sigmoid_kernel
+
+            Δz = zs[2] - zs[1]
+            zps = zeros(length(zs))
+
+            for i in eachindex(zps)
+                z = zs[i]
+                # this can be sped up by sorting retvals and only summing over neighbourhood of z
+                for j in eachindex(retvals)
+                    f = retvals[j]
+                    p = joint[j]
+
+                    zps[i] += kernel_func(f, z, kernel_smoothing) * p
+                end
+            end
+
+            zps = zps / sum(zps) / Δz 
+
+            i = 1
+            while zps[i] < density_thresh && i < length(zs) / 2
+                i += 1
+            end
+            z0 = zs[i]
+
+            j = length(zs)
+            while zps[j] < density_thresh && j > length(zs) / 2
+                j -= 1
+            end
+            z1 = zs[j]
+
+            did_update_support = 1 < i || j < length(zs)
+            
+            if !did_update_support
+                return zs, zps
+            end
         end
-    end
 
-    return zs, zps / sum(zps) / Δz
+    else # mode == :cdf
+        if is_discrete
+            zs = Vector{Float64}(z0:z1)
+        else
+            zs = Vector{Float64}(LinRange(z0, z1, N))
+        end
+        println("new support: ", z0, " ... ", z1)
+
+        Δz = zs[2] - zs[1]
+        zps = zeros(length(zs))
+
+        for i in eachindex(zps)
+            z = zs[i]
+            for j in eachindex(retvals)
+                f = retvals[j]
+                p = joint[j]
+
+                zps[i] += (f <= z) * p
+            end
+        end
+
+        zps = zps / zps[end]
+        return zs, zps
+
+        # i = 1
+        # while zps[i] < density_thresh && i < length(zs) / 2
+        #     i += 1
+        # end
+        # z0 = zs[i]
+
+        # j = length(zs)
+        # while zps[j] < density_thresh && j > length(zs) / 2
+        #     j -= 1
+        # end
+        # z1 = zs[j]
+
+        # did_update_support = 1 < i || j < length(zs)
+        
+        # if !did_update_support
+        #     return zs, zps
+        # end
+    
+    end
 end
 export aqua_get_return_distribution
