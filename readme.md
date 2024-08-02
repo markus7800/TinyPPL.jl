@@ -424,6 +424,7 @@ end
 |SMC| | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
 |Particle Gibbs| | X | X | [PMCMC](https://www.stats.ox.ac.uk/~doucet/andrieu_doucet_holenstein_PMCMC.pdf)|
 |PGAS| | X | X | [PGAS](https://arxiv.org/abs/1401.0604)|
+|AQUA| | | X | [AQUA](https://www.cs.cornell.edu/~saikatd/papers/aqua-atva21.pdf) |
 
 
 ## Installation

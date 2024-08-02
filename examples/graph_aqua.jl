@@ -237,9 +237,6 @@ ys, y_ps = result[:Y]
 plot(xs, x_ps)
 plot!(ys, y_ps)
 
-
-result[:b][2]
-
 Random.seed!(0)
 @time traces, lps = likelihood_weighting(model, 10^6)
 histogram(traces[:X], weights=exp.(lps), normalize=true, legend=false, lc=1)
@@ -282,7 +279,7 @@ ys, y_ps = result[:Y]
 plot(xs, x_ps)
 plot!(ys, y_ps)
 
-support, joint = aqua_get_joint(model, result, Address[:X,:Y])
+support, joint = aqua_get_joint(model, 100, result, Address[:X,:Y])
 sum(joint) * (xs[2]-xs[1]) * (ys[2]-ys[1])
 
 heatmap(support[1], support[2], joint)
@@ -302,7 +299,7 @@ ys, y_ps = result[:Y]
 plot(xs, x_ps)
 plot!(ys, y_ps)
 
-zs, zps = aqua_get_return_distribution(model, result)
+zs, zps = aqua_get_return_distribution(model, 100, result)
 plot(zs, zps)
 plot!(z -> exp(logpdf(Normal(0,sqrt(2.)),z)))
 
@@ -314,10 +311,9 @@ model = @pgm Model begin
     end
 end
 result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result)
+zs, zps = aqua_get_return_distribution(model, 100, result)
 plot(zs, zps)
 plot!(z -> exp(logpdf(Normal(0.5,sqrt(1+Dists.var(Uniform(0,1)))),z)))
-
 
 model = @pgm Model begin
     let X ~ Normal(0.,1.),
@@ -326,9 +322,18 @@ model = @pgm Model begin
     end
 end
 result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result, density_thresh=1e-5)
+zs, zps = aqua_get_return_distribution(model, 100, result)
+
+model = @pgm Model begin
+    let X ~ Main.Dists.Chisq(1.),
+        Y ~ Main.Dists.Chisq(1.)
+        0.5 * X - 0.5* Y
+    end
+end
+result = aqua(model, 100, method=:ve);
+chi_zs, chi_zps = aqua_get_return_distribution(model, 100, result)
 plot(zs, zps)
-plot!(z -> exp(logpdf(Cauchy(),z)))
+plot!(chi_zs, chi_zps)
 
 
 model = @pgm Model begin
@@ -337,8 +342,9 @@ model = @pgm Model begin
         X / Y
     end
 end
-result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result, density_thresh=1e-3)
+N = 200
+result = aqua(model, N, method=:ve);
+zs, zps = aqua_get_return_distribution(model, N, result, z0=-10.,z1=10.)
 plot(zs, zps)
 plot!(z -> exp(logpdf(Cauchy(),z)))
 
@@ -351,7 +357,51 @@ model = @pgm Model begin
     end
 end
 result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result, mode=:cdf)
+zs, zps = aqua_get_return_distribution(model, 100, result, mode=:pdf)
+zs, zps = aqua_get_return_distribution(model, 100, result, mode=:cdf)
+
+
+model = @pgm Model begin
+    let X ~ Normal(-2,1),
+        Y ~ Normal(2,1),
+        B ~ Bernoulli(0.5)
+
+        if B == 1.
+            X
+        else
+            Y
+        end
+    end
+end
+N = 200
+
+result = aqua(model, N, method=:ve);
+zs, zps = aqua_get_return_distribution(model, N, result, mode=:pdf)
+plot(zs, zps)
+plot!(z -> 0.5 * Dists.pdf(Normal(-2,1),z) + 0.5 * Dists.pdf(Normal(2,1),z))
+
+zs_cdf, zps_cdf = aqua_get_return_distribution(model, N, result, mode=:cdf)
+plot(zs_cdf, zps_cdf)
+plot!(z -> 0.5 * Dists.cdf(Normal(-2,1),z) + 0.5 * Dists.cdf(Normal(2,1),z))
+
+
+function rolling_mean_cdf(x::AbstractVector{Float64}, n::Int)
+    y = similar(x)
+    for i in 1:length(x)
+        y[i] = mean(x[max(1,i-n) : min(length(x),i+n)])
+    end
+    y / y[end]
+end
+repeatf(f, x, n) = n > 1 ? f(repeatf(f, x, n-1)) : f(x)
+
+plot(zs_cdf, rolling_mean_cdf(zps_cdf,2))
+plot!(z -> 0.5 * Dists.cdf(Normal(-2,1),z) + 0.5 * Dists.cdf(Normal(2,1),z))
+
+zps_from_cdf = diff(vcat(0,repeatf(_zps -> rolling_mean_cdf(_zps,1), zps_cdf, 6)))
+zps_from_cdf = zps_from_cdf / sum(zps_from_cdf) / (zs_cdf[2] - zs_cdf[1])
+plot(zs_cdf, zps_from_cdf)
+plot!(z -> 0.5 * Dists.pdf(Normal(-2,1),z) + 0.5 * Dists.pdf(Normal(2,1),z))
+
 
 model = @pgm Model begin
     let X ~ Normal(0.,1.),
@@ -359,14 +409,18 @@ model = @pgm Model begin
         X + Y
     end
 end
-result = aqua(model, 200, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result, mode=:cdf)
+N = 500
+result = aqua(model, N, method=:ve);
+zs, zps = aqua_get_return_distribution(model, N, result, mode=:cdf)
 plot(zs, zps)
 plot!(z -> Dists.cdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
 
+plot(diff(zps))
+sum(diff(zps)) * (zs[2] - zs[1])
 
-result = aqua(model, 200, method=:ve);
-zs, zps = aqua_get_return_distribution(model, result, mode=:pdf, kernel=:sigmoid, kernel_smoothing=0.1)
+
+result = aqua(model, N, method=:ve);
+zs, zps = aqua_get_return_distribution(model, N, result, mode=:pdf)
 plot(zs, zps)
 plot!(z -> Dists.pdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
 

@@ -271,9 +271,8 @@ function get_node_for_address(variable_nodes::Vector{VariableNode}, addr::Addres
 end
 export get_node_for_address
 
-function aqua_get_joint(pgm::PGM, marginals::Dict{Address,Tuple{Vector{Float64},Vector{Float64}}}, joint::Vector{Address})
+function aqua_get_joint(pgm::PGM, N::Int, marginals::Dict{Address,Tuple{Vector{Float64},Vector{Float64}}}, joint::Vector{Address})
 
-    N = length(first(marginals)[2][1])
     expansion_counter = Dict{Address,Int}(addr => BOUNDED_FLAG for (addr, _) in marginals) # do not update supports anymore
     variable_nodes, factor_nodes, did_update_support = get_aqua_factor_graph(pgm, N, marginals, expansion_counter)
     @assert !did_update_support
@@ -308,12 +307,14 @@ function ∇sigmoid_kernel(t, z, c)
     return E / (c * (1 + E)^2)
 end
 
-function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Vector{Float64},Vector{Float64}}}; mode::Symbol=:pdf, kernel::Symbol=:linear, kernel_smoothing::Union{Nothing,Float64}=nothing, density_thresh::Float64=1e-5)
+function aqua_get_return_distribution(pgm::PGM, N::Int, marginals::Dict{Address,Tuple{Vector{Float64},Vector{Float64}}};
+    mode::Symbol=:pdf, kernel::Symbol=:sigmoid, kernel_smoothing::Union{Nothing,Float64}=nothing, density_thresh::Float64=1e-5,
+    z0::Union{Nothing,Float64}=nothing, z1::Union{Nothing,Float64}=nothing)
     @assert mode in (:pdf, :cdf)
     @assert kernel in (:linear, :sigmoid)
 
     return_variables = return_expr_variables(pgm)
-    supports, joint = aqua_get_joint(pgm, marginals, Address[pgm.addresses[v] for v in return_variables])
+    supports, joint = aqua_get_joint(pgm, N, marginals, Address[pgm.addresses[v] for v in return_variables])
 
     retvals = similar(joint)
 
@@ -333,10 +334,8 @@ function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Ve
     joint = reshape(joint, :)
     retvals = reshape(retvals, :)
 
-    N = length(first(marginals)[2][1])
-
-    z0 = minimum(retvals)
-    z1 = maximum(retvals)
+    z0 = isnothing(z0) ? minimum(retvals) : z0
+    z1 = isnothing(z1) ? maximum(retvals) : z1
     is_discrete = all(isinteger.(retvals))
 
     if mode == :pdf
@@ -354,7 +353,7 @@ function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Ve
             end
             println("new support: ", z0, " ... ", z1)
 
-            kernel_smoothing = isnothing(kernel_smoothing) ? (zs[end] - zs[1]) / 100 : kernel_smoothing
+            kernel_smoothing = isnothing(kernel_smoothing) ? (zs[end] - zs[1]) / 200 : kernel_smoothing
             kernel_func = kernel == :linear ? ∇linear_kernel : ∇sigmoid_kernel
 
             Δz = zs[2] - zs[1]
@@ -393,6 +392,9 @@ function aqua_get_return_distribution(pgm::PGM, marginals::Dict{Address,Tuple{Ve
         end
 
     else # mode == :cdf
+        
+        # this should be more accurate in general
+
         if is_discrete
             zs = Vector{Float64}(z0:z1)
         else
