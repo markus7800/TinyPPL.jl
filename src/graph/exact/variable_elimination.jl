@@ -1,12 +1,24 @@
 
-function parse_marginal_variables(pgm::PGM, v::Vector{Int})::Vector{Int}
+function parse_variables(pgm::PGM, v::Vector{Int})::Vector{Int}
     return v
 end
-function parse_marginal_variables(pgm::PGM, addresses::Vector{Any})::Vector{Int}
+function parse_variables(pgm::PGM, addresses::Vector{Any})::Vector{Int}
     addr_to_variable = Dict(addr => i for (i,addr) in enumerate(pgm.addresses))
     return Int[addr_to_variable[addr] for addr in addresses]
 end
+export parse_variables
 
+function get_joint_factor(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
+    res = reduce(factor_product, factor_nodes)
+    evidence = sum(exp, res.table)
+    return res, evidence
+end
+function get_joint_factor(pgm::PGM)
+    variable_nodes, factor_nodes = get_factor_graph(pgm)
+    return get_joint_factor(variable_nodes, factor_nodes)
+end
+
+export get_joint_factor
 
 # eliminates all variables except the marginal_variables.
 # marginal_variables default to the variables in the return expression
@@ -20,7 +32,7 @@ function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, fa
     if isnothing(marginal_variables)
         marginal_variables = return_expr_variables(pgm)
     else
-        marginal_variables = parse_marginal_variables(pgm, marginal_variables)
+        marginal_variables = parse_variables(pgm, marginal_variables)
     end
     variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables, order)
 end

@@ -302,3 +302,128 @@ for ((i, _, m1), (j,_,m2)) in zip(marginals, marginals2)
     @assert i == j
     @assert m1 ≈ m2
 end
+
+
+
+
+using TinyPPL.Graph
+
+
+model = @pgm DiceSum begin
+    let dice1 ~ Categorical(fill(1/6,6)),
+        dice2 ~ Categorical(fill(1/6,6)),
+        dice3 ~ Categorical(fill(1/6,6))
+        Dirac(dice1 + dice2 + dice3) ↦ 5.
+        (dice1,dice2,dice3)
+    end
+end
+
+model = @pgm DiceSum begin
+    let dice1 ~ Categorical(fill(1/6,6)),
+        dice2 ~ Categorical(fill(1/6,6)),
+        dice3 ~ Categorical(fill(1/6,6))
+        Dirac(dice1 + dice2) ↦ 3.
+        Dirac(dice2 + dice3) ↦ 3.
+        (dice1,)
+    end
+end
+# p(d1=1,d2=2,d3=1) = 0.5
+# p(d1=2,d2=1,d3=2) = 0.5
+
+# p(d1=1,d3=1) = 0.5
+# p(d1=2,d3=2) = 0.5
+
+# p(d1=2,d2=1) = 0.5
+# p(d1=1,d2=2) = 0.5
+
+joint, evidence = get_joint_factor(model)
+
+
+res, evidence = variable_elimination(model)
+post = exp.(res.table) ./ evidence
+evaluate_return_expr_over_factor(model, res)
+
+junction_tree, root_cluster_node, root_factor = get_junction_tree(model)
+print_junction_tree(root_cluster_node)
+
+res = belief_propagation(model, calibrate_tree=false)
+get_posterior_for_root_factor(res)
+
+res = belief_propagation(model, calibrate_tree=true)
+get_marginals_from_calibrated_belief_tree(res)
+
+
+begin
+    N = 100000
+    res = sample_from_calibrated_belief_tree(tree, N)
+    freq = Dict{Vector{Float64},Float64}()
+    for i in 1:N
+        X =  res[:,i]
+        if !haskey(freq,X)
+            freq[X] = 0.
+        end
+        freq[X] += 1.0/N
+    end
+    freq
+end
+
+
+res, e = get_return_factor_from_calibrated_belief_tree(model, tree)
+
+exp.(res.table) ./ e
+
+
+joint = [0.0 0.0 0.16666666666666669 0.0 0.0 0.0; 0.0 0.16666666666666669 0.0 0.0 0.0 0.0; 0.16666666666666669 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0;;; 0.0 0.16666666666666669 0.0 0.0 0.0 0.0; 0.16666666666666669 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0;;; 0.16666666666666669 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0;;; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0;;; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0;;; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0]
+marginal = [0.49999999999999994, 0.3333333333333332, 0.1666666666666666, 0.0, 0.0, 0.0]
+
+joint .* reshape(marginal, :, 1, 1) .* reshape(marginal, 1, :, 1) .* reshape(marginal, 1, 1, :)
+
+
+
+
+model = @pgm Chain begin
+    let a1 ~ DiscreteUniform(1,10),
+        a2 ~ DiscreteUniform(a1,10+a1),
+        b1 ~ DiscreteUniform(1,10),
+        b2 ~ DiscreteUniform(b1,10+b1),
+        x ~ DiscreteUniform(-a2,b2)
+        DiscreteUniform(x-5,x+5) ↦ 7
+        a1
+    end
+end
+
+model.addresses
+
+joint, evidence = get_joint_factor(model)
+
+
+log_a1b1 = factor_sum(joint, setdiff(1:model.n_latents, parse_variables(model, Any[:a1, :b1])))
+a1b1 = exp.(log_a1b1.table) / evidence
+heatmap(a1b1)
+
+
+log_a1x = factor_sum(joint, setdiff(1:model.n_latents, parse_variables(model, Any[:a1, :x])))
+a1x = exp.(log_a1x.table) / evidence
+heatmap(a1x)
+
+
+res, evidence = variable_elimination(model)
+post = exp.(res.table) ./ evidence
+evaluate_return_expr_over_factor(model, res)
+bar(post)
+
+
+res = junction_tree_message_passing(model, return_factor_as_root=true, calibrate_tree=true)
+get_posterior_for_root_factor(res)
+get_marginals(res)
+
+print_junction_tree(res.root)
+q = parse_variables(model, Any[:b2, :x])
+q_res, q_e = query(res, q)
+q_res = exp.(q_res.table) / q_e
+q_res ≈ exp.(factor_sum(joint, setdiff(1:model.n_latents, q)).table) / evidence
+heatmap(q_res)
+
+res = belief_propagation(model, calibrate_tree=true)
+get_posterior_for_root_factor(res)
+get_marginals(res)

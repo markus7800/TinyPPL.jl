@@ -1,10 +1,15 @@
 
 
-function get_junction_tree(pgm::PGM; order::Symbol=:Greedy)
+function get_junction_tree(pgm::PGM; order::Symbol=:Greedy, return_factor_as_root::Bool=false)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
-    return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
+    if return_factor_as_root
+        return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
+        root_factor = return_factor
+    else
+        root_factor = factor_nodes[1]
+    end
     elimination_order = get_elimination_order(pgm, variable_nodes, Int[], order)
-    return get_junction_tree(variable_nodes, elimination_order, return_factor)
+    return get_junction_tree(variable_nodes, elimination_order, root_factor)
 end
 
 # PGM 10.1.1
@@ -20,9 +25,10 @@ mutable struct ClusterNode
     parent::Union{ClusterNode, Nothing}
     messages::Vector{FactorNode}
     potential::FactorNode # psi_i = ∏ f for f in factors
+    belief::FactorNode # β_i
     function ClusterNode(cluster::Vector{VariableNode})
         potential = FactorNode(cluster, zeros(Tuple([length(v.support) for v in cluster])))
-        return new(cluster, Set{ClusterNode}(), Set{FactorNode}(), nothing, Vector{FactorNode}(), potential)
+        return new(cluster, Set{ClusterNode}(), Set{FactorNode}(), nothing, Vector{FactorNode}(), potential, potential)
     end
 end
 function Base.show(io::IO, cluster_node::ClusterNode)
@@ -121,20 +127,22 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
         did_change = true
         while did_change
             did_change = false
-            mask = trues(length(junction_tree))
+            ix = 0
             for (i, cluster_node) in enumerate(junction_tree)
                 for neighbour in cluster_node.neighbours
                     if cluster_node.cluster ⊆ neighbour.cluster && length(cluster_node.cluster) < length(neighbour.cluster)
                         merge_cluster_node_into_neighbour(cluster_node, neighbour)
                         # println("merge ", cluster_node, " in ", neighbour)
-                        mask[i] = false
+                        ix = i
                         did_change = true
                         break
                     end
                 end
                 did_change && break
             end
-            junction_tree = junction_tree[mask]
+            if did_change
+                deleteat!(junction_tree,ix)
+            end
         end
     end
 
@@ -166,9 +174,9 @@ function print_junction_tree(root::ClusterNode, tab="")
 end
 export print_junction_tree
 
-function junction_tree_message_passing(pgm::PGM; all_marginals::Bool=false)
-    junction_tree, root_cluster_node, root_factor = get_junction_tree(pgm)
-    junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, all_marginals)
+function junction_tree_message_passing(pgm::PGM; calibrate_tree::Bool=false, return_factor_as_root::Bool=false)
+    junction_tree, root_cluster_node, root_factor = get_junction_tree(pgm, return_factor_as_root=return_factor_as_root)
+    junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, calibrate_tree)
 end
 
 
@@ -216,7 +224,7 @@ function backward(node::ClusterNode)
             child_message = factor_product(child_message, node.messages[j])
         end
 
-        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours))
+        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours)) # TODO: this is ugly
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward(neighbour)
@@ -253,7 +261,7 @@ function backward_with_division(node::ClusterNode)
 
         child_message = _child_message
 
-        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours))
+        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours)) # TODO: this is ugly
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward_with_division(neighbour)
@@ -278,20 +286,23 @@ function get_variable_nodes(junction_tree::Vector{ClusterNode})
     return variable_nodes
 end
 
-function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, all_marginals::Bool; with_division::Bool=false)
+struct JunctionTreeMessagePassingResult
+    is_calibrated::Bool
+    junction_tree::Vector{ClusterNode}
+    root::ClusterNode
+    root_factor::FactorNode
+    evidence::Float64
+end
+Base.show(io::IO, tree::JunctionTreeMessagePassingResult) = print(io, "JunctionTreeMessagePassingResult()")
+
+function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root::ClusterNode, root_factor::FactorNode, calibrate_tree::Bool; with_division::Bool=false)
     @assert root_factor in root.factors || isempty(root_factor.neighbours)
     initialise_potentials(root)
 
     res = forward(root)
     evidence = exp(res.table[1])
 
-    # The message δ_{k → i}(S_ki) multiplies all factors that are reachable from i through k
-    # Thus, β_i(C_i) = ψ_i ∏ δ_{k → i} = ∑_{X - C_i} P(X) (Corollary 10.2)
-    # This, holds for root C_r after forward pass and for all other nodes after backward pass (Corollary 10.1)
-    return_factor = reduce(factor_product, root.messages, init=root.potential)
-    return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
-
-    if all_marginals
+    if calibrate_tree
         # only need backward pass if we want to evaluate all marginals
         if with_division
             backward_with_division(root)
@@ -299,32 +310,105 @@ function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root:
             backward(root)
         end
 
-        variable_nodes = get_variable_nodes(junction_tree)
-       
-        marginals = Vector{Tuple{VariableNode, Vector{Float64}}}(undef, length(variable_nodes))
-        cached_factors = Dict{ClusterNode, FactorNode}()
-        for (i, (v,cluster_node)) in enumerate(variable_nodes)
-            # cluster is the smallest cluster that v belongs to
-            # compute β_i(C_i) = ψ_i ∏ δ_{k → i} = ∑_{X - C_i} P(X)
-            # if we have not already done for other variable that belongs to cluster, cache the result
-            factor = get!(
-                cached_factors, cluster_node,
-                reduce(factor_product, cluster_node.messages, init=cluster_node.potential
-                )
-            )
-            # sum out all other variables to get marginal of v
-            factor = factor_sum(factor, setdiff(factor.neighbours, [v]))
-
-            table = exp.(factor.table)
-            table /= sum(table)
-            marginals[i] = (v, table)
+        # compute β_i(C_i) = ψ_i ∏ δ_{k → i} = ∑_{X - C_i} P(X)
+        for node in junction_tree
+            node.belief = reduce(factor_product, node.messages, init=node.potential)
         end
-
-        return return_factor, evidence, marginals
-    else
-
-        return return_factor, evidence
     end
+
+    return JunctionTreeMessagePassingResult(calibrate_tree, junction_tree, root, root_factor, evidence)
 end
 
 export junction_tree_message_passing
+
+function get_posterior_for_root_factor(res::JunctionTreeMessagePassingResult)
+    # The message δ_{k → i}(S_ki) multiplies all factors that are reachable from i through k
+    # Thus, β_i(C_i) = ψ_i ∏ δ_{k → i} = ∑_{X - C_i} P(X) (Corollary 10.2)
+    # This, holds for root C_r after forward pass and for all other nodes after backward pass (Corollary 10.1)
+    root = res.root
+    root_factor = res.root_factor
+    return_factor = reduce(factor_product, root.messages, init=root.potential)
+    return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
+    return exp.(return_factor.table) ./ res.evidence
+end
+export get_posterior_for_root_factor
+
+function get_marginals(res::JunctionTreeMessagePassingResult)
+    @assert res.is_calibrated
+
+    variable_nodes = get_variable_nodes(res.junction_tree)
+       
+    marginals = Vector{Tuple{VariableNode, Vector{Float64}}}(undef, length(variable_nodes))
+    cached_factors = Dict{ClusterNode, FactorNode}()
+    for (i, (v,cluster_node)) in enumerate(variable_nodes)
+        # cluster is the smallest cluster that v belongs to
+        # if we have not already done for other variable that belongs to cluster, cache the result
+        # sum out all other variables to get marginal of v
+        factor = factor_sum(cluster_node.belief, setdiff(cluster_node.belief.neighbours, [v]))
+
+        table = exp.(factor.table)
+        table /= sum(table)
+        marginals[i] = (v, table)
+    end
+
+    return marginals
+end
+export get_marginals
+
+function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector{Int})
+    @assert res.is_calibrated
+    subtree = ClusterNode[]
+    for node in res.junction_tree
+        if !isempty(marginal_variables ∩ map(v -> v.variable, node.cluster))
+            push!(subtree, node)
+        end
+    end
+
+    root = subtree[1]
+    while !isnothing(root.parent) && root.parent in subtree
+        root = root.parent
+    end
+    for node in subtree
+        _root = node
+        while !isnothing(_root.parent) && _root.parent in subtree
+            _root = _root.parent
+        end
+        @assert _root == root
+    end
+
+
+    variable_nodes_dict = Dict{Int,VariableNode}()
+    factor_nodes = FactorNode[]
+    for node in subtree
+        if node == root
+            factor_node = node.belief
+        else
+            factor_node = node.belief
+            message_from_parent = node.parent.messages[findfirst(n -> n==node, collect(node.parent.neighbours))] # TODO: this is ugly
+            message_to_parent = node.messages[findfirst(n -> n==node.parent, collect(node.neighbours))] # TODO: this is ugly
+            μ = factor_product(message_from_parent, message_to_parent)
+            factor_node = factor_division!(factor_node, μ, EmptyFactorNode(factor_node.neighbours))
+        end
+        push!(factor_nodes, FactorNode(copy(factor_node.neighbours), factor_node.table))
+    end
+    
+    for factor_node in factor_nodes
+        for (i,v) in enumerate(factor_node.neighbours)
+            if !haskey(variable_nodes_dict, v.variable)
+                new_variable_node = VariableNode(v.variable, v.address)
+                new_variable_node.support = copy(v.support)
+                variable_nodes_dict[v.variable] = new_variable_node
+            end
+            variable_node = variable_nodes_dict[v.variable]
+            factor_node.neighbours[i] = variable_node
+            push!(variable_node.neighbours, factor_node)
+        end
+    end
+    variable_nodes = collect(values(variable_nodes_dict))
+    println(factor_nodes)
+    println(variable_nodes)
+    elimination_order = get_greedy_elimination_order(variable_nodes, marginal_variables)
+    return variable_elimination(variable_nodes, elimination_order)
+end
+export query
+

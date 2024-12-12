@@ -10,11 +10,12 @@ function inference(model, show_results=false; algo=:VE, kwargs...)
     # model = get_model() TODO: this does not work for ladder, check why, we have to invoke from Main?
     
     if algo == :VE
-        f, _ = greedy_variable_elimination(model; kwargs...)
+        f, evidence = greedy_variable_elimination(model; kwargs...)
     elseif algo == :BP || algo == :JT
         func = algo == :BP ? belief_propagation : junction_tree_message_passing
         t = func(model; kwargs...)
         f = t[1]
+        evidence = t[2]
         if show_results && length(t) == 3
             marginals = t[3]
             for (_, address, table) in marginals
@@ -26,6 +27,7 @@ function inference(model, show_results=false; algo=:VE, kwargs...)
 
     if show_results
         display(retvals)
+        println("Evidence = ", evidence)
     end
 end
 model = get_model()

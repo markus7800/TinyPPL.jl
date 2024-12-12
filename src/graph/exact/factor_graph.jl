@@ -241,6 +241,8 @@ function factor_div_op(x::Float64, y::Float64)::Float64
         return x - y
     end
 end
+
+# computes B = C / A
 function factor_division!(C::FactorNode, A::FactorNode, B::FactorNode)::FactorNode
     @assert Set(A.neighbours) ∪ Set(B.neighbours) == Set(C.neighbours)
 
