@@ -23,12 +23,13 @@ mutable struct ClusterNode
     neighbours::Set{ClusterNode}
     factors::Set{FactorNode} # each factor f that is associated with ClusterNode, Scope[f] ⊆ C_i
     parent::Union{ClusterNode, Nothing}
+    neighbor_to_ix::Dict{ClusterNode,Int}
     messages::Vector{FactorNode}
     potential::FactorNode # psi_i = ∏ f for f in factors
     belief::FactorNode # β_i
     function ClusterNode(cluster::Vector{VariableNode})
         potential = FactorNode(cluster, zeros(Tuple([length(v.support) for v in cluster])))
-        return new(cluster, Set{ClusterNode}(), Set{FactorNode}(), nothing, Vector{FactorNode}(), potential, potential)
+        return new(cluster, Set{ClusterNode}(), Set{FactorNode}(), nothing, Dict{ClusterNode,Int}(), Vector{FactorNode}(), potential, potential)
     end
 end
 function Base.show(io::IO, cluster_node::ClusterNode)
@@ -146,6 +147,12 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
         end
     end
 
+    
+    for clusternode in junction_tree
+        for (ix, neighbour) in enumerate(clusternode.neighbours)
+            clusternode.neighbor_to_ix[neighbour] = ix
+        end
+    end
 
     # PGM 10.1.2 Theorem 10.1
     # The cluster graph induced by an execution of variable elimination is necessarily a tree.
@@ -237,7 +244,7 @@ function backward(node::ClusterNode)
             child_message = factor_product(child_message, node.messages[j])
         end
 
-        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours)) # TODO: this is ugly
+        index_in_child = neighbour.neighbor_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward(neighbour)
@@ -274,7 +281,7 @@ function backward_with_division(node::ClusterNode)
 
         child_message = _child_message
 
-        index_in_child = findfirst(n -> n==node, collect(neighbour.neighbours)) # TODO: this is ugly
+        index_in_child = neighbour.neighbor_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward_with_division(neighbour)
@@ -428,8 +435,8 @@ function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector
             factor_node = node.belief
         else
             factor_node = node.belief
-            message_from_parent = node.parent.messages[findfirst(n -> n==node, collect(node.parent.neighbours))] # TODO: this is ugly
-            message_to_parent = node.messages[findfirst(n -> n==node.parent, collect(node.neighbours))] # TODO: this is ugly
+            message_from_parent = node.parent.messages[node.parent.neighbor_to_ix[node]]
+            message_to_parent = node.messages[node.neighbor_to_ix[node.parent]]
             μ = factor_product(message_from_parent, message_to_parent)
             factor_node = factor_division!(factor_node, μ, EmptyFactorNode(factor_node.neighbours))
         end
