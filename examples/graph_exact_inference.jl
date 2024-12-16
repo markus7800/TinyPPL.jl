@@ -402,6 +402,11 @@ a1b1 = exp.(log_a1b1.table) / evidence
 heatmap(a1b1)
 
 
+log_a2b2 = factor_sum(joint, setdiff(1:model.n_latents, parse_variables(model, Any[:a2, :b2])))
+a2b2 = exp.(log_a2b2.table) / evidence
+heatmap(a2b2)
+
+
 log_a1x = factor_sum(joint, setdiff(1:model.n_latents, parse_variables(model, Any[:a1, :x])))
 a1x = exp.(log_a1x.table) / evidence
 heatmap(a1x)
@@ -424,6 +429,125 @@ q_res = exp.(q_res.table) / q_e
 q_res ≈ exp.(factor_sum(joint, setdiff(1:model.n_latents, q)).table) / evidence
 heatmap(q_res)
 
+q_joint, q_e = query(res, collect(1:model.n_latents))
+joint.table ≈ q_joint.table
+
 res = belief_propagation(model, calibrate_tree=true)
 get_posterior_for_root_factor(res)
 get_marginals(res)
+
+
+
+joint
+
+y1 = 8
+y2 = 17
+
+T = joint.table[:,y1,:,y2,:]
+
+
+v1 = joint.neighbours[2]
+e1 = fill(-Inf, size(v1.support))
+e1[y1] = 0
+f1 = FactorNode([v1], e1)
+
+v2 = joint.neighbours[4]
+e2 = fill(-Inf, size(v2.support))
+e2[y2] = 0
+f2 = FactorNode([v2], e2)
+
+
+f = factor_product(f1, f2)
+f.table # indicator of evidence
+f.table[y1,y2]
+A = factor_sum(factor_product(joint, f), [v1, v2])
+A.table ≈ T
+
+function factor_condition(factor_node::FactorNode, evidence_ixs::Dict{VariableNode,Int})::FactorNode
+
+    vars = VariableNode[]
+    table_sel = []
+    for v in factor_node.neighbours
+        if haskey(evidence_ixs, v)
+            push!(table_sel, evidence_ixs[v])
+        else
+            push!(table_sel, Colon())
+            push!(vars,v)
+        end
+    end
+
+    table = factor_node.table[table_sel...]
+    return FactorNode(vars, table)
+end
+
+B = factor_condition(joint, Dict(v1 => y1, v2 => y2))
+
+# B = factor_condition(joint, Dict(v1 => y1, v2 => y2, v3 => y3))
+
+sum(exp, joint.table)
+sum(exp, A.table)
+sum(exp, B.table)
+
+A.table ≈ B.table
+
+function get_one_hot_factor(v, y)
+    e = fill(-Inf, size(v.support))
+    e[y] = 0
+    return FactorNode([v], e)
+end
+for _ in 1:10000
+    vs = VariableNode[]
+    ys = Int[]
+    for v in joint.neighbours
+        if rand() < 0.5
+            push!(vs, v)
+            push!(ys, rand(1:length(v.support)))
+        end
+    end
+    if isempty(vs)
+        continue
+    end
+    f = reduce(factor_product, map((t -> get_one_hot_factor(t...)), zip(vs,ys)))
+    # println(f)
+
+    A = factor_sum(factor_product(joint, f), vs)
+    B = factor_condition(joint, Dict(v => y for (v,y) in zip(vs,ys) ))
+    @assert(A.table ≈ B.table)
+end
+
+
+# factor_sum(factor_product(indicatior(X), f(X,Y)), X) == factor_condition(f(X,Y), map(indicator(X)))
+
+
+
+
+
+@time variable_nodes, factor_nodes = read_bif("examples/bif_models/munin.bif");
+@time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
+junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1]);
+@time res = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
+
+print_junction_tree(root_cluster_node)
+pint_dot_junction_tree(junction_tree)
+
+import Random
+begin
+    Random.seed!(0)
+    t1 = 0.
+    t2 = 0.
+    for _ in 1:100
+        v1 = rand(variable_nodes)
+        v2 = rand(variable_nodes)
+        if v1 != v2
+            println([v1, v2])
+            tq1 = @timed greedy_variable_elimination(variable_nodes, factor_nodes, [v1, v2])
+            t1 += tq1.time
+            q1 = tq1.value
+            tq2 = @timed query(res, [v1, v2])
+            t2 += tq2.time
+            q2 = tq2.value
+            @assert isapprox(q1.evidence, q2.evidence, rtol=1e-5)
+        end
+    end
+    println(t1, " vs ", t2)
+end

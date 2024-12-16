@@ -292,27 +292,31 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
 
     if isempty(factor_nodes)
         evidence = sum(exp, tau.table)
-        return FactorNode(VariableNode[],0.), evidence
+        return VariableEliminationResult(FactorNode(VariableNode[],0.), evidence)
     else
         factor_nodes = reduce(∪, values(factor_nodes))
         res = reduce(factor_product, factor_nodes)
         evidence = sum(exp, res.table)
-        return res, evidence
+        return VariableEliminationResult(res, evidence)
     end
 end
 
 function greedy_variable_elimination(pgm::PGM; marginal_variables=nothing)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
-    greedy_variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables=marginal_variables)
-end
-
-function greedy_variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}; marginal_variables=nothing)
-    if isnothing(marginal_variables)
+    if isnothing(marginal_variables) 
         marginal_variables = return_expr_variables(pgm)
     else
-        marginal_variables = parse_marginal_variables(pgm, marginal_variables)
+        marginal_variables = parse_variables(pgm, marginal_variables)
     end
-    greedy_variable_elimination(variable_nodes, marginal_variables)
+    return greedy_variable_elimination(variable_nodes, marginal_variables)
+end
+
+function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int})
+    return greedy_variable_elimination(variable_nodes, marginal_variables)
+end
+
+function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{VariableNode})
+    return greedy_variable_elimination(variable_nodes, Int[v.variable for v in marginal_variables])
 end
 
 export greedy_variable_elimination

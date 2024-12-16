@@ -54,6 +54,18 @@ function Base.show(io::IO, factor_node::FactorNode)
 end
 
 Base.similar(factor_node::FactorNode) = FactorNode(factor_node.neighbours, similar(factor_node.table))
+
+function exp_table(factor_node::FactorNode)
+    return exp.(factor_node.table)
+end
+export exp_table
+
+function exp_normalised_table(factor_node::FactorNode)
+    table = exp_table(factor_node)
+    return table ./ sum(table)
+end
+export exp_normalised_table
+
 export FactorNode
 
 function print_dot(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})

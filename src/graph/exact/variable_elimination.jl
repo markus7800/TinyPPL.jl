@@ -2,6 +2,9 @@
 function parse_variables(pgm::PGM, v::Vector{Int})::Vector{Int}
     return v
 end
+function parse_variables(pgm::PGM, vars::Vector{VariableNode})::Vector{Int}
+    return Int[v.variable for v in vars]
+end
 function parse_variables(pgm::PGM, addresses::Vector{Any})::Vector{Int}
     addr_to_variable = Dict(addr => i for (i,addr) in enumerate(pgm.addresses))
     return Int[addr_to_variable[addr] for addr in addresses]
@@ -34,12 +37,17 @@ function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, fa
     else
         marginal_variables = parse_variables(pgm, marginal_variables)
     end
-    variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables, order)
+    return variable_elimination(pgm, variable_nodes, factor_nodes, marginal_variables, order)
 end
 
 function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int}, order::Symbol)
     elimination_order = get_elimination_order(pgm, variable_nodes, marginal_variables, order)
-    variable_elimination(variable_nodes, elimination_order)
+    return variable_elimination(variable_nodes, elimination_order)
+end
+
+struct VariableEliminationResult
+    factor::FactorNode
+    evidence::Float64
 end
 
 # eliminates all variables specified in elimination_order
@@ -75,12 +83,12 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
     
     if isempty(factor_nodes)
         evidence = sum(exp, tau.table)
-        return FactorNode(VariableNode[],0.), evidence
+        return VariableEliminationResult(FactorNode(VariableNode[],0.), evidence)
     else
         factor_nodes = reduce(∪, values(factor_nodes))
         res = reduce(factor_product, factor_nodes)
         evidence = sum(exp, res.table)
-        return res, evidence
+        return VariableEliminationResult(res, evidence)
     end
 end
 

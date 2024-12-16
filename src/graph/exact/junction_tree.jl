@@ -174,6 +174,19 @@ function print_junction_tree(root::ClusterNode, tab="")
 end
 export print_junction_tree
 
+
+function pint_dot_junction_tree(junction_tree::Vector{ClusterNode})
+    println("graph {")
+    println("  node[shape=box]")
+    for clusternode in junction_tree
+        for node in clusternode.neighbours
+            println("  \"$(clusternode)\\n@$(objectid(clusternode))\" -- \"$(node)\\n@$(objectid(node))\"")
+        end
+    end
+    println("}")
+end
+export pint_dot_junction_tree
+
 function junction_tree_message_passing(pgm::PGM; calibrate_tree::Bool=false, return_factor_as_root::Bool=false)
     junction_tree, root_cluster_node, root_factor = get_junction_tree(pgm, return_factor_as_root=return_factor_as_root)
     junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, calibrate_tree)
@@ -355,19 +368,50 @@ function get_marginals(res::JunctionTreeMessagePassingResult)
 end
 export get_marginals
 
+
+
+# PGM Algorithm 10.4
 function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector{Int})
     @assert res.is_calibrated
-    subtree = ClusterNode[]
+
+    # collect all clusters which contain at least on marginal variable
+    query_nodes = Set{ClusterNode}()
     for node in res.junction_tree
         if !isempty(marginal_variables ∩ map(v -> v.variable, node.cluster))
+            push!(query_nodes, node)
+        end
+    end
+    
+    # compute subtree that contains all nodes
+    path_to_roots = Vector{Vector{ClusterNode}}()
+    for node in query_nodes
+        path_to_root = ClusterNode[node]
+        while !isnothing(node.parent)
+            node = node.parent
+            pushfirst!(path_to_root, node)
+        end
+        push!(path_to_roots, path_to_root)
+    end
+    @assert allequal(path[1] for path in path_to_roots)
+    root = path_to_roots[1][1]
+    i = 1
+    while all(length(path) >= i for path in path_to_roots) && allequal(path[i] for path in path_to_roots)
+        root = path_to_roots[1][i]
+        i += 1
+    end
+
+    subtree = copy(query_nodes)
+    push!(subtree, root)
+    for path in path_to_roots
+        for node in path[i:end]
             push!(subtree, node)
         end
     end
 
-    root = subtree[1]
-    while !isnothing(root.parent) && root.parent in subtree
-        root = root.parent
-    end
+    # println(root)
+    # println(subtree)
+
+    # verify root
     for node in subtree
         _root = node
         while !isnothing(_root.parent) && _root.parent in subtree
@@ -377,7 +421,7 @@ function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector
     end
 
 
-    variable_nodes_dict = Dict{Int,VariableNode}()
+    # compute factors
     factor_nodes = FactorNode[]
     for node in subtree
         if node == root
@@ -389,9 +433,12 @@ function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector
             μ = factor_product(message_from_parent, message_to_parent)
             factor_node = factor_division!(factor_node, μ, EmptyFactorNode(factor_node.neighbours))
         end
+        # copy here in order to not modify node.belief neighbours
         push!(factor_nodes, FactorNode(copy(factor_node.neighbours), factor_node.table))
     end
     
+    # construct new variables for subtree (they are neighbours only of the computed factors)
+    variable_nodes_dict = Dict{Int,VariableNode}()
     for factor_node in factor_nodes
         for (i,v) in enumerate(factor_node.neighbours)
             if !haskey(variable_nodes_dict, v.variable)
@@ -405,10 +452,11 @@ function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector
         end
     end
     variable_nodes = collect(values(variable_nodes_dict))
-    println(factor_nodes)
-    println(variable_nodes)
+    
+    # perform variable elimination
     elimination_order = get_greedy_elimination_order(variable_nodes, marginal_variables)
     return variable_elimination(variable_nodes, elimination_order)
 end
 export query
 
+query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector{VariableNode}) = query(res, Int[v.variable for v in marginal_variables])
