@@ -524,6 +524,8 @@ end
 
 @time variable_nodes, factor_nodes = read_bif("examples/bif_models/survey.bif");
 @time variable_nodes, factor_nodes = read_bif("examples/bif_models/munin.bif");
+@time variable_nodes, factor_nodes = read_bif("examples/bif_models/pathfinder.bif");
+println(length(variable_nodes))
 
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1]);
@@ -615,7 +617,8 @@ node = res.junction_tree[3]
 sample_clusternode(res, node)
 
 Random.seed!(0)
-X, messages = sample_junctiontree_naive(res)
+X, P, messages = sample_junctiontree_naive(res);
+
 for node in res.junction_tree
     I = similar(node.potential)
     I.table .= -Inf
@@ -626,3 +629,8 @@ for node in res.junction_tree
     println(sum(belief))
 end
 
+Random.seed!(0)
+X2, P2, messages = sample_junctiontree_naive_2(res);
+
+X == X2
+P ≈ P2
