@@ -9,6 +9,10 @@ function parse_variables(pgm::PGM, addresses::Vector{Any})::Vector{Int}
     addr_to_variable = Dict(addr => i for (i,addr) in enumerate(pgm.addresses))
     return Int[addr_to_variable[addr] for addr in addresses]
 end
+function parse_variables(pgm::PGM, addresses::Vector{Symbol})::Vector{Int}
+    return parse_variables(pgm, convert(Vector{Any}, addresses))
+end
+
 export parse_variables
 
 function get_joint_factor(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})

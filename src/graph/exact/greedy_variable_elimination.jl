@@ -261,6 +261,7 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
     # we make heap such that we can simply pop the best node to eliminate
     reduction_size, reduction_size_heap = initialise_reduction_size_heap(variable_nodes, marginal_variables)
 
+    local tau::FactorNode
     @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
         r = pop!(reduction_size_heap)
         node = r.v

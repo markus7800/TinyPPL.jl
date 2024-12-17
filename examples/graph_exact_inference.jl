@@ -522,13 +522,15 @@ end
 
 
 
+@time variable_nodes, factor_nodes = read_bif("examples/bif_models/survey.bif");
 @time variable_nodes, factor_nodes = read_bif("examples/bif_models/munin.bif");
+
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1]);
 @time res = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
 
 print_junction_tree(root_cluster_node)
-pint_dot_junction_tree(junction_tree)
+print_dot_junction_tree(junction_tree)
 
 import Random
 begin
@@ -551,3 +553,76 @@ begin
     end
     println(t1, " vs ", t2)
 end
+
+
+model = @pgm Indep begin
+    let x ~ DiscreteUniform(0,5),
+        y ~ DiscreteUniform(0,x),
+        a ~ DiscreteUniform(0,5),
+        b ~ DiscreteUniform(0,a)
+        (x,b)
+    end
+end
+res = junction_tree_message_passing(model, return_factor_as_root=true, calibrate_tree=true)
+print_dot_junction_tree(res.junction_tree)
+q = query(res, parse_variables(model,[:x,:y]))
+exp_normalised_table(q.factor)
+
+q = greedy_variable_elimination(model, marginal_variables=parse_variables(model,[:x,:y]))
+exp_normalised_table(q.factor)
+
+
+
+model = @pgm Diamond begin
+    let a ~ DiscreteUniform(1, 3),
+        b1 ~ DiscreteUniform(0, 2*a),
+        b2 ~ DiscreteUniform(0, 2*a),
+        c11 ~ DiscreteUniform(0, 2*b1),
+        c12 ~ DiscreteUniform(0, 2*b1),
+        c21 ~ DiscreteUniform(0, 2*b2),
+        c22 ~ DiscreteUniform(0, 2*b2),
+        d1 ~ DiscreteUniform(0, c11 + c12),
+        d2 ~ DiscreteUniform(0, c21 + c21),
+        e ~ DiscreteUniform(0, d1 + d2)
+        {:f} ~ DiscreteUniform(e-1,e+1) ↦ 5
+        a
+    end
+end
+
+model = @pgm Diamond begin
+    let a ~ DiscreteUniform(1, 3),
+        b1 ~ DiscreteUniform(0, 2*a),
+        b2 ~ DiscreteUniform(0, 2*a),
+        c ~ DiscreteUniform(0, (b1 + b2) ÷ 2)
+        {:d} ~ DiscreteUniform(c-1,c+1) ↦ 5
+        a
+    end
+end
+
+res = greedy_variable_elimination(model, marginal_variables=parse_variables(model, [:c]))
+exp_normalised_table(res.factor)
+
+res = junction_tree_message_passing(model, return_factor_as_root=true, calibrate_tree=true)
+print_dot_junction_tree(res.junction_tree)
+get_posterior_for_root_factor(res)
+
+q = query(res, parse_variables(model, [:c]))
+exp_normalised_table(q.factor)
+
+
+node = res.junction_tree[3]
+# Random.seed!(0)
+sample_clusternode(res, node)
+
+Random.seed!(0)
+X, messages = sample_junctiontree_naive(res)
+for node in res.junction_tree
+    I = similar(node.potential)
+    I.table .= -Inf
+    I.table[[X[v.variable] for v in node.potential.neighbours]...] = 0
+
+    belief = exp.(reduce(factor_product, messages[node], init=factor_product(I,node.potential)).table)
+
+    println(sum(belief))
+end
+
