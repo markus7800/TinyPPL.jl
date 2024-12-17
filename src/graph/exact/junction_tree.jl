@@ -662,8 +662,17 @@ function _sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult, sam
     ps = ps / Z
     @assert P_current ≈ Z # we only have messages (updated evidence) from nodes above node (on path from node to root)
 
+    table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
+    ps2 = exp.(node.belief.table[table_sel...])
+    Z2 = sum(ps2)
+    ps2 = ps2 / Z2
+    @assert sum(ps[table_sel...]) ≈ 1.
+    @assert ps[table_sel...] ≈ ps2
+    
+
+
     c = CartesianIndices(ps)[rand(Categorical(reshape(ps,:)))]
-    println("Sample ", node, ": c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", P=", P_current)
+    println("Sample ", node, ": c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", Z2=", Z2, ", P=", P_current)
     push!(P, ps[c])
     P_current *= ps[c]
 
