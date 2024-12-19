@@ -525,7 +525,7 @@ end
 @time variable_nodes, factor_nodes = read_bif("examples/bif_models/survey.bif");
 @time variable_nodes, factor_nodes = read_bif("examples/bif_models/munin.bif");
 @time variable_nodes, factor_nodes = read_bif("examples/bif_models/pathfinder.bif");
-println(length(variable_nodes))
+length(variable_nodes)
 
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1]);
@@ -612,25 +612,122 @@ q = query(res, parse_variables(model, [:c]))
 exp_normalised_table(q.factor)
 
 
-node = res.junction_tree[3]
-# Random.seed!(0)
-sample_clusternode(res, node)
+function print_messages_Z(res, X, messages)
+    for node in res.junction_tree
+        I = similar(node.potential)
+        I.table .= -Inf
+        sel = [get(X, v.variable, Colon()) for v in I.neighbours]
+        if Colon() in sel
+            I.table[sel...] .= 0
+        else
+            I.table[sel...] = 0
+        end
 
-Random.seed!(0)
-X, P, messages = sample_junctiontree_naive(res);
+        belief = exp.(reduce(factor_product, messages[node], init=factor_product(I,node.potential)).table)
 
-for node in res.junction_tree
-    I = similar(node.potential)
-    I.table .= -Inf
-    I.table[[X[v.variable] for v in node.potential.neighbours]...] = 0
-
-    belief = exp.(reduce(factor_product, messages[node], init=factor_product(I,node.potential)).table)
-
-    println(sum(belief))
+        print(sum(belief))
+        if node == res.root
+            println(" root")
+        else
+            println()
+        end
+    end
 end
 
 Random.seed!(0)
-X2, P2, messages = sample_junctiontree_naive_2(res);
+X1, P1, messages1 = sample_junctiontree_naive(res, :dfs);
 
-X == X2
-P ≈ P2
+
+print_messages_Z(res, X1, messages1)
+
+
+for node in res.junction_tree
+
+    I = similar(node.belief)
+    I.table .= -Inf
+    sel = [get(X1, v.variable, Colon()) for v in I.neighbours]
+    if Colon() in sel
+        I.table[sel...] .= 0
+    else
+        I.table[sel...] = 0
+    end
+
+    new_belief = reduce(factor_product, messages1[node], init=factor_product(node.potential, I))
+    new_belief_table = exp.(new_belief.table)
+    new_Z = sum(new_belief_table)
+    new_belief_table = new_belief_table ./ new_Z
+    old_belief_selected = factor_product(node.belief, I)
+    old_belief_selected_table = exp.(old_belief_selected.table)
+    old_Z = sum(old_belief_selected_table)
+    old_belief_selected_table = old_belief_selected_table ./ old_Z
+    println(node, ": ", new_belief_table ≈ old_belief_selected_table, " ", new_Z)
+    # if !(new_belief_table ≈ old_belief_selected_table)
+    #     println(new_belief_table[.!(new_belief_table .≈ old_belief_selected_table)])
+    #     println("versus")
+    #     println(old_belief_selected_table[.!(new_belief_table .≈ old_belief_selected_table)])
+    # end
+end
+
+for node in res.junction_tree
+    ix_to_neighbour = Dict(ix => n for (n, ix) in node.neighbour_to_ix)
+    for (i,(msg1, msg2)) in enumerate(zip(messages1[node], node.messages))
+        I = similar(msg1)
+        I.table .= -Inf
+        sel = [get(X1, v.variable, Colon()) for v in msg1.neighbours]
+        if Colon() in sel
+            I.table[sel...] .= 0
+        else
+            I.table[sel...] = 0
+        end
+        msg1_table = exp.(msg1.table)
+        Z1 = sum(msg1_table)
+        msg2_table = exp.(factor_product(I, msg2).table)
+        Z2 = sum(msg2_table)
+        if !(msg1.table ≈ msg2.table || msg1_table ./ Z1 ≈ msg2_table ./ Z2)
+            println(ix_to_neighbour[i], " to ", node)
+            println(msg1)
+            println(exp.(msg1.table) ./ sum(exp, msg1.table))
+            println("and")
+            println(msg1_table ./ Z1)
+            println("vs")
+            println(exp.(msg2.table) ./ sum(exp, msg2.table))
+            println("and")
+            println(msg2_table ./ Z2)
+        end
+        # @assert msg1_table ./ Z1 ≈ msg2_table ./ Z2
+        # println(Z1, " vs ", Z2, ": ")
+        # if !(msg1_table ./ Z1 ≈ msg2_table ./ Z2)
+        #     println(maximum(abs, msg1_table ./ Z1 .- msg2_table ./ Z2))
+        # end
+    end
+end
+
+Random.seed!(0)
+X2, P2, messages2 = sample_junctiontree_naive_2(res);
+print_messages_Z(res, X2, messages2)
+
+
+X1 == X2
+P1 ≈ P2
+
+for node in res.junction_tree
+    # message from parent to child
+    for child in node.neighbours
+        child == node.parent && continue
+        println(node, " to ", child)
+        ix = child.neighbour_to_ix[node]
+        msg1 = exp.(messages1[child][ix].table)
+        msg2 = exp.(messages2[child][ix].table)
+        Z1 = sum(msg1)
+        Z2 = sum(msg2)
+        println(Z1, " vs ", Z2, " ", msg1 ./ Z1 ≈ msg2 ./ Z2)
+    end
+    # if !isnothing(node.parent)
+    #     ix = node.neighbour_to_ix[node.parent]
+    #     msg1 = exp.(messages1[node][ix].table)
+    #     msg2 = exp.(messages2[node][ix].table)
+    #     Z1 = sum(msg1)
+    #     Z2 = sum(msg2)
+    #     println(Z1, " vs ", Z2, " ", msg1 ./ Z1 ≈ msg2 ./ Z2)
+    # end
+end

@@ -23,8 +23,8 @@ mutable struct ClusterNode
     neighbours::Set{ClusterNode}
     factors::Set{FactorNode} # each factor f that is associated with ClusterNode, Scope[f] ⊆ C_i
     parent::Union{ClusterNode, Nothing}
-    neighbor_to_ix::Dict{ClusterNode,Int}
-    messages::Vector{FactorNode} # messages to node from neigbours in order of neighbor_to_ix
+    neighbour_to_ix::Dict{ClusterNode,Int}
+    messages::Vector{FactorNode} # messages to node from neigbours in order of neighbour_to_ix
     potential::FactorNode # psi_i = ∏ f for f in factors
     belief::FactorNode # β_i
     function ClusterNode(cluster::Vector{VariableNode})
@@ -153,7 +153,7 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
     
     for clusternode in junction_tree
         for (ix, neighbour) in enumerate(clusternode.neighbours)
-            clusternode.neighbor_to_ix[neighbour] = ix
+            clusternode.neighbour_to_ix[neighbour] = ix
         end
     end
 
@@ -252,7 +252,7 @@ function backward(node::ClusterNode, parent::Union{ClusterNode, Nothing})
             child_message = factor_product(child_message, node.messages[j])
         end
 
-        index_in_child = neighbour.neighbor_to_ix[node]
+        index_in_child = neighbour.neighbour_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward(neighbour, node)
@@ -289,7 +289,7 @@ function backward_with_division(node::ClusterNode, parent::Union{ClusterNode, No
 
         child_message = _child_message
 
-        index_in_child = neighbour.neighbor_to_ix[node]
+        index_in_child = neighbour.neighbour_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
         backward_with_division(neighbour, parent)
@@ -446,8 +446,8 @@ function query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector
             factor_node = node.belief
         else
             factor_node = node.belief
-            message_from_parent = node.parent.messages[node.parent.neighbor_to_ix[node]]
-            message_to_parent = node.messages[node.neighbor_to_ix[node.parent]]
+            message_from_parent = node.parent.messages[node.parent.neighbour_to_ix[node]]
+            message_to_parent = node.messages[node.neighbour_to_ix[node.parent]]
             μ = factor_product(message_from_parent, message_to_parent)
             factor_node = factor_division!(factor_node, μ, EmptyFactorNode(factor_node.neighbours))
         end
@@ -479,75 +479,6 @@ export query
 
 query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector{VariableNode}) = query(res, Int[v.variable for v in marginal_variables])
 
-
-function sample_clusternode(res::JunctionTreeMessagePassingResult, node::ClusterNode)
-    @assert res.is_calibrated
-
-
-    ps = exp.(node.belief.table) ./ res.evidence
-    @assert sum(ps) ≈ 1
-
-    c = CartesianIndices(ps)[rand(Categorical(reshape(ps,:)))]
-    println(c, ", ", ps[c], ", ", log(ps[c]))
-
-    I = similar(node.belief)
-    I.table .= -Inf
-    I.table[c] = 0
-
-    X = Dict{Int,Int}()
-    for (i,v) in enumerate(node.belief.neighbours)
-        X[v.variable] = c[i]
-    end
-
-    for neighbour in node.neighbours
-        child_message = factor_product(I, node.potential)
-        for (j, n) in enumerate(node.neighbours)
-            n == neighbour && continue
-            child_message = factor_product(child_message, node.messages[j])
-        end
-
-        index_in_child = neighbour.neighbor_to_ix[node]
-        neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
-
-
-        new_message = factor_product(I, node.belief)
-        new_message = factor_sum(new_message, setdiff(node.cluster, neighbour.cluster))
-
-        index_in_child = neighbour.neighbor_to_ix[node]
-        old_message = neighbour.messages[index_in_child]
-
-        println(new_message.table)
-        println(old_message.table)
-
-        new_neighbour_messages = copy(neighbour.messages)
-        new_neighbour_messages[index_in_child] = new_message
-
-        new_neighbour_belief = reduce(factor_product, new_neighbour_messages, init=neighbour.potential)
-        new_neighbour_belief_table = exp.(new_neighbour_belief.table)
-        println(sum(new_neighbour_belief_table), " vs ", sum(exp,neighbour.belief.table))
-        # display(new_neighbour_belief_table ./ sum(new_neighbour_belief_table))
-
-
-        table_sel = [get(X, v.variable, Colon()) for v in new_neighbour_belief.neighbours]
-        new_belief_table_selected = new_neighbour_belief_table[table_sel...]
-        println(sum(new_belief_table_selected))
-        println(size(new_belief_table_selected))
-
-        old_belief_table_selected = exp.(neighbour.belief.table[table_sel...])
-        println(sum(old_belief_table_selected), " vs ", ps[c] * res.evidence)
-        println(size(old_belief_table_selected))
-
-        println("diff: ", maximum(abs,
-            (new_belief_table_selected ./ sum(new_belief_table_selected)) .-
-            (old_belief_table_selected ./ sum(old_belief_table_selected))
-        ))
-        println((new_belief_table_selected ./ sum(new_belief_table_selected)) ≈ (old_belief_table_selected ./ sum(old_belief_table_selected)))
-    end
-
-end
-
-export sample_clusternode
-
 function dfs_order(node::ClusterNode, parent::Union{Nothing,ClusterNode}, nodes::Vector{ClusterNode})
     push!(nodes, node)
     for neighbour in node.neighbours
@@ -556,22 +487,49 @@ function dfs_order(node::ClusterNode, parent::Union{Nothing,ClusterNode}, nodes:
     end
     return nodes
 end
+function bfs_order(root::ClusterNode, nodes::Vector{ClusterNode})
+    queue = [root]
 
-function sample_junctiontree_naive(res::JunctionTreeMessagePassingResult)
+    while length(queue) > 0
+        node = popfirst!(queue)
+        push!(nodes, node)
+        for neighbour in node.neighbours
+            neighbour == node.parent && continue
+            if !(neighbour in nodes)
+                push!(queue, neighbour)
+            end
+        end
+    end
+    return nodes
+end
+
+function sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, order=:dfs)
     @assert res.is_calibrated
     messages = Dict{ClusterNode, Vector{FactorNode}}(node => copy(node.messages) for node in res.junction_tree)
     X = Dict{Int,Int}()
     sampled = Dict{ClusterNode,Bool}()
     P = Float64[res.evidence]
-    for (i,node) in enumerate(dfs_order(res.root, nothing, ClusterNode[]))# res.junction_tree
-        print("$i/$(length(res.junction_tree)). ")
-        _sample_junctiontree_naive(res, sampled, P, messages, X, node, nothing)
+    if order == :dfs
+        node_order = dfs_order(res.root, nothing, ClusterNode[])
+    elseif order == :bfs
+        node_order = bfs_order(res.root, ClusterNode[])
+    elseif order == :random
+        node_order = Random.shuffle(res.junction_tree)
+    else
+        node_order = res.junction_tree
+    end
+    # node_order = reverse(dfs_order(res.root, nothing, ClusterNode[]))
+    for (i,node) in enumerate(node_order)
+        # print("$i/$(length(res.junction_tree)). ")
+        # println("\n Sample at $node")
+        _sample_junctiontree_naive(res, sampled, P, messages, X, node, nothing, order)
+        # i == 2 && break
     end
     return X, prod(P), messages
 end
 export sample_junctiontree_naive
 
-function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampled::Dict{ClusterNode,Bool}, P::Vector{Float64}, messages::Dict{ClusterNode,Vector{FactorNode}}, X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
+function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampled::Dict{ClusterNode,Bool}, P::Vector{Float64}, messages::Dict{ClusterNode,Vector{FactorNode}}, X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode}, order::Symbol)
 
     if isnothing(parent)
         sampled[node] = true
@@ -586,8 +544,29 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
         Z = sum(ps)
         ps = ps / Z
 
+        println("Visit ", node)
+
+        if order == :dfs || order == :bfs
+            table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
+            ps2 = exp.(node.belief.table[table_sel...])
+            Z2 = sum(ps2)
+            ps2 = ps2 / Z2
+            @assert sum(ps[table_sel...]) ≈ 1.
+            @assert ps[table_sel...] ≈ ps2
+            if !isnothing(node.parent) 
+                old_parent_msg = node.messages[node.neighbour_to_ix[node.parent]]
+                old_t = exp(old_parent_msg.table[[get(X, v.variable, Colon()) for v in old_parent_msg.neighbours]...])
+                new_parent_msg = messages[node][node.neighbour_to_ix[node.parent]]
+                @assert sum(new_parent_msg.table .!= -Inf) == 1
+                new_t = exp(new_parent_msg.table[[get(X, v.variable, Colon()) for v in new_parent_msg.neighbours]...])
+
+                println("Z=", Z, ", Z2=", Z2, ", old_t=", old_t, ", new_t=", new_t, " ~~ ", Z * old_t / new_t)
+                @assert Z * old_t / new_t ≈ Z2
+            end
+        end
+
         c = CartesianIndices(ps)[rand(Categorical(reshape(ps,:)))]
-        println("Sample ", node, ": c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", P=",prod(P))
+        println("sample: c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", P=", prod(P))
         @assert Z ≈ prod(P)
 
         push!(P, ps[c])
@@ -625,11 +604,21 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
             child_message = factor_product(child_message, messages[node][j])
         end
 
-        index_in_child = neighbour.neighbor_to_ix[node]
+        index_in_child = neighbour.neighbour_to_ix[node]
         messages[neighbour][index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
-        # println("Send message from ", node, " to ", neighbour, " at index ", index_in_child)
-        # println(messages[neighbour][index_in_child].table)
-        _sample_junctiontree_naive(res, sampled, P, messages, X, neighbour, node)
+        msg = messages[neighbour][index_in_child]
+
+        if order == :bfs || order == :dfs
+            if get(sampled, node, false) # neighbour == node.parent || isnothing(parent)
+                println("Send message from ", node, " to ", neighbour, " at index ", index_in_child)
+                entry = msg.table[[X[v.variable] for v in msg.neighbours]...]
+                # println(msg].table)
+                
+                @assert sum(msg.table .!= -Inf) == 1
+                println(exp(entry))
+            end
+        end
+        _sample_junctiontree_naive(res, sampled, P, messages, X, neighbour, node, order)
     end
 
 end
@@ -641,7 +630,8 @@ function sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult)
     X = Dict{Int,Int}()
     sampled = Dict{ClusterNode,Bool}()
     P = Float64[res.evidence]
-    _sample_junctiontree_naive_2(res, sampled, P, res.evidence, messages, X, res.root, nothing)
+    message_to_root = _sample_junctiontree_naive_2(res, sampled, P, res.evidence, messages, X, res.root, nothing)
+    # @assert exp(message_to_root.table[]) ≈ prod(P)
     return X, prod(P), messages
 end
 export sample_junctiontree_naive_2
@@ -651,6 +641,7 @@ function _sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult, sam
     sampled[node] = true
     belief = reduce(factor_product, messages[node]; init=node.potential)
 
+    # println("\n Sample at $node")
     # println("\nReceived Messages at ", node)
     # for (i,neighbour) in enumerate(node.neighbours)
     #     println(neighbour, ": ")
@@ -660,7 +651,6 @@ function _sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult, sam
     ps = exp.(belief.table)
     Z = sum(ps)
     ps = ps / Z
-    @assert P_current ≈ Z # we only have messages (updated evidence) from nodes above node (on path from node to root)
 
     table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
     ps2 = exp.(node.belief.table[table_sel...])
@@ -672,13 +662,16 @@ function _sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult, sam
 
 
     c = CartesianIndices(ps)[rand(Categorical(reshape(ps,:)))]
-    println("Sample ", node, ": c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", Z2=", Z2, ", P=", P_current)
-    push!(P, ps[c])
-    P_current *= ps[c]
+    Δ = log(P_current) - log(prod(P))
+    println("Sample ", node, ": c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", P=", prod(P), ", Z2=", Z2, ", P2=", P_current, ", log(P/P2)=", Δ)
+    @assert P_current ≈ Z # we only have messages (updated evidence) from nodes above node (on path from node to root)
+    # @assert P_current ≈ prod(P)
 
     I = similar(belief)
     I.table .= -Inf
     I.table[c] = 0
+
+    push!(P, ps[c])
 
     for (i,v) in enumerate(belief.neighbours)
         X[v.variable] = c[i]
@@ -686,9 +679,14 @@ function _sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult, sam
 
     node_potential = factor_product(I, node.potential)
     
+    new_messages = similar(messages[node])
+    if !isnothing(parent)
+        parent_ix = node.neighbour_to_ix[parent]
+        new_messages[parent_ix] = messages[node][parent_ix]
+    end
 
     # backward
-    for neighbour in node.neighbours
+    for (i,neighbour) in enumerate(node.neighbours)
         neighbour == parent && continue
         child_message = node_potential
         for (j, other_neighbor) in enumerate(node.neighbours)
@@ -696,22 +694,31 @@ function _sample_junctiontree_naive_2(res::JunctionTreeMessagePassingResult, sam
             child_message = factor_product(child_message, messages[node][j])
         end
 
-        index_in_child = neighbour.neighbor_to_ix[node]
-        messages[neighbour][index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
+        index_in_child = neighbour.neighbour_to_ix[node]
+        message_to_child = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
+        # message_to_child.table .-= Δ
+        messages[neighbour][index_in_child] = message_to_child 
         # println("Send message from ", node, " to ", neighbour, " at index ", index_in_child)
         # println(messages[neighbour][index_in_child].table)
 
-        _sample_junctiontree_naive_2(res, sampled, P, P_current, messages, X, neighbour, node)
+        message_from_child = _sample_junctiontree_naive_2(res, sampled, P, P_current * ps[c], messages, X, neighbour, node)
+        # println("Send message from ", neighbour, " to ", node)
+        # println(message_from_child.table)
+        new_messages[i] = message_from_child
     end
 
+    # messages[node] = new_messages
+
     # forward
-    # if !isnothing(node.parent)
-    #     parent_message = factor_product(I, node.potential)
-    #     for (i, neighbour) in enumerate(node.neighbours)
-    #         neighbour == node.parent && continue
-    #         parent_message = factor_product(parent_message, messages[node][i])
-    #     end
-    #     parent_message = factor_sum(parent_message, setdiff(node.cluster, node.parent.cluster))
-    #     messages[node.parent][node.parent.neighbor_to_ix[node]] = parent_message
-    # end
+    parent_message = node_potential
+    for (i, neighbour) in enumerate(node.neighbours)
+        neighbour == parent && continue
+        parent_message = factor_product(parent_message, new_messages[i])
+    end
+    if !isnothing(parent)
+        parent_message = factor_sum(parent_message, setdiff(node.cluster, parent.cluster))
+    else
+        parent_message = factor_sum(parent_message, node.cluster)
+    end
+    return parent_message
 end
