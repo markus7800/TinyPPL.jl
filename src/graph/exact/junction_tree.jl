@@ -503,12 +503,14 @@ function bfs_order(root::ClusterNode, nodes::Vector{ClusterNode})
     return nodes
 end
 
+# PGA 10.3.3.1
 function sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, order=:dfs)
     @assert res.is_calibrated
     messages = Dict{ClusterNode, Vector{FactorNode}}(node => copy(node.messages) for node in res.junction_tree)
     X = Dict{Int,Int}()
     sampled = Dict{ClusterNode,Bool}()
     P = Float64[res.evidence]
+
     if order == :dfs
         node_order = dfs_order(res.root, nothing, ClusterNode[])
     elseif order == :bfs
@@ -518,13 +520,14 @@ function sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, order=
     else
         node_order = res.junction_tree
     end
-    # node_order = reverse(dfs_order(res.root, nothing, ClusterNode[]))
+
+    # we sample from the belief of one node (representing a marginal)
+    # and then iteratively update the belief of all nodes according  to the sampled values
+    # until we sampled from all nodes
     for (i,node) in enumerate(node_order)
-        # print("$i/$(length(res.junction_tree)). ")
-        # println("\n Sample at $node")
         _sample_junctiontree_naive(res, sampled, P, messages, X, node, nothing, order)
-        # i == 2 && break
     end
+
     return X, prod(P) / res.evidence, messages
 end
 export sample_junctiontree_naive
@@ -534,13 +537,10 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
     freshly_sample = isnothing(parent)
     if freshly_sample
         sampled[node] = true
+        # compute current belief at node, it is the marginal over node.cluster
         belief = reduce(factor_product, messages[node]; init=node.potential)
-        # println("\nReceived Messages at ", node)
-        # for (i,neighbour) in enumerate(node.neighbours)
-        #     println(neighbour, ": ")
-        #     println(messages[node][i].table)
-        # end
 
+        # normalise this belief to be able to sample from it
         ps = exp.(belief.table)
         Z = sum(ps)
         ps = ps / Z
@@ -548,27 +548,40 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
         println("Visit ", node)
 
         if order == :dfs || order == :bfs
+            # if the order is dfs or bfs it means that we have visited parent before
+            # and the only updated message (with repspect to the new evidence) comes via the parent
             table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
             ps2 = exp.(node.belief.table[table_sel...])
             Z2 = sum(ps2)
             ps2 = ps2 / Z2
             @assert sum(ps[table_sel...]) ≈ 1.
+            # in this case we have following equality
             @assert ps[table_sel...] ≈ ps2
-            if !isnothing(node.parent) 
-                old_parent_msg = node.messages[node.neighbour_to_ix[node.parent]]
-                old_t = exp(old_parent_msg.table[[get(X, v.variable, Colon()) for v in old_parent_msg.neighbours]...])
-                new_parent_msg = messages[node][node.neighbour_to_ix[node.parent]]
-                @assert sum(new_parent_msg.table .!= -Inf) == 1
-                new_t = exp(new_parent_msg.table[[get(X, v.variable, Colon()) for v in new_parent_msg.neighbours]...])
 
+            if !isnothing(node.parent)
+                # the correct updated belief is new_parent_msg / old_parent_msg * old_belief
+                # the new_parent_msg has form α * 1[C_r,i = e_r,i]
+                # thus updated belief = α * 1[C_r,i = e_r,i] / old_parent_msg * old_belief
+                # 1[C_r,i = e_r,i] / old_parent_msg is also a factor with just one non-null entry because scope[old_parent_msg] == C_r,i
+                old_parent_msg = node.messages[node.neighbour_to_ix[node.parent]]
+                old_t = exp(old_parent_msg.table[[get(X, v.variable, Colon()) for v in old_parent_msg.neighbours]...]) # = 1[C_r,i = e_r,i] / old_parent_msg
+                new_parent_msg = messages[node][node.neighbour_to_ix[node.parent]]
+                @assert sum(new_parent_msg.table .!= -Inf) == 1 # new parent has only one non-null entry, α
+                new_t = exp(new_parent_msg.table[[get(X, v.variable, Colon()) for v in new_parent_msg.neighbours]...]) # = α
+
+                # thus we can compute the normalisation constant from the new and old message, and old belief
                 println("Z=", Z, ", Z2=", Z2, ", old_t=", old_t, ", new_t=", new_t, " ~~ ", Z * old_t / new_t)
                 @assert Z * old_t / new_t ≈ Z2
+            else
+                # the start is the root node which is normalised by res.evidence (as all other nodes at this point)
+                @assert Z ≈ res.evidence
             end
         end
 
+        # sample from categorical distribution (first flatten, then unravel index)
         c = CartesianIndices(ps)[rand(Categorical(reshape(ps,:)))]
         println("sample: c=", c, ", ps[c]=", ps[c], ", Z=", Z, ", P=", prod(P))
-        @assert Z ≈ prod(P)
+        @assert Z ≈ prod(P) # prod(P) = res.evidence * ∏ ps[c]
 
         push!(P, ps[c])
 
@@ -577,10 +590,12 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
         I.table .= -Inf
         I.table[c] = 0
 
+        # collect samples
         for (i,v) in enumerate(belief.neighbours)
             X[v.variable] = c[i]
         end
 
+        # this is the new node potential that we have to send to all other nodes with a backward pass
         node_potential = factor_product(I, node.potential)
 
     elseif get(sampled, node, false)
@@ -590,9 +605,11 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
         I.table .= -Inf
         I.table[[X[v.variable] for v in node.potential.neighbours]...] = 0
 
+        # we have to reflect this in the node potential
         node_potential = factor_product(I, node.potential)
 
     else
+        # node was not sampled before -> use old potential
         node_potential = node.potential
     end
 
@@ -612,18 +629,28 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
 
         if order == :bfs || order == :dfs
             if get(sampled, node, false)
+                # once a node has been sampled (I was added to its potential) it can only send "singular" messages
+                # i.e. messages that have only one non-null entry
                 entry = msg.table[[X[v.variable] for v in msg.neighbours]...]
                 @assert sum(msg.table .!= -Inf) == 1
                 println("... message has to be singular")
-                # println(exp(entry))
 
                 if freshly_sample && neighbour == node.parent
+                    # if the node is freshly sampled, it only received updated messages from the parent
+                    # i.e. all messages from the children are old
+                    # Because we update the node belief with I, this acts as a selector on the old messages and old belief
+
+                    # The message *to* the parent can thus be computed by selecting from the old belief and old messages:
+
+                    # select from old belief
                     t = node_potential.table[[X[v.variable] for v in node_potential.neighbours]...]
                     for (j, other_neighbor) in enumerate(node.neighbours)
                         other_neighbor == neighbour && continue
                         old_msg = node.messages[j]
+                        # select from old messages 
                         t += old_msg.table[[X[v.variable] for v in old_msg.neighbours]...]
                     end
+
                     @assert exp(t) ≈ exp(entry)
                 end
 
@@ -631,13 +658,17 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
                 for (j, other_neighbor) in enumerate(node.neighbours)
                     other_neighbor == neighbour && continue
                     if get(sampled, other_neighbor, false)
+                        # either we have new message from a sampled node
+                        # in this case the message is singular
                         new_msg = messages[node][j]
                         @assert sum(new_msg.table .!= -Inf) == 1
                         t += new_msg.table[[X[v.variable] for v in new_msg.neighbours]...]
                     else
+                        # or we have no new message from other_neighbor
                         old_msg = node.messages[j]
                         new_msg = messages[node][j]
                         @assert (old_msg.table ≈ new_msg.table)
+                        # in this case I in the new node potential acts as selector
                         t += old_msg.table[[X[v.variable] for v in old_msg.neighbours]...]
                     end
                 end
@@ -660,7 +691,9 @@ end
 export sample_junctiontree
 
 function _sample_junctiontree(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
-
+    # depth first visiting of nodes
+    # computes the normalisation Z by summing over the belief
+    # no messages
     table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
     ps = exp.(node.belief.table[table_sel...])
     Z = sum(ps)
@@ -717,39 +750,59 @@ export sample_junctiontree_optimised_messaging
 
 
 function _pass_message_to_all_visited(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
+    # this is an improved message passing scheme for sampling from the junction tree
+    # it only sends messages from already sampled nodes (to either other sampled nodes or neighouring un-sampled nodes)
+    # the messages are all scalar
     if !get(visited, node, false)
         return
     end
 
+    # message passing with division
+    t = node.potential.table[[X[v.variable] for v in node.potential.neighbours]...]
+
+    ts = zeros(length(node.neighbours))
+    for (j, other_neighbor) in enumerate(node.neighbours)
+        if get(visited, other_neighbor, false)
+            ts[j] = messages[node][j]
+        else
+            old_msg = node.messages[j]
+            ts[j] = old_msg.table[[X[v.variable] for v in old_msg.neighbours]...]
+        end
+    end
+
+    t += sum(ts)
+
     for (i,neighbour) in enumerate(node.neighbours)
         neighbour == parent && continue
 
-        t = node.potential.table[[X[v.variable] for v in node.potential.neighbours]...]
-
-        for (j, other_neighbor) in enumerate(node.neighbours)
-            other_neighbor == neighbour && continue
-            if get(visited, other_neighbor, false)
-                t += messages[node][j]
-            else
-                old_msg = node.messages[j]
-                t += old_msg.table[[X[v.variable] for v in old_msg.neighbours]...]
-            end
-        end
+        # message passing without devision
+        # t = node.potential.table[[X[v.variable] for v in node.potential.neighbours]...]
+        # for (j, other_neighbor) in enumerate(node.neighbours)
+        #     other_neighbor == neighbour && continue
+        #     if get(visited, other_neighbor, false)
+        #         t += messages[node][j]
+        #     else
+        #         old_msg = node.messages[j]
+        #         t += old_msg.table[[X[v.variable] for v in old_msg.neighbours]...]
+        #     end
+        # end
 
         index_in_child = neighbour.neighbour_to_ix[node]
-        messages[neighbour][index_in_child] = t
+        messages[neighbour][index_in_child] = t - ts[i]
 
         _pass_message_to_all_visited(res, X, visited, messages, neighbour, node)
     end
 end
 
 function _sample_junctiontree_optimised_messaging(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, Ps::Vector{Float64}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
+    # sampling from junction tree with optimised message passing by learning from the comments in _sample_junctiontree_naive
     visited[node] = true
     # println("Visit ", node)
 
     table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
     ps = exp.(node.belief.table[table_sel...])
 
+    # we can compute Z like this: (this may not be faster though because it requires message passing)
     if !isnothing(node.parent)
         old_parent_msg = node.messages[node.neighbour_to_ix[node.parent]]
         old_t = exp(old_parent_msg.table[[X[v.variable] for v in old_parent_msg.neighbours]...])
@@ -760,7 +813,8 @@ function _sample_junctiontree_optimised_messaging(res::JunctionTreeMessagePassin
     else
         Z = res.evidence
     end
-    @assert Z ≈ sum(ps)
+    # this is true:
+    # @assert Z ≈ sum(ps)
     ps = ps / Z
 
 
