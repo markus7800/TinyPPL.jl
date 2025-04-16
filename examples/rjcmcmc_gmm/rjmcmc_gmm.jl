@@ -13,12 +13,14 @@ Random.seed!(0)
     gmm, (n,), observations,
     aux_model, (n,),
     involution!,
-    5000 * 6;
+    100_000 * 6;
     check_involution=true
 );
 
 # number of times k changes
 sum(traces[:k,i] != traces[:k,i+1] for i in 1:(length(traces)-1))
+
+[mean(traces[:k] .== i) for i in 1:10]
 
 maximum(lp)
 best_trace = traces.data[argmax(lp)]
