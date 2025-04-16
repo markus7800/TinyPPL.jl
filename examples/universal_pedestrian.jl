@@ -24,14 +24,16 @@ args = (Inf,)
 observations = Observations(:distance => 1.1);
 
 
-Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 5_000_000, Evaluation.retval_completion);
-W = exp.(lps);
+Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 50_000_000, Evaluation.retval_completion);
+W = exp.(lps .- logsumexp(lps));
 
 density(lw_retvals, weights=W, legend=false)
+histogram(lw_retvals, weights=W, legend=false, normalize=true)
+yticks!(collect(0.:0.05:1.2), string.(0.:0.05:1.2))
 
 Random.seed!(0); @time traces = lmh(pedestrian, args, observations, 1_000_000; gibbs=false);
 
-Random.seed!(0); @time traces = rwmh(pedestrian, args, observations, 1_000_000, default_var=0.1);
+Random.seed!(0); @time traces = rwmh(pedestrian, args, observations, 10_000_000, default_var=0.1);
 
 histogram(retvals(traces), normalize=true, legend=false)
 density!(lw_retvals, weights=W)
