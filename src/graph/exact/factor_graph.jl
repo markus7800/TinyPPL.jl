@@ -26,8 +26,8 @@ Base.isless(x::VariableNode, y::VariableNode) = x.variable < y.variable
 mutable struct FactorNode <: FactorGraphNode
     neighbours::Vector{VariableNode} # variables
     table::Array{Float64}
-    function FactorNode(neighbours::Vector{VariableNode}, table::Array{Float64})::FactorNode
-        if !issorted(neighbours)
+    function FactorNode(neighbours::Vector{VariableNode}, table::Array{Float64}; disable_sort::Bool=false)::FactorNode
+        if !issorted(neighbours) && !disable_sort
             perm = sortperm(neighbours)
             neighbours = neighbours[perm]
             table = permutedims(table, perm)
