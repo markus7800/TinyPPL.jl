@@ -9,6 +9,7 @@ function normalise(logprobs::Vector{Float64})
     l = m + log(sum(exp, logprobs .- m))
     return logprobs .- l
 end
+export normalise
 
 function logsumexp(x)
     m = maximum(x)
@@ -17,6 +18,7 @@ function logsumexp(x)
     end
     return log(sum(exp, x .- m)) + m
 end
+export logsumexp
 
 sigmoid(x) = 1 / (1 + exp(-x))
 function ∇sigmoid(x)
