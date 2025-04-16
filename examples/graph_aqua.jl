@@ -1,6 +1,5 @@
 using TinyPPL.Distributions
 using TinyPPL.Graph
-import TinyPPL.Graph: Graph
 
 import Pkg; Pkg.activate("test")
 import Distributions as Dists
@@ -426,3 +425,38 @@ plot!(z -> Dists.pdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
 
 histogram(randn(10^6) .+ (rand(10^6) .< 0.5), lc=1, normalize=true)
 plot!(z -> exp(logpdf(Normal(0.5, sqrt(1 + 0.5^2)),z)))
+
+
+
+include("gmm/data.jl")
+
+model = @pgm GMM begin
+    function dirichlet(δ, k)
+        let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
+            w / sum(w)
+        end
+    end
+    let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
+        k = ({:k} ~ Poisson(λ) ↦ 3) + 1,
+        y = $(Main.gt_ys[1:10]),
+        n = length(y),
+        w = dirichlet(δ, k),
+        means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
+        vars = [{:σ²=>j} ~ InverseGamma(α, β) for j in 1:k],
+        z = [{:z=>i} ~ Categorical(w) for i in 1:n]
+
+        [{:y=>i} ~ Normal(means[Int(z[i])], sqrt(vars[Int(z[i])])) ↦ y[i] for i in 1:n]
+        
+        means
+    end
+end
+    
+
+N = 60
+
+@time result = aqua(model, N, method=:ve);
+@time result = aqua(model, N, method=:bp);
+@time result = aqua(model, N, method=:jt);
+
+xs, ps = result[:μ=>1]
+plot(xs, ps)

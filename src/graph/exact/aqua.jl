@@ -236,7 +236,8 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
         
         if method == :ve
             for node in variable_nodes
-                f, Z = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
+                ve_result = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
+                f, Z = ve_result.factor, ve_result.evidence
                 Δ = length(node.support) == 1 ? 1. : node.support[2] - node.support[1] # is not observed variable_node
                 result[node.address] =  (node.support, exp.(f.table) / (Z * Δ))
             end
@@ -246,7 +247,8 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
                 # print_dot(variable_nodes, factor_nodes)
                 error("Factor graph is not a tree :(")
             end
-            f, evidence, marginals = belief_propagation(factor_nodes[1], true)
+            be_result = belief_propagation(factor_nodes[1], true)
+            f, evidence, marginals = get_posterior_for_root_factor(be_result), be_result.evidence, get_marginals(be_result)
             for (node, ps) in marginals
                 Δ = node.support[2] - node.support[1]
                 result[node.address] = (node.support, ps / Δ)
@@ -254,7 +256,8 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
         elseif method == :jt
             elimination_order = get_elimination_order(pgm, variable_nodes, Int[], :Greedy)
             junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1])
-            f, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true)
+            jt_result = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true)
+            f, evidence, marginals = get_posterior_for_root_factor(jt_result), jt_result.evidence, get_marginals(jt_result)
             for (node, ps) in marginals
                 Δ = node.support[2] - node.support[1]
                 result[node.address] = (node.support, ps / Δ)
