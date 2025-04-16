@@ -79,7 +79,7 @@ function likelihood_weighting(model::UniversalModel, args::Tuple, observations::
         logprobs[i] = sampler.W
         result[i] = completion(sampler.trace, retval)
     end
-    return result, normalise(logprobs)
+    return result, logprobs
 end
 
 export likelihood_weighting

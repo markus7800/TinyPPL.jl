@@ -27,7 +27,7 @@ function likelihood_weighting(pgm::PGM, n_samples::Int)
         trace[:,i] = X
     end
 
-    return GraphTraces(pgm, trace, retvals), normalise(logprobs)
+    return GraphTraces(pgm, trace, retvals), logprobs
 end
 
 export likelihood_weighting

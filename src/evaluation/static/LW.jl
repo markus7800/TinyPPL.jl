@@ -40,7 +40,7 @@ function likelihood_weighting(model::StaticModel, args::Tuple, observations::Obs
         traces.retvals[i] = model(args, sampler, observations)
         logprobs[i] = sampler.W
     end
-    return traces, normalise(logprobs)
+    return traces, logprobs
 end
 
 """
@@ -87,7 +87,7 @@ function likelihood_weighting(model::StaticModel, args::Tuple, observations::Dic
         traces.data[:,i] = sampler.trace[1:K]
         logprobs[i] = sampler.W
     end
-    return traces, normalise(logprobs)
+    return traces, logprobs
 end
 
 export likelihood_weighting

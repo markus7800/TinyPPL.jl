@@ -74,7 +74,7 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
         Xs[:,i] = X
     end
     
-    return GraphTraces(pgm, Xs, retvals), normalise(logprobs)
+    return GraphTraces(pgm, Xs, retvals), logprobs
 end
 
 export compile_likelihood_weighting, compiled_likelihood_weighting
