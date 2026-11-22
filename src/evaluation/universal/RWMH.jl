@@ -57,9 +57,9 @@ end
 # This is equivalent to running lmh with setting every proposal distribution
 # to the corresponding RandomWalkProposal competible with addr2var
 function rwmh(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int;
-    default_var::Float64=1., addr2var::Addr2Var=Addr2Var(), gibbs=false)
+    default_var::Float64=1., addr2var::Addr2Var=Addr2Var(), n_updates::Int=1)
     sampler = RWMH(default_var, addr2var)
-    return single_site_sampler(model, args, observations, n_samples, sampler, gibbs)
+    return single_site_sampler(model, args, observations, n_samples, sampler, n_updates)
 end
 
 export rwmh

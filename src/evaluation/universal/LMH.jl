@@ -68,14 +68,19 @@ function sample(sampler::LMH, addr::Address, dist::Distribution, obs::Union{Noth
     return value
 end
 
-# if gibbs = true all addresses in current trace will be resampled in random order in one iteration
-# this is usefull for static models
-# else only one resample address is chosen randomly per iteraion
-# this is worker functoin which may be used by any UniversalSingleSiteSampler (LMH or RWMH)
+# Each single-site update chooses the resample address uniformly from the current trace.
+# `n_updates` single-site updates are performed per returned sample (thinning).
+# The number of updates must not depend on the current state.
+#
+# Note: the original `gibbs = true` option swept over all addresses of the initial trace in random order
+# and only makes sense if the shape of the trace (set of addresses) does not change, i.e. for static models.
+# For universal models, new addresses would never be updated and the site selection depends on the state.
+# this is worker function which may be used by any UniversalSingleSiteSampler (LMH or RWMH)
 # returns samples X_i ~ p(X|Y) 
 # (does not return also `logprobs` log p(X,Y) = log p(X|Y) + log p(Y), which my be used to estimate MAP
 # but can be computed with make_logjoint afterwards.)
-function single_site_sampler(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, sampler::UniversalSingleSiteSampler, gibbs::Bool)
+function single_site_sampler(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, sampler::UniversalSingleSiteSampler, n_updates::Int)
+    @assert n_updates >= 1
     traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
 
@@ -85,16 +90,11 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::O
     Q_current = sampler.Q
     trace_current = sampler.trace_proposed
 
-    addresses = gibbs ? collect(keys(trace_current)) : Any[nothing]
-
     n_accepted = 0
     @progress for i in 1:n_samples
-        if gibbs
-            Random.shuffle!(addresses)
-        else
-            addresses[1] = rand(keys(trace_current))
-        end
-        for addr in addresses # if gibbs = false only one address
+        for _ in 1:n_updates
+            # choose resample address uniformly, log(1/|X|) is accounted for in log_α
+            addr = rand(keys(trace_current))
 
             # reset sampler
             sampler.W = 0.
@@ -136,16 +136,16 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::O
         retvals[i] = retval_current
         traces[i] = trace_current
     end
-    @info "SingleSite $(typeof(sampler))" n_accepted/(n_samples*length(addresses))
+    @info "SingleSite $(typeof(sampler))" n_accepted/(n_samples*n_updates)
 
     return UniversalTraces(traces, retvals)
 end
 
 function lmh(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int; 
-    addr2proposal::Addr2Proposal=Addr2Proposal(), gibbs::Bool=false)
+    addr2proposal::Addr2Proposal=Addr2Proposal(), n_updates::Int=1)
 
     sampler = LMH(addr2proposal)
-    return single_site_sampler(model, args, observations, n_samples, sampler, gibbs)
+    return single_site_sampler(model, args, observations, n_samples, sampler, n_updates)
 end
 
 

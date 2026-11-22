@@ -215,10 +215,15 @@ const MH_MODELS = [
             check(lmh(model, args, obs, 50_000))
         end
     end
-    @testset "gibbs geometric" begin # C17
+    @testset "n_updates geometric" begin # C17
         Random.seed!(0)
-        traces = lmh(geometric, (), geo_obs, 20_000; gibbs=true)
+        traces = lmh(geometric, (), geo_obs, 20_000; n_updates=3)
         @test mean(burn(retvals(traces))) ≈ R.GEO_POST_MEAN atol = 0.1
+    end
+    @testset "n_updates linear_regression" begin # C17
+        Random.seed!(0)
+        traces = lmh(linear_regression, (R.LR_XS,), lr_obs, 20_000; n_updates=2, addr2proposal=Addr2Proposal(:slope => ContinuousRandomWalkProposal(0.1), :intercept => ContinuousRandomWalkProposal(0.5)))
+        @test [mean(burn(traces[:slope])), mean(burn(traces[:intercept]))] ≈ R.LR_POST_MEAN atol = 0.1
     end
     @testset "random walk proposal normal_normal" begin
         Random.seed!(0)
