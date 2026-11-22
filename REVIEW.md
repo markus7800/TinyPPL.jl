@@ -11,7 +11,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
   branching / geometric (universal: changing / unbounded traces), linear_regression (2-D, plated + unplated),
   plated_gamma_poisson (plate of non-identical constrained latents), lazy_branching (`lazy_ifs`),
   exact: chain4 (impossible value), two_coins / orphan_observation (disconnected), many_observations (underflow), burglary.
-- [ ] T2 Not yet covered by tests: C11 (did not reproduce with return factor as BP root), C12, C16 (constrained unvisited branch passed), C18, C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, IMCMC, guides, conditional_smc.
+- [ ] T2 Not yet covered by tests: C12, C16 (constrained unvisited branch passed), C18, C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, IMCMC, guides, conditional_smc.
 - [x] T3 `test/Project.toml` now only lists test deps (Test, Distributions, ForwardDiff, SpecialFunctions + stdlibs), so `Pkg.test()` works. The previous examples environment (Turing, PyPlot, Plots, …) was moved unchanged to `examples/Project.toml` + `examples/Manifest.toml` (run examples with `--project=examples`).
 
 ## C. Inference silently returns wrong results
@@ -43,7 +43,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [x] C10 ✅ `src/graph/exact/factor_graph.jl:323` (+VE/BP/JT) — `log.(sum(exp, …))` without max shift; evidence returned linear → `-Inf`/`NaN` with many observations.
   - fixed: `factor_sum` uses a max-shifted `logsumexp(table, dims)`; VE/BP/JT results have a new field `log_evidence` (`evidence` is kept, but may underflow); posteriors, marginals, `evaluate_return_expr_over_factor`, `exp_normalised_table` and AQUA normalise in log space.
   - not converted: JT sampling / density helpers (`junction_tree.jl` ≈ l. 520–840) still multiply linear probabilities and divide by `res.evidence`.
-- [ ] C11 ✅ `src/graph/exact/belief_propagation.jl:482` — `message .-= …` gives `-Inf - -Inf = NaN`; use `factor_div_op`.
+- [x] C11 ✅ `src/graph/exact/belief_propagation.jl:482` — `message .-= …` gives `-Inf - -Inf = NaN`; use `factor_div_op`.
+  - fixed: `broadcast(factor_div_op, …)` (0/0 = 0). Reproduced with an observation factor with two latent parents that rules out a value (NaN marginals of the other parent); in chain4 the observation factor is a leaf, so the NaN message was never used.
 - [ ] C12 `src/graph/SMC.jl:26,41` — `light_smc` returns pre-resampling weights for resampled particles; linear `marginal_lik`.
 - [ ] C13 `src/graph/SMC.jl:117-119` — PGAS indexes `X_ref` with observed node (BoundsError); future latents never written into `X`.
 - [ ] C14 `src/graph/SMC.jl:73-84` — SMC with custom proposal: latents after last observe don't update `log_w`; `propose_and_logpdf(q, (addr,X))` passes a tuple.

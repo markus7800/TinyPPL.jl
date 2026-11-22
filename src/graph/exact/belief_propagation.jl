@@ -477,10 +477,10 @@ function backward_with_division(belief_node::BeliefNode)
         for (i, child) in enumerate(belief_node.neighbours)
             child == belief_node.parent && continue # we do not send a message to parent
             # message to FactorNode child i 
-            message = copy(base_message)
             # now instead of summing every message up except from parent,
             # we some everything up except from the child we send the message to
-            message .-= belief_node.messages[i]
+            # factor_div_op uses the convention 0 / 0 = 0 (-Inf - -Inf = -Inf), PGM 10.3.1
+            message = broadcast(factor_div_op, base_message, belief_node.messages[i])
 
             # put the message into child
             child.messages[child.parent_index] = message

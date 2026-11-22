@@ -30,6 +30,17 @@ const chain4 = @pgm exact_test_chain4 begin
     end
 end
 
+# observation factor with two latent parents rules out b = 1 (C11)
+#   P(e = 1 | o = 1) ∝ 0.4 * 0.5 vs P(e = 0 | o = 1) ∝ 0.6 * 0.2 → 0.625
+const impossible_branch = @pgm exact_test_impossible_branch begin
+    let a ~ Bernoulli(0.6),
+        b ~ Bernoulli(a == 1. ? 0.7 : 0.2),
+        e ~ Bernoulli(0.4)
+        {:o} ~ Bernoulli(b == 1. ? 0.0 : (e == 1. ? 0.5 : 0.2)) ↦ 1.
+        a
+    end
+end
+
 const two_coins = @pgm exact_test_two_coins begin
     let a ~ Bernoulli(0.5),
         b ~ Bernoulli(0.5)
@@ -233,6 +244,14 @@ end
             @test marginal(get_marginals(res), addr, [0., 1.]) ≈ ref(addr)
         end
     end
+end
+
+@testset "belief propagation with division and impossible values" begin # C11
+    res = bp_with_division(impossible_branch)
+    @test marginal(get_marginals(res), :e, [0., 1.]) ≈ [0.375, 0.625]
+    @test marginal(get_marginals(res), :b, [0., 1.]) ≈ [1., 0.]
+    res = belief_propagation(impossible_branch; calibrate_tree=true, return_factor_as_root=true)
+    @test marginal(get_marginals(res), :e, [0., 1.]) ≈ [0.375, 0.625]
 end
 
 @testset "disconnected components" begin # C9
