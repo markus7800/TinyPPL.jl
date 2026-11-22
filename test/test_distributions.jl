@@ -5,7 +5,7 @@ using Test, Random, Statistics
 import ForwardDiff
 import Distributions
 import Distributions: Normal, Gamma, Beta, Uniform, Exponential, InverseGamma, Laplace, LogNormal, Cauchy,
-    Poisson, Geometric, Bernoulli, Categorical, Binomial, DiscreteUniform, MvNormal, RealInterval, logpdf, pdf
+    Poisson, Geometric, Bernoulli, Categorical, Binomial, DiscreteUniform, MvNormal, RealInterval, TDist, logpdf, pdf
 import TinyPPL.Distributions as TD
 import TinyPPL.Logjoint as LJ
 using ..TestUtils
@@ -135,14 +135,32 @@ end
         (θ -> Cauchy(θ[1], θ[2]), [0.2, 1.5], 1.1),
         (θ -> Poisson(θ[1]), [3.0], 2),
         (θ -> Geometric(θ[1]), [0.3], 2),
+        (θ -> Poisson(θ[1]), [3.0], 2.0), # values stored as Float64 in traces
+        (θ -> Geometric(θ[1]), [0.3], 2),
         (θ -> Bernoulli(θ[1]), [0.3], true),
+        (θ -> Bernoulli(θ[1]), [0.3], false),
+        (θ -> Bernoulli(θ[1]), [0.3], 1.0),
+        (θ -> TDist(θ[1]), [3.5], 1.1),
+        (θ -> Uniform(θ[1], θ[2]), [-0.5, 2.0], 1.1),
+        (θ -> Categorical(θ), [0.2, 0.3, 0.5], 2),
+        (θ -> Exponential(θ[1]), [2.0], 1), # Int value for continuous distribution
     ]
     for (make_dist, θ, x) in cases
         d = make_dist(θ)
-        @testset "$(typeof(d).name.name)" begin
+        @testset "$(typeof(d).name.name) x=$x" begin
             ad_grad = ForwardDiff.gradient(θ -> logpdf(make_dist(θ), x), θ)
-            @test collect(TD.logpdf_params_grad(d, x)) ≈ ad_grad
+            @test collect(Iterators.flatten(TD.logpdf_params_grad(d, x))) ≈ ad_grad
         end
+    end
+    @testset "Binomial" begin # n is discrete, gradient only w.r.t. p
+        ∇n, ∇p = TD.logpdf_params_grad(Binomial(5, 0.3), 2)
+        @test ∇n == 0
+        @test ∇p ≈ ForwardDiff.derivative(p -> logpdf(Binomial(5, p), 2), 0.3)
+    end
+    @testset "constrain" begin
+        @test TD.constrain(Bernoulli(0.5), (1.3,)) == (1.,)
+        @test TD.constrain(Binomial(5, 0.5), (5, -0.2)) == (5, 0.)
+        @test_throws ErrorException TD.constrain(Normal(), (0., 1.))
     end
 end
 
