@@ -39,6 +39,22 @@ const hierarchical_scale = @pgm graph_test_hierarchical_scale begin
     end
 end
 
+# observation y2 depends on past (z) and future (a) latent when resampling at y1 (C13)
+const future_parents = @pgm graph_test_future_parents begin
+    let z ~ Normal(0., 1.)
+        {:y1} ~ Normal(z, 1.) ↦ 1.
+        let a ~ Normal(z, 1.)
+            {:y2} ~ Normal(a + z, 1.) ↦ 2.5
+            z
+        end
+    end
+end
+# linear Gaussian posterior of (z, a)
+const FP_PRIOR_COV = [1. 1.; 1. 2.]
+const FP_H = [1. 0.; 1. 1.]
+const FP_POST_COV = inv(inv(FP_PRIOR_COV) + FP_H' * FP_H)
+const FP_POST_MEAN = FP_POST_COV * FP_H' * [1., 2.5]
+
 const beta_bernoulli = @pgm graph_test_beta_bernoulli begin
     let p ~ Beta(2., 2.),
         ys = [1., 1., 0., 1., 1.]
@@ -458,6 +474,12 @@ end
         Random.seed!(0)
         traces = particle_gibbs(chain, 10, 2_000; ancestral_sampling=true)
         @test mean(burn(traces[:z])) ≈ R.CH_POST_MEAN_Z atol = 0.1
+    end
+    @testset "pgas future_parents" begin # C13
+        Random.seed!(0)
+        traces = particle_gibbs(future_parents, 10, 5_000; ancestral_sampling=true)
+        @test mean(burn(traces[:z])) ≈ FP_POST_MEAN[1] atol = 0.05
+        @test mean(burn(traces[:a])) ≈ FP_POST_MEAN[2] atol = 0.05
     end
     @testset "pgas linear_regression" begin # C13
         Random.seed!(0)

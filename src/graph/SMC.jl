@@ -55,7 +55,9 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
     conditional = !isnothing(X_ref)
     last_observe_node = first(Iterators.reverse(Iterators.filter(node -> isobserved(pgm, node), pgm.topological_order)))
 
-    particles = [Vector{Float64}(undef, pgm.n_latents) for _ in 1:n_particles]
+    # In conditional SMC, all particles are initialised with X_ref, such that the values
+    # of nodes that are not sampled yet are given by X_ref (needed for ancestral sampling).
+    particles = [conditional ? copy(X_ref) : Vector{Float64}(undef, pgm.n_latents) for _ in 1:n_particles]
     log_w = Vector{Float64}(undef, n_particles)
     log_w_tilde = Vector{Float64}(undef, n_particles)
     log_q = zeros(n_particles)
@@ -91,12 +93,8 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 if ancestral_sampling
                     for i in 1:n_particles
                         X = particles[i]
+                        # X[t+1:end] = X_ref[t+1:end] since particles are initialised with X_ref
                         if isnothing(relevant_future_nodes)
-                            for future_node in pgm.topological_order[t+1:end]
-                                if !isobserved(pgm, future_node)
-                                    X[future_node] = X_ref[future_node]
-                                end
-                            end
                             # this takes long because of dispatch
                             # log_γ_future = sum(
                             #     logpdf(get_distribution(pgm, future_node, X), get_value(pgm, future_node, X))
@@ -116,7 +114,7 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                             # relevant_future_nodes[t] = {t+1}
                             # relevant_future_nodes is computed once in particle_gibbs
                             log_γ_future_relevant = sum(
-                                logpdf(get_distribution(pgm, future_node, X), X_ref[future_node])
+                                logpdf(get_distribution(pgm, future_node, X), get_value(pgm, future_node, X))
                                 for future_node in relevant_future_nodes[t]; init=0.
                             )
                             log_w_tilde[i] = log_w[i] + log_γ_future_relevant
@@ -242,12 +240,12 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
     retvals = Vector{Any}(undef, n_samples)
 
     # initialise with SMC
-    smc_traces, lps, marginal_lik = smc(pgm, n_particles; addr2proposal=addr2proposal)
+    smc_traces, lps, log_marginal_lik = smc(pgm, n_particles; addr2proposal=addr2proposal)
     W = exp.(normalise(lps))
     k = rand(Categorical(W))
     X_current = smc_traces[:, k]
     retval_current = smc_traces.retvals[k]
-    marginal_lik_current = marginal_lik
+    log_marginal_lik_current = log_marginal_lik
 
     n_accept = 0
     @progress for i in 1:n_samples
@@ -255,17 +253,16 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
             pgm, n_particles, nothing;
             addr2proposal=addr2proposal
         )
-        marginal_lik_proposed = exp(marginal_lik_proposed)
         W = exp.(normalise(lps))
         k = rand(Categorical(W))
         X_proposed = smc_traces[:,k]
         retval_proposed = smc_traces.retvals[k]
 
-        if rand() < marginal_lik_proposed / marginal_lik_current
+        if log(rand()) < log_marginal_lik_proposed - log_marginal_lik_current
             n_accept += 1
             X_current = X_proposed
             retval_current = retval_proposed
-            marginal_lik_current = marginal_lik_proposed
+            log_marginal_lik_current = log_marginal_lik_proposed
         end
 
         pg_traces[:,i] = X_current
