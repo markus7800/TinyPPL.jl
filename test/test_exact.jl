@@ -31,6 +31,21 @@ const chain4 = @pgm exact_test_chain4 begin
     end
 end
 
+# chain x1 -> ... -> x8 -> y, a good elimination order never creates factors with more than 2 variables (B13)
+const chain8 = @pgm exact_test_chain8 begin
+    let x1 ~ Bernoulli(0.6),
+        x2 ~ Bernoulli(x1 == 1. ? 0.7 : 0.2),
+        x3 ~ Bernoulli(x2 == 1. ? 0.9 : 0.4),
+        x4 ~ Bernoulli(x3 == 1. ? 0.3 : 0.8),
+        x5 ~ Bernoulli(x4 == 1. ? 0.6 : 0.1),
+        x6 ~ Bernoulli(x5 == 1. ? 0.2 : 0.7),
+        x7 ~ Bernoulli(x6 == 1. ? 0.8 : 0.5),
+        x8 ~ Bernoulli(x7 == 1. ? 0.4 : 0.9)
+        {:y} ~ Bernoulli(x8 == 1. ? 0.9 : 0.2) ↦ 1.
+        x1
+    end
+end
+
 # observation factor with two latent parents rules out b = 1 (C11)
 #   P(e = 1 | o = 1) ∝ 0.4 * 0.5 vs P(e = 0 | o = 1) ∝ 0.6 * 0.2 → 0.625
 const impossible_branch = @pgm exact_test_impossible_branch begin
@@ -225,6 +240,40 @@ end
     @testset "factor_sum is numerically stable" begin # C10
         F = FactorNode([X], [-2000., -2001.])
         @test only(factor_sum(F, [X]).table) ≈ -2000 + log(1 + exp(-1))
+    end
+end
+
+# simulates variable elimination with `order` and returns the largest number of variables of a multiplied factor
+function max_factor_scope(factor_nodes, order)
+    scopes = [Set(v.variable for v in f.neighbours) for f in factor_nodes]
+    max_scope = 0
+    for node in order
+        involved = [s for s in scopes if node.variable in s]
+        psi = reduce(∪, involved; init=Set{Int}())
+        max_scope = max(max_scope, length(psi))
+        scopes = [[s for s in scopes if !(node.variable in s)]; [setdiff(psi, [node.variable])]]
+    end
+    return max_scope
+end
+
+@testset "elimination order heuristics" begin # B13
+    variable_nodes, factor_nodes = G.get_factor_graph(chain8)
+    marginal_variables = G.return_expr_variables(chain8)
+    ref = variable_elimination(chain8; order=:Topological)
+    for order in (:MinNeighbours, :MinFill, :WeightedMinFill)
+        @testset "$order" begin
+            elimination_order = G.get_elimination_order(chain8, variable_nodes, marginal_variables, order)
+            @test length(elimination_order) == 7
+            @test !any(v.variable in marginal_variables for v in elimination_order)
+            @test max_factor_scope(factor_nodes, elimination_order) == 2 # no fill edges in a chain
+            res = variable_elimination(chain8; order=order)
+            @test res.log_evidence ≈ ref.log_evidence
+            @test exp.(res.factor.table .- res.log_evidence) ≈ exp.(ref.factor.table .- ref.log_evidence)
+        end
+    end
+    @testset "observed child with two parents $order" for order in (:MinNeighbours, :MinFill, :WeightedMinFill)
+        res = variable_elimination(impossible_branch; order=order)
+        @test res.log_evidence ≈ variable_elimination(impossible_branch; order=:Topological).log_evidence
     end
 end
 
