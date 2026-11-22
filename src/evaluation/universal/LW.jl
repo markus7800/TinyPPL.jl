@@ -74,7 +74,9 @@ function likelihood_weighting(model::UniversalModel, args::Tuple, observations::
     sampler = LW()
     @progress for i in 1:n_samples
         sampler.W = 0.
-        sampler.trace = empty!(sampler.trace)
+        # fresh trace for each sample, since the completion may keep the trace
+        # (traces that are not kept by the completion are garbage collected)
+        sampler.trace = UniversalTrace()
         retval = model(args, sampler, observations)
         logprobs[i] = sampler.W
         result[i] = completion(sampler.trace, retval)

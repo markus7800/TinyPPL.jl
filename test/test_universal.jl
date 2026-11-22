@@ -174,6 +174,10 @@ end
         Random.seed!(0)
         ts, _ = likelihood_weighting(normal_normal, (), nn_obs, 3, (trace, retval) -> trace)
         @test ts[1][:μ] != ts[2][:μ]
+        # each kept trace belongs to its own sample (normal_normal returns μ)
+        res, _ = likelihood_weighting(normal_normal, (), nn_obs, 5, (trace, retval) -> (trace, retval))
+        @test all(trace[:μ] == retval for (trace, retval) in res)
+        @test length(unique(objectid(trace) for (trace, _) in res)) == 5
     end
 end
 
