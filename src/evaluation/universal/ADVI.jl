@@ -20,17 +20,44 @@ function Base.getindex(umf::UniversalMeanField, addr::Address)
 end
 
 
-function rand_and_logpdf(umf::UniversalMeanField)
-    X = ContinuousUniversalTrace()
-    lp = 0.0
-    for (addr, var_dist) in umf.variational_dists
-        x, xlp = rand_and_logpdf(var_dist)
-        lp += xlp
-        X[addr] = x
+"""
+Runs the model and samples each latent from its variational distribution, which approximates the
+*unconstrained* model for continuous distributions (the model receives the constrained value).
+Addresses without variational distribution (not visited during optimisation) are sampled from the prior.
+Returns trace of unconstrained values and its log density.
+"""
+mutable struct UniversalMeanFieldSampler <: UniversalSampler
+    umf::UniversalMeanField
+    X::ContinuousUniversalTrace # unconstrained values
+    lp::Float64
+    UniversalMeanFieldSampler(umf::UniversalMeanField) = new(umf, ContinuousUniversalTrace(), 0.)
+end
+
+function sample(sampler::UniversalMeanFieldSampler, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        return obs
     end
-    sampler = TraceSampler(X)
-    umf.model(umf.args, sampler, umf.observations) # instantiate missing addresses for UniversalTraceTransformer
-    return sampler.X, lp # lp only of samples from umf.variational_dists
+    is_continuous = dist isa Distributions.ContinuousDistribution
+    transformed_dist = is_continuous ? to_unconstrained(dist) : nothing
+    if haskey(sampler.umf.variational_dists, addr)
+        # continuous: x is unconstrained, discrete: x is in support of dist
+        x, xlp = rand_and_logpdf(sampler.umf.variational_dists[addr])
+        value = is_continuous ? transformed_dist.T_inv(x) : x
+    else
+        # not visited during optimisation: sample from prior
+        value = rand(dist)
+        x = is_continuous ? transformed_dist.T(value) : value
+        xlp = is_continuous ? logpdf(transformed_dist, x) : logpdf(dist, x)
+    end
+    sampler.X[addr] = x
+    sampler.lp += xlp
+    return value
+end
+
+function rand_and_logpdf(umf::UniversalMeanField)
+    sampler = UniversalMeanFieldSampler(umf)
+    umf.model(umf.args, sampler, umf.observations)
+    return sampler.X, sampler.lp
 end
 
 # function rand_and_logpdf(umf::UniversalMeanField, n::Int)

@@ -11,7 +11,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
   branching / geometric (universal: changing / unbounded traces), linear_regression (2-D, plated + unplated),
   plated_gamma_poisson (plate of non-identical constrained latents), lazy_branching (`lazy_ifs`),
   exact: chain4 (impossible value), two_coins / orphan_observation (disconnected), many_observations (underflow), burglary.
-- [ ] T2 Not yet covered by tests: C16 (constrained unvisited branch passed), C18, C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, IMCMC, guides, conditional_smc.
+- [ ] T2 Not yet covered by tests: C18, C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, IMCMC, guides, conditional_smc.
 - [x] T3 `test/Project.toml` now only lists test deps (Test, Distributions, ForwardDiff, SpecialFunctions + stdlibs), so `Pkg.test()` works. The previous examples environment (Turing, PyPlot, Plots, …) was moved unchanged to `examples/Project.toml` + `examples/Manifest.toml` (run examples with `--project=examples`).
 
 ## C. Inference silently returns wrong results
@@ -53,7 +53,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: final weights and the last evidence factor are computed after all nodes are processed (`log_γ_new - log_γ - log_q`); works without observations. The tuple is intended as context `x_current` (static SMC passes `(addr, trace, addresses_to_ix)`), so only `StaticProposal`-like proposals make sense in SMC — documented, the context differs between static and graph (A-type inconsistency).
 - [x] C15 ✅ `src/distributions/random_walk.jl:34,53` — truncated split-normal proposal inconsistent with its `logpdf` within 1e-3 of a bound; `var/2` halves variance for bounded proposals; `DiscreteRWProposer` `% 0` for single category.
   - fixed: `ContinuousRWProposer(lower, upper, x, var)` now returns `truncated(Normal(x, √var), lower, upper)` (the split normal with mass-proportional sides is the same distribution; no `var/2`). `DiscreteRWProposer` with a single value is a point mass. The discrete wrap-around (`% b`) is consistent with its truncated geometric `logpdf` (memorylessness); its `var/2` is a heuristic scale and unchanged.
-- [ ] C16 ✅ `src/evaluation/universal/ADVI.jl:31-33,76` — `rand_and_logpdf(::UniversalMeanField)` runs the model via `TraceSampler` on *unconstrained* values → universal `advi_meanfield`/`bbvi` `sample_posterior` crash for constrained parents (Gamma scale → negative σ). Also: unseen addresses filled with constrained prior draws are then transformed as if unconstrained.
+- [x] C16 ✅ `src/evaluation/universal/ADVI.jl:31-33,76` — `rand_and_logpdf(::UniversalMeanField)` runs the model via `TraceSampler` on *unconstrained* values → universal `advi_meanfield`/`bbvi` `sample_posterior` crash for constrained parents (Gamma scale → negative σ). Also: unseen addresses filled with constrained prior draws are then transformed as if unconstrained.
+  - fixed: new `UniversalMeanFieldSampler` runs the model, samples unconstrained values from q and passes `T_inv(x)` to the model; addresses without variational distribution are sampled from the prior and stored as `T(value)`. `lp` is the log density of the returned unconstrained trace (incl. prior-sampled addresses).
 - [ ] C17 ✅ `src/evaluation/universal/LMH.jl:88,116` — Gibbs mode applies `log|X|−log|X'|` correction and uses fixed address list (wrong for universal models).
 - [ ] C18 `src/evaluation/universal/IMCMC.jl:58-65` — missing addresses silently drawn from prior without proposal term.
 - [ ] C19 `src/graph/core/plates.jl:411-439` — plated topological sort ignores edges to/from single plate members.

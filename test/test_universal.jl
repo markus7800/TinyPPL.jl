@@ -294,6 +294,16 @@ end
         traces, _ = sample_posterior(res, 10_000)
         @test [mean(traces[:slope]), mean(traces[:intercept])] ≈ R.LR_POST_MEAN atol = 0.1
     end
+    @testset "addresses without variational distribution are sampled from prior" begin # C16
+        Random.seed!(0)
+        umf = E.UniversalMeanField(Dict{Any,E.VariationalDistribution}(), gamma_scale, (), gs_obs)
+        res = E.UniversalVIResult(umf, X -> transform_to_constrained(X, gamma_scale, (), gs_obs))
+        traces, lps = sample_posterior(res, 10_000)
+        @test mean(traces[:s]) ≈ 2. atol = 0.05 # prior Gamma(2, 1)
+        # lp is the log density of the unconstrained prior sample
+        X, lp = E.rand_and_logpdf(umf)
+        @test lp ≈ logpdf(Gamma(2., 1.), exp(X[:s])) + X[:s]
+    end
     @testset "branching: unvisited addresses" begin # C16
         Random.seed!(0)
         res = advi_meanfield(branching_constrained, (), br_obs, 500, 10, 0.05)
