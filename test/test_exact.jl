@@ -4,6 +4,7 @@ module ExactInferenceTests
 using Test, Random, Statistics
 using TinyPPL.Distributions
 using TinyPPL.Graph
+import Distributions: pdf
 import TinyPPL.Graph as G
 import ..References as R
 using ..TestUtils
@@ -133,6 +134,40 @@ const arcsine_bernoulli = @pgm exact_test_arcsine_bernoulli begin
     end
 end
 const ARCSINE_POST_MEAN = 1.5 / 2 # Beta(1.5, 0.5)
+
+# c has support with only one value, x | y ~ N(0.75, 1/2)
+const single_point_support = @pgm exact_test_single_point_support begin
+    let c ~ Categorical([1.]),
+        x ~ Normal(c, 1.)
+        {:y} ~ Normal(x, 1.) ↦ 0.5
+        x
+    end
+end
+
+# p has infinite density at 0 and an unbounded parent (support of p is expanded)
+const beta_unbounded_parent = @pgm exact_test_beta_unbounded_parent begin
+    let s ~ Gamma(2., 1.),
+        p ~ Beta(0.5, 1. + s)
+        {:y} ~ Bernoulli(p) ↦ 1.
+        p
+    end
+end
+# E[p | y=1] = ∫ Gamma(s; 2, 1) P(y=1|s) E[p|y=1,s] ds / ∫ Gamma(s; 2, 1) P(y=1|s) ds
+# with P(y=1|s) = 0.5 / (1.5 + s) and p | y=1, s ~ Beta(1.5, 1 + s)
+const BETA_UNBOUNDED_POST_MEAN = let ss = range(1e-6, 60, length=600_001), w = pdf.(Gamma(2., 1.), ss) .* 0.5 ./ (1.5 .+ ss)
+    sum(w .* 1.5 ./ (2.5 .+ ss)) / sum(w)
+end
+
+# posterior of n is concentrated at the lower bound 0 of the support
+const poisson_at_bound = @pgm exact_test_poisson_at_bound begin
+    let n ~ Poisson(0.5)
+        {:y} ~ Normal(n, 1.) ↦ -1.
+        n
+    end
+end
+const POISSON_AT_BOUND_POST = let ns = 0:30, w = pdf.(Poisson(0.5), ns) .* pdf.(Normal.(ns, 1.), -1.)
+    w ./ sum(w)
+end
 
 # --------------------------------------------------------------------- helpers
 
@@ -345,7 +380,7 @@ end
 
 # ------------------------------------------------------------------------ AQUA
 
-aqua_mean(result, addr) = ((xs, ps) = result[addr]; sum(xs .* ps) * (xs[2] - xs[1]))
+aqua_mean(result, addr) = ((xs, ps) = result[addr]; sum(xs .* ps) * G.aqua_cell_width(xs))
 
 @testset "aqua" begin
     @testset "normal_normal method=$method" for method in (:ve, :bp, :jt)
@@ -359,6 +394,26 @@ aqua_mean(result, addr) = ((xs, ps) = result[addr]; sum(xs .* ps) * (xs[2] - xs[
     @testset "infinite density at boundary" begin # B12
         result = aqua(arcsine_bernoulli, 100)
         @test aqua_mean(result, :p) ≈ ARCSINE_POST_MEAN atol = 0.02
+    end
+    @testset "support with one value" begin # B12
+        for method in (:ve, :bp, :jt)
+            result = aqua(single_point_support, 100; method=method)
+            @test result[:c] == ([1.], [1.])
+            @test aqua_mean(result, :x) ≈ 0.75 atol = 0.01
+        end
+    end
+    @testset "infinite density at boundary with unbounded parent" begin # B12
+        result = aqua(beta_unbounded_parent, 100)
+        xs, ps = result[:p]
+        @test all(0 .< xs .< 1) # grid does not contain bounds
+        @test all(isfinite, ps)
+        @test aqua_mean(result, :p) ≈ BETA_UNBOUNDED_POST_MEAN atol = 0.02
+    end
+    @testset "discrete support is not expanded beyond bound" begin # B12
+        result = aqua(poisson_at_bound, 100)
+        xs, ps = result[:n]
+        @test xs[1] == 0.
+        @test ps ≈ POISSON_AT_BOUND_POST[1:length(xs)] atol = 1e-4
     end
     @testset "aqua_get_joint" begin # B4
         marginals = aqua(normal_normal, 100)

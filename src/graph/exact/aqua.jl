@@ -57,8 +57,36 @@ function get_initial_aqua_support(pgm::PGM, node::VariableNode, parents::Vector{
     if dist_type <: Distributions.DiscreteUnivariateDistribution
         return Vector{Float64}(x0:x1), is_bounded # stepsize == 1 always
     else
-        return Vector{Float64}(LinRange(x0, x1, N)), is_bounded # parents also need to be bounded
+        return midpoint_grid(x0, x1, N), is_bounded # parents also need to be bounded
     end
+end
+
+# N grid points that are the midpoints of N cells of equal width covering [x0, x1].
+# For bounded distributions, the grid does not contain the bounds, where the density may be infinite (e.g. Beta(0.5, 0.5)).
+function midpoint_grid(x0::Real, x1::Real, N::Int)
+    Δ = (x1 - x0) / N
+    return Vector{Float64}(LinRange(x0 + Δ/2, x1 - Δ/2, N))
+end
+
+# width of the cells represented by the grid points (1 for discrete distributions and for support with only one point)
+aqua_cell_width(support::AbstractVector) = length(support) == 1 ? 1. : support[2] - support[1]
+
+# lower and upper bound of the support of p(x | parents) over all parent values and whether the distribution is discrete
+function get_aqua_support_bounds(pgm::PGM, node::VariableNode, parents::Vector{VariableNode})
+    X = Vector{Float64}(undef, pgm.n_variables)
+    dist = pgm.distributions[node.variable]
+    lo, hi = Inf, -Inf
+    is_discrete = false
+    for assignment in Iterators.product([parent.support for parent in parents]...)
+        for (parent, value) in zip(parents, assignment)
+            X[parent.variable] = value
+        end
+        d = dist(X)
+        lo = min(lo, minimum(d))
+        hi = max(hi, maximum(d))
+        is_discrete = d isa Distributions.DiscreteUnivariateDistribution
+    end
+    return lo, hi, is_discrete
 end
 
 # conditional probability distribution p(x|parents(x)) for unobserved
@@ -67,7 +95,7 @@ function get_aqua_table(pgm::PGM, node::VariableNode, parents::Vector{VariableNo
     X = Vector{Float64}(undef, pgm.n_variables)
     dist = pgm.distributions[node.variable]
     is_observed = isobserved(pgm, node.variable)
-    Δ = is_observed ? 0. : (length(node.support) == 1 ? 1. : (node.support[2] - node.support[1]))
+    Δ = is_observed ? 0. : aqua_cell_width(node.support)
 
     if !is_observed
         cpd = zeros([length(parent.support) for parent in parents]..., length(node.support))
@@ -131,35 +159,37 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                 ec = expansion_counter[node.address]
 
                 x0, x1 = xs[1], xs[end]
-                Δ = length(xs) == 1 ? 1. : (xs[2] - xs[1])
-                is_discrete = Δ ≈ 1 # hack, but should work
+                Δ = aqua_cell_width(xs)
+                lo, hi, is_discrete = get_aqua_support_bounds(pgm, node, parents)
+                # continuous grid points are cell midpoints and have to stay inside the support
+                margin = is_discrete ? 0. : Δ/2
+                new_grid(x0, x1) = is_discrete ? Vector{Float64}(x0:x1) : Vector{Float64}(LinRange(x0, x1, N))
 
                 should_try_shrink = true
 
                 # first we try to find an interval such that the ends are below density_thresh
+                # (or the ends are at the bounds of the support)
                 if ec < MAX_N_EXPANSIONS
-                    if ps[1] > density_thresh
-                        ec += 1
-                        x0 -= Δ * max(1, (length(xs) ÷ 10)) # increase interval ~10%
-                    end
-                    if ps[end] > density_thresh
-                        ec += 1
-                        x1 += Δ * max(1,(length(xs) ÷ 10))
-                    end
-                    if ps[1] < density_thresh && ps[end] < density_thresh
+                    step = Δ * max(1, (length(xs) ÷ 10)) # increase interval ~10%
+                    x0_new = max(x0 - step, lo + margin)
+                    x1_new = min(x1 + step, hi - margin)
+                    expand_left = ps[1] > density_thresh && x0_new < x0
+                    expand_right = ps[end] > density_thresh && x1_new > x1
+                    if !expand_left && !expand_right
                         # we are finished with expanding interval -> set to max
                         expansion_counter[node.address] = MAX_N_EXPANSIONS
                     else
-                        # node.support = get_initial_aqua_support(pgm, node, parents, N, 10.0^(-l_prec), 10.0^(-r_prec))
-                        if is_discrete
-                            node.support = Vector{Float64}(x0:x1)
-                        else
-                            node.support = Vector{Float64}(LinRange(x0, x1, N))
+                        if expand_left
+                            ec += 1
+                            x0 = x0_new
                         end
+                        if expand_right
+                            ec += 1
+                            x1 = x1_new
+                        end
+                        node.support = new_grid(x0, x1)
                         did_update_support = true
-                        println(node.address)
-                        println("old support: ", xs[1], " ... ", xs[end])#, " ", largest_bounds[node.address])
-                        println("new support: ", node.support[1], " ... ", node.support[end])#, " ($l_prec, $r_prec)")
+                        @debug "expand support of $(node.address)" xs[1] xs[end] node.support[1] node.support[end]
                         expansion_counter[node.address] = ec
 
                         should_try_shrink = false
@@ -180,20 +210,10 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                     end
                     x1 = xs[j]
 
-                    if is_discrete
-                        xs_new = Vector{Float64}(x0:x1)
-                    else
-                        xs_new = Vector{Float64}(LinRange(x0, x1, N))
-                    end
-
-                    
-                    node.support = xs_new
-                    did_update_support = did_update_support || 1 < i || j < length(xs)
-
-                    if did_update_support
-                        println(node.address)
-                        println("old support: ", xs[1], " ... ", xs[end])
-                        println("new support: ", xs_new[1], " ... ", xs_new[end])
+                    if 1 < i || j < length(xs)
+                        node.support = new_grid(x0, x1)
+                        did_update_support = true
+                        @debug "shrink support of $(node.address)" xs[1] xs[end] node.support[1] node.support[end]
                     end
                 end
             end
@@ -238,7 +258,7 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
             for node in variable_nodes
                 ve_result = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
                 f, log_Z = ve_result.factor, ve_result.log_evidence
-                Δ = length(node.support) == 1 ? 1. : node.support[2] - node.support[1] # is not observed variable_node
+                Δ = aqua_cell_width(node.support) # is not observed variable_node
                 result[node.address] =  (node.support, exp.(f.table .- log_Z) / Δ)
             end
         elseif method == :bp
@@ -250,7 +270,7 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
             be_result = belief_propagation(factor_nodes[1], true)
             f, evidence, marginals = get_posterior_for_root_factor(be_result), be_result.evidence, get_marginals(be_result)
             for (node, ps) in marginals
-                Δ = node.support[2] - node.support[1]
+                Δ = aqua_cell_width(node.support)
                 result[node.address] = (node.support, ps / Δ)
             end
         elseif method == :jt
@@ -259,7 +279,7 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
             jt_result = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true)
             f, evidence, marginals = get_posterior_for_root_factor(jt_result), jt_result.evidence, get_marginals(jt_result)
             for (node, ps) in marginals
-                Δ = node.support[2] - node.support[1]
+                Δ = aqua_cell_width(node.support)
                 result[node.address] = (node.support, ps / Δ)
             end
         end
@@ -282,7 +302,7 @@ function aqua_get_joint(pgm::PGM, N::Int, marginals::Dict{Address,Tuple{Vector{F
 
     ve_result = variable_elimination(pgm, variable_nodes, factor_nodes, [get_node_for_address(variable_nodes, v).variable for v in joint], :Greedy)
     f, log_Z = ve_result.factor, ve_result.log_evidence
-    Δ = prod(node.support[2] - node.support[1] for node in f.neighbours)
+    Δ = prod(aqua_cell_width(node.support) for node in f.neighbours; init=1.)
 
     return [node.support for node in f.neighbours], exp.(f.table .- log_Z) / Δ
 end
