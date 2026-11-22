@@ -2,7 +2,7 @@ module DistributionsTests
 # Unit tests for src/distributions and src/logjoint. Mostly deterministic.
 
 using Test, Random, Statistics
-import ForwardDiff
+import ForwardDiff, ReverseDiff, Tracker
 import Distributions
 import Distributions: Normal, Gamma, Beta, Uniform, Exponential, InverseGamma, Laplace, LogNormal, Cauchy,
     Poisson, Geometric, Bernoulli, Categorical, Binomial, DiscreteUniform, MvNormal, RealInterval, TDist, logpdf, pdf
@@ -116,6 +116,18 @@ end
     L_neg = [-1.0 0.0 0.0; 0.5 2.0 0.0; -0.3 0.2 0.7]
     q = TD.FullRankGaussian([0.5, -1.0, 2.0], vec(L_neg))
     @test logpdf(q, x) ≈ logpdf(MvNormal([0.5, -1.0, 2.0], L_neg * L_neg'), x)
+    @test Distributions.entropy(q) ≈ Distributions.entropy(MvNormal([0.5, -1.0, 2.0], L_neg * L_neg'))
+
+    @testset "FullRankGaussian gradients with negative diagonal" begin # B16
+        q0 = TD.FullRankGaussian(3)
+        phi = vcat([0.5, -1.0, 2.0], vec(L_neg))
+        f(p) = (q_p = TD.update_params(q0, p); logpdf(q_p, x) + Distributions.entropy(q_p))
+        h = 1e-6
+        ref = [(f(phi .+ h .* (1:12 .== i)) - f(phi .- h .* (1:12 .== i))) / 2h for i in 1:12]
+        @test Tracker.data(Tracker.gradient(f, phi)[1]) ≈ ref rtol = 1e-5
+        @test ForwardDiff.gradient(f, phi) ≈ ref rtol = 1e-5
+        @test ReverseDiff.gradient(f, phi) ≈ ref rtol = 1e-5
+    end
 
     @testset "MeanField sampling returns Float64 matrix" begin # B8
         q = TD.MeanField([TD.VariationalNormal(), TD.VariationalNormal()])

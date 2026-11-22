@@ -114,11 +114,22 @@ function FullRankGaussian(K::Int)
     L = reshape(LinearAlgebra.diagm(ones(K)), :)
     return FullRankGaussian(mu, L, Distributions.MultivariateNormal(mu, LinearAlgebra.diagm(ones(K))))
 end
+# MultivariateNormal(mu, L*L') for lower triangular part of A.
+# The Cholesky factor of a covariance matrix has positive diagonal, but the optimisation may produce
+# negative diagonal entries. L*D with D = Diagonal(±1) gives the same covariance L*D*D'*L' = L*L',
+# so we flip the sign of the columns with negative diagonal entry
+# (otherwise PDMats computes log of negative numbers for the log determinant).
+function fullrank_mvnormal(mu::AbstractVector{<:Real}, A::AbstractMatrix{<:Real})
+    # The signs are locally constant (derivative 0), so AD computes the exact gradient of the objective,
+    # which only depends on A*A' (the gradient w.r.t. A is the gradient w.r.t. L multiplied by Diagonal(signs)).
+    signs = [A[i,i] < 0 ? -1. : 1. for i in axes(A, 1)]
+    L = LinearAlgebra.LowerTriangular(A .* signs')
+    return Distributions.MultivariateNormal(mu, PDMats.PDMat(LinearAlgebra.Cholesky(L)))
+end
+
 function FullRankGaussian(mu::VariationalParameters, L::VariationalParameters)
     K = length(mu)
-    L_matrix = LinearAlgebra.LowerTriangular(reshape(L, K, K))
-    chol = PDMats.PDMat(LinearAlgebra.Cholesky(L_matrix))
-    return FullRankGaussian(mu, L, Distributions.MultivariateNormal(mu, chol))
+    return FullRankGaussian(mu, L, fullrank_mvnormal(mu, reshape(L, K, K)))
 end
 
 function get_params(q::FullRankGaussian)::VariationalParameters
@@ -131,9 +142,7 @@ function update_params(q::FullRankGaussian, params::VariationalParameters)::Full
     mu = convert(Vector{eltype(mu)}, mu)
     A = reshape(params[K+1:end], K, K)
     A = convert(Matrix{eltype(A)}, A) # Tracked K×K Matrix{Float64} -> K×K Matrix{Tracker.TrackedReal{Float64}}
-
-    L = LinearAlgebra.LowerTriangular(A) # KxK LinearAlgebra.LowerTriangular{Tracker.TrackedReal{Float64}, Matrix{Tracker.TrackedReal{Float64}}}
-    return FullRankGaussian(params[1:K], params[K+1:end], Distributions.MultivariateNormal(mu, PDMats.PDMat(LinearAlgebra.Cholesky(L))))
+    return FullRankGaussian(params[1:K], params[K+1:end], fullrank_mvnormal(mu, A))
 end
 
 function rand_and_logpdf(q::FullRankGaussian)
