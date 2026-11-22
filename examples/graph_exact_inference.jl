@@ -170,9 +170,9 @@ end
 
 
 using TinyPPL.Graph
-N = 1000
-# model = @ppl Diamond begin
-@time model = Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
+N = 100
+model = @pgm Diamond begin
+# @time model = eval(Graph.pgm_macro(Set{Symbol}([:uninvoked]), :Diamond, :(begin
     function or(x, y)
         max(x, y)
     end
@@ -194,12 +194,12 @@ N = 1000
         end
     end
     @iterate($(Main.N), func, 1.)
-end));
-
+# end)));
+end;
 
 @time f = variable_elimination(model, order=:Greedy)
 @time f = variable_elimination(model, order=:MinFill) # almost all time spent getting elimination order
-evaluate_return_expr_over_factor(model, f)
+evaluate_return_expr_over_factor(model, f.factor)
 
 @time [get_junction_tree(model) for _ in 1:10];
 
@@ -239,12 +239,12 @@ is_tree(variable_nodes, factor_nodes)
 # end
 @time elimination_order = get_greedy_elimination_order(variable_nodes, marginal_variables);
 
-@time res, evidence = variable_elimination(variable_nodes, elimination_order)
-evaluate_return_expr_over_factor(model, res)
+@time res = variable_elimination(variable_nodes, elimination_order)
+evaluate_return_expr_over_factor(model, res.factor)
 print_reference_solution(N)
 
 @time belief_tree = get_blief_tree(return_factor);
-@time res, evidence = belief_propagation(belief_tree, return_factor, false);
+@time res = belief_propagation(belief_tree, return_factor, false);
 evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 

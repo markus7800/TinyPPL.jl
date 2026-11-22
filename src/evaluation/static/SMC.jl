@@ -142,6 +142,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
                 log_w_tilde = normalise(log_w + log_γ_T - log_γ)
                 W_tilde = exp.(log_w_tilde)
                 A[1] = rand(Categorical(W_tilde / sum(W_tilde)))
+                # log_w is updated before return
             else
                 A[1] = 1 # retain reference particle
             end

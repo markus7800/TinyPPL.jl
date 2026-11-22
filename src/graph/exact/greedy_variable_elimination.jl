@@ -292,6 +292,7 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
     end
 
     if isempty(factor_nodes)
+        println("log-evidence: ", logsumexp(tau.table))
         evidence = sum(exp, tau.table)
         return VariableEliminationResult(FactorNode(VariableNode[],0.), evidence)
     else
