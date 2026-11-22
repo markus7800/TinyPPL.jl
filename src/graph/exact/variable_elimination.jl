@@ -17,8 +17,8 @@ export parse_variables
 
 function get_joint_factor(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
     res = reduce(factor_product, factor_nodes)
-    evidence = sum(exp, res.table)
-    return res, evidence
+    log_evidence = logsumexp(res.table)
+    return res, exp(log_evidence)
 end
 function get_joint_factor(pgm::PGM)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
@@ -50,8 +50,9 @@ function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, fa
 end
 
 struct VariableEliminationResult
-    factor::FactorNode
-    evidence::Float64
+    factor::FactorNode # unnormalised log factor over marginal variables
+    evidence::Float64 # may underflow, use log_evidence
+    log_evidence::Float64
 end
 
 # factors with empty scope (e.g. observations that do not depend on latent variables)
@@ -63,8 +64,8 @@ get_scalar_factors(factor_nodes::Vector{FactorNode}) = FactorNode[f for f in fac
 function get_variable_elimination_result(factor_nodes::Dict{VariableNode,<:Set}, scalar_factors::Vector{FactorNode})
     remaining_factors = reduce(∪, values(factor_nodes); init=Set{FactorNode}())::Set
     res = reduce(factor_product, remaining_factors ∪ scalar_factors; init=FactorNode(VariableNode[], 0.))
-    evidence = sum(exp, res.table)
-    return VariableEliminationResult(res, evidence)
+    log_evidence = logsumexp(res.table)
+    return VariableEliminationResult(res, exp(log_evidence), log_evidence)
 end
 
 # eliminates all variables specified in elimination_order

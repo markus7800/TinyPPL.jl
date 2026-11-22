@@ -339,7 +339,8 @@ struct JunctionTreeMessagePassingResult
     junction_tree::Vector{ClusterNode}
     root::ClusterNode
     root_factor::FactorNode
-    evidence::Float64
+    evidence::Float64 # may underflow, use log_evidence
+    log_evidence::Float64
 end
 Base.show(io::IO, tree::JunctionTreeMessagePassingResult) = print(io, "JunctionTreeMessagePassingResult()")
 
@@ -355,7 +356,7 @@ function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root:
     initialise_potentials(root)
 
     res = forward(root, nothing)
-    evidence = exp(res.table[1])
+    log_evidence = res.table[1]
 
     if calibrate_tree
         # only need backward pass if we want to evaluate all marginals
@@ -367,7 +368,7 @@ function junction_tree_message_passing(junction_tree::Vector{ClusterNode}, root:
         calibrate_bliefs(junction_tree)
     end
 
-    return JunctionTreeMessagePassingResult(calibrate_tree, junction_tree, root, root_factor, evidence)
+    return JunctionTreeMessagePassingResult(calibrate_tree, junction_tree, root, root_factor, exp(log_evidence), log_evidence)
 end
 
 export junction_tree_message_passing
@@ -380,7 +381,7 @@ function get_posterior_for_root_factor(res::JunctionTreeMessagePassingResult)
     root_factor = res.root_factor
     return_factor = reduce(factor_product, root.messages, init=root.potential)
     return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
-    return exp.(return_factor.table) ./ res.evidence
+    return exp.(return_factor.table .- res.log_evidence)
 end
 export get_posterior_for_root_factor
 
@@ -397,8 +398,7 @@ function get_marginals(res::JunctionTreeMessagePassingResult)
         # sum out all other variables to get marginal of v
         factor = factor_sum(cluster_node.belief, setdiff(cluster_node.belief.neighbours, [v]))
 
-        table = exp.(factor.table)
-        table /= sum(table)
+        table = exp.(factor.table .- logsumexp(factor.table))
         marginals[i] = (v, table)
     end
 

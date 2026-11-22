@@ -61,8 +61,7 @@ end
 export exp_table
 
 function exp_normalised_table(factor_node::FactorNode)
-    table = exp_table(factor_node)
-    return table ./ sum(table)
+    return exp.(factor_node.table .- logsumexp(factor_node.table))
 end
 export exp_normalised_table
 
@@ -311,6 +310,13 @@ export factor_division!
 # A2.table[:,:,4] ≈ A.table
 
 Base.reshape(f::Float64, ::Tuple{}) = f
+
+# numerically stable log(sum(exp(table), dims=dims))
+function logsumexp(table::AbstractArray{Float64}, dims)
+    m = maximum(table, dims=dims, init=-Inf)
+    m = map(x -> isfinite(x) ? x : 0., m) # if all values are -Inf, the result is -Inf
+    return m .+ log.(sum(exp.(table .- m), dims=dims))
+end
  
 # PGM 9.3.1.1 Factor Marginalisation
 # sums out dims from factor
@@ -318,9 +324,7 @@ Base.reshape(f::Float64, ::Tuple{}) = f
 function factor_sum(factor_node::FactorNode, dims::Vector{Int})::FactorNode
     variables = [v for (i,v) in enumerate(factor_node.neighbours) if !(i in dims)]
     size = Tuple([length(v.support) for v in variables])
-    # table = mapslices(sum, factor_node.table, dims=dims)
-    # table = mapslices(logsumexp, factor_node.table, dims=dims)
-    table = log.(sum(exp, factor_node.table, dims=dims))
+    table = logsumexp(factor_node.table, dims)
     table = reshape(table, size)
     return FactorNode(variables, table)
 end
@@ -363,8 +367,8 @@ end
 function evaluate_return_expr_over_factor(pgm::PGM, factor::FactorNode)
     result = Array{Tuple{Any, Float64}}(undef, size(factor.table))
 
-    # normalising constant
-    Z = sum(exp, factor.table)
+    # log normalising constant
+    log_Z = logsumexp(factor.table)
 
     X = Vector{Float64}(undef, pgm.n_variables)
     # iterate over the product of the support of all factor variables
@@ -375,7 +379,7 @@ function evaluate_return_expr_over_factor(pgm::PGM, factor::FactorNode)
         end
         
         retval = get_retval(pgm, X) # observed values in return expr are subsituted with their value
-        prob = exp(factor.table[indices...]) / Z
+        prob = exp(factor.table[indices...] - log_Z)
         result[indices...] = (retval, prob)  # add return value and its probability to the result
     end
     # transform to list

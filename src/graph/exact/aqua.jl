@@ -237,9 +237,9 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
         if method == :ve
             for node in variable_nodes
                 ve_result = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
-                f, Z = ve_result.factor, ve_result.evidence
+                f, log_Z = ve_result.factor, ve_result.log_evidence
                 Δ = length(node.support) == 1 ? 1. : node.support[2] - node.support[1] # is not observed variable_node
-                result[node.address] =  (node.support, exp.(f.table) / (Z * Δ))
+                result[node.address] =  (node.support, exp.(f.table .- log_Z) / Δ)
             end
         elseif method == :bp
             
@@ -280,10 +280,11 @@ function aqua_get_joint(pgm::PGM, N::Int, marginals::Dict{Address,Tuple{Vector{F
     variable_nodes, factor_nodes, did_update_support = get_aqua_factor_graph(pgm, N, marginals, expansion_counter)
     @assert !did_update_support
 
-    f, Z = variable_elimination(pgm, variable_nodes, factor_nodes, [get_node_for_address(variable_nodes, v).variable for v in joint], :Greedy)
+    ve_result = variable_elimination(pgm, variable_nodes, factor_nodes, [get_node_for_address(variable_nodes, v).variable for v in joint], :Greedy)
+    f, log_Z = ve_result.factor, ve_result.log_evidence
     Δ = prod(node.support[2] - node.support[1] for node in f.neighbours)
 
-    return [node.support for node in f.neighbours], exp.(f.table) / (Z * Δ)
+    return [node.support for node in f.neighbours], exp.(f.table .- log_Z) / Δ
 end
 export aqua_get_joint
 

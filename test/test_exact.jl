@@ -175,12 +175,12 @@ end
     @testset "variable_elimination order=$order" for order in (:Topological, :MinNeighbours, :MinFill, :Greedy)
         res = variable_elimination(discrete_network; order=order)
         @test ve_return_probs(discrete_network, res, [1., 2., 3.]) ≈ R.DN_POST_Z
-        @test log(res.evidence) ≈ R.DN_LOG_EVIDENCE
+        @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
     end
     @testset "greedy_variable_elimination" begin
         res = greedy_variable_elimination(discrete_network)
         @test ve_return_probs(discrete_network, res, [1., 2., 3.]) ≈ R.DN_POST_Z
-        @test log(res.evidence) ≈ R.DN_LOG_EVIDENCE
+        @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
     end
     @testset "variable_elimination marginal b" begin
         @test ve_marginal(discrete_network, :b, [0., 1.]) ≈ R.DN_POST_B
@@ -188,13 +188,13 @@ end
     @testset "belief_propagation" begin
         res = belief_propagation(discrete_network; calibrate_tree=true, return_factor_as_root=true)
         @test get_posterior_for_root_factor(res) ≈ R.DN_POST_Z
-        @test log(res.evidence) ≈ R.DN_LOG_EVIDENCE
+        @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
         @test marginal(get_marginals(res), :b, [0., 1.]) ≈ R.DN_POST_B
     end
     @testset "junction_tree_message_passing" begin
         res = junction_tree_message_passing(discrete_network; calibrate_tree=true, return_factor_as_root=true)
         @test get_posterior_for_root_factor(res) ≈ R.DN_POST_Z
-        @test log(res.evidence) ≈ R.DN_LOG_EVIDENCE
+        @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
         @test marginal(get_marginals(res), :b, [0., 1.]) ≈ R.DN_POST_B
     end
 end
@@ -269,15 +269,19 @@ end
     @testset "variable_elimination" begin
         res = variable_elimination(many_observations)
         @test ve_return_probs(many_observations, res, [1., 2.]) ≈ R.MO_POST_Z
-        @test log(res.evidence) ≈ R.MO_LOG_EVIDENCE
+        @test res.log_evidence ≈ R.MO_LOG_EVIDENCE
     end
     @testset "belief_propagation" begin
         res = belief_propagation(many_observations; calibrate_tree=true, return_factor_as_root=true)
         @test get_posterior_for_root_factor(res) ≈ R.MO_POST_Z
+        @test res.log_evidence ≈ R.MO_LOG_EVIDENCE
+        @test [p for (_, p) in get_marginals(res)] ≈ [R.MO_POST_Z]
     end
     @testset "junction_tree_message_passing" begin
         res = junction_tree_message_passing(many_observations; calibrate_tree=true, return_factor_as_root=true)
         @test get_posterior_for_root_factor(res) ≈ R.MO_POST_Z
+        @test res.log_evidence ≈ R.MO_LOG_EVIDENCE
+        @test [p for (_, p) in get_marginals(res)] ≈ [R.MO_POST_Z]
     end
 end
 
@@ -309,7 +313,11 @@ aqua_mean(result, addr) = ((xs, ps) = result[addr]; sum(xs .* ps) * (xs[2] - xs[
     @testset "aqua_get_joint" begin # B4
         marginals = aqua(normal_normal, 100)
         xs, ps = aqua_get_joint(normal_normal, 100, marginals, Any[:μ])
-        @test length(xs) == length(ps)
+        # one support vector per joint variable, ps is density table
+        @test length(xs) == 1 && size(ps) == (length(xs[1]),)
+        Δ = xs[1][2] - xs[1][1]
+        @test sum(ps) * Δ ≈ 1
+        @test sum(xs[1] .* ps) * Δ ≈ R.NN_POST_MEAN atol = 0.05
     end
 end
 

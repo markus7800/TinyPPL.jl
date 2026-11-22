@@ -81,13 +81,13 @@ print_reference_solution()
 
 variable_nodes, factor_nodes = get_factor_graph(model)
 
-res, evidence = variable_elimination(model, variable_nodes, factor_nodes)
-evaluate_return_expr_over_factor(model, res)
+ve_result = variable_elimination(model, variable_nodes, factor_nodes)
+evaluate_return_expr_over_factor(model, ve_result.factor)
 
-res, evidence = variable_elimination(variable_nodes, variable_nodes)
+ve_result = variable_elimination(variable_nodes, variable_nodes)
 
-res, evidence = junction_tree_message_passing(model)
-evaluate_return_expr_over_factor(model, res)
+jt_result = junction_tree_message_passing(model; return_factor_as_root=true)
+get_posterior_for_root_factor(jt_result)
 
 
 model = @pgm Student begin
@@ -249,7 +249,7 @@ evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 
 belief_tree = get_blief_tree(return_factor);
-@time res, evidence, marginals = belief_propagation(belief_tree, return_factor, true);
+@time res = belief_propagation(belief_tree, return_factor, true);
 
 belief_tree = get_blief_tree(return_factor);
 @time res2, evidence2, marginals2 = belief_propagation(belief_tree, return_factor, true; with_division=true);
@@ -261,12 +261,12 @@ end
 # elimination_order = variable_nodes
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 @time junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
-@time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
+@time res = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
 evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 
 @time junction_tree, root_cluster_node, root_factor =  get_junction_tree(variable_nodes, elimination_order, return_factor);
-@time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
+@time res = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
 
 
 
@@ -280,19 +280,19 @@ is_tree(variable_nodes, factor_nodes)
 
 # FIX: is_tree is not indicative of whether we can construct Belief Tree from empty return factor does not make sense
 # check directed vs undirected tree
-# @time res, evidence = belief_propagation(return_factor, false)
-# @time res, evidence, marginals = belief_propagation(return_factor, true)
+# @time res = belief_propagation(return_factor, false)
+# @time res = belief_propagation(return_factor, true)
 
 
 @time elimination_order = get_greedy_elimination_order(variable_nodes, Int[]);
 
 # Munin: 1.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
-@time res, evidence = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
+@time res = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, false);
 
 # Munin 16.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
-@time res, evidence, marginals = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
+@time res = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true);
 
 # Munin 6.5 seconds
 junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, return_factor);
@@ -339,8 +339,9 @@ end
 joint, evidence = get_joint_factor(model)
 
 
-res, evidence = variable_elimination(model)
-post = exp.(res.table) ./ evidence
+ve_result = variable_elimination(model)
+res = ve_result.factor
+post = exp.(res.table .- ve_result.log_evidence)
 evaluate_return_expr_over_factor(model, res)
 
 junction_tree, root_cluster_node, root_factor = get_junction_tree(model)
@@ -412,8 +413,9 @@ a1x = exp.(log_a1x.table) / evidence
 heatmap(a1x)
 
 
-res, evidence = variable_elimination(model)
-post = exp.(res.table) ./ evidence
+ve_result = variable_elimination(model)
+res = ve_result.factor
+post = exp.(res.table .- ve_result.log_evidence)
 evaluate_return_expr_over_factor(model, res)
 bar(post)
 

@@ -139,7 +139,8 @@ end
 struct BeliefPropagationResult
     is_calibrated::Bool
     root::BeliefNode
-    evidence::Float64
+    evidence::Float64 # may underflow, use log_evidence
+    log_evidence::Float64
 end
 Base.show(io::IO, tree::BeliefPropagationResult) = print(io, "BeliefPropagationResult()")
 
@@ -149,7 +150,7 @@ function belief_propagation(root::BeliefNode, root_factor::FactorNode, calibrate
     # Run forward pass. As the root factor has no parents to send a message to,
     # its message actually corresponds to the joint density with all variables summed out - i.e. the evidence. 
     res = forward(root)
-    evidence = exp(res[1])
+    log_evidence = res[1]
 
     if calibrate_tree
         # only need backward pass if we want to evaluate all marginals
@@ -159,7 +160,7 @@ function belief_propagation(root::BeliefNode, root_factor::FactorNode, calibrate
             backward(root)
         end
     end
-    return BeliefPropagationResult(calibrate_tree, root, evidence) 
+    return BeliefPropagationResult(calibrate_tree, root, exp(log_evidence), log_evidence)
 end
 
 function _compute_factor_from_messages(beliefnode::BeliefNode)
@@ -182,7 +183,7 @@ function get_posterior_for_root_factor(res::BeliefPropagationResult)
     # [root.neighbours].node are root.node.neighbours
     root_factor = _compute_factor_from_messages(res.root)
     # sum(exp, root_factor.table) should be equal to evidence
-    return exp.(root_factor.table) ./ res.evidence
+    return exp.(root_factor.table .- res.log_evidence)
 end
 export get_posterior_for_root_factor
 
@@ -193,8 +194,8 @@ function get_marginals(res::BeliefPropagationResult)
     # p(x) = ∑_{X - x} p(X) = ∏_{s ∈ ne(x)} μ_{f_s → x}(x)
     for (i,v) in enumerate(variable_nodes)
         varnode = v.node
-        table = exp.(sum(v.messages))
-        table /= sum(table)
+        log_table = sum(v.messages)
+        table = exp.(log_table .- logsumexp(log_table))
         marginals[i] = (varnode, table)
     end
     return marginals

@@ -40,7 +40,9 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [x] C9 ✅ exact: `variable_elimination.jl:59,80`, `greedy_variable_elimination.jl:259,285`, `junction_tree.jl:123,210` — disconnected factor graphs: empty-scope factors dropped / JT only walks root component (two coins: evidence 0.5 instead of 0.25).
   - fixed: VE and greedy VE collect empty-scope factors (initial ones via `get_scalar_factors(factor_nodes)` and each `tau` of a fully eliminated component) and multiply them into the result. If all variables are eliminated, the result factor now holds the log evidence instead of 0.
   - JT: the trees of the connected components are linked with empty sepsets and empty-scope factors are assigned to a component root; also used by AQUA `:jt`. Removed debug `println` in greedy VE.
-- [ ] C10 ✅ `src/graph/exact/factor_graph.jl:323` (+VE/BP/JT) — `log.(sum(exp, …))` without max shift; evidence returned linear → `-Inf`/`NaN` with many observations.
+- [x] C10 ✅ `src/graph/exact/factor_graph.jl:323` (+VE/BP/JT) — `log.(sum(exp, …))` without max shift; evidence returned linear → `-Inf`/`NaN` with many observations.
+  - fixed: `factor_sum` uses a max-shifted `logsumexp(table, dims)`; VE/BP/JT results have a new field `log_evidence` (`evidence` is kept, but may underflow); posteriors, marginals, `evaluate_return_expr_over_factor`, `exp_normalised_table` and AQUA normalise in log space.
+  - not converted: JT sampling / density helpers (`junction_tree.jl` ≈ l. 520–840) still multiply linear probabilities and divide by `res.evidence`.
 - [ ] C11 ✅ `src/graph/exact/belief_propagation.jl:482` — `message .-= …` gives `-Inf - -Inf = NaN`; use `factor_div_op`.
 - [ ] C12 `src/graph/SMC.jl:26,41` — `light_smc` returns pre-resampling weights for resampled particles; linear `marginal_lik`.
 - [ ] C13 `src/graph/SMC.jl:117-119` — PGAS indexes `X_ref` with observed node (BoundsError); future latents never written into `X`.
@@ -55,7 +57,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] B1 ✅ `src/distributions/transformed.jl:205` — upper-bounded support uses `supp.lb` instead of `supp.ub`.
 - [ ] B2 ✅ `src/logjoint/ADVI.jl:122` — ForwardDiff ELBO grad uses default chunk; >12 params → truncated gradient / DimensionMismatch. ReverseDiff version uses internals.
 - [ ] B3 ✅ `src/graph/exact/junction_tree.jl:295` — `backward_with_division(neighbour, parent)` should pass `node` → StackOverflow.
-- [ ] B4 ✅ `src/graph/exact/aqua.jl:283` — destructures `VariableEliminationResult` (also `examples/exact_inference/exact_inference.jl`).
+- [x] B4 ✅ `src/graph/exact/aqua.jl:283` — destructures `VariableEliminationResult` (also `examples/exact_inference/exact_inference.jl`). Fixed with C10, also the stale VE/BP/JT destructuring in `examples/graph_exact_inference.jl`.
 - [ ] B5 ✅ undefined names: `make_unconstrained_logjoint` w/o `pgm` (`graph/ADVI.jl:54`), `marginal_lik_proposed` (`graph/SMC.jl:257`), `proposal` (`compiled/LMH.jl:57`), ~~`todo` (`universal/HMC.jl:137`)~~ (fixed with C2), `SpecialFunctions.digamma` (`logpdf_grad.jl:91`), static `advi(unconstrained=true)` calls universal-only `transform_to_constrained` (`static/advi.jl:61,87`).
 - [ ] B6 ✅ `src/graph/core/symbolic_pgm.jl:217` — procedure inlining returns `G_proc` instead of `G`.
 - [ ] B7 ✅ graph models only work with Tracker (`INPUT_VECTOR_TYPE`, plate functions typed `Vector{Float64}`); ~~plated `lp_unconstrained` mutates input~~ (fixed with C5).
