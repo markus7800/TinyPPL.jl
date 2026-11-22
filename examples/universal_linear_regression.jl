@@ -98,7 +98,7 @@ mean(hmc_traces[:slope])
 
 
 Random.seed!(0)
-@time smc_traces, lps, marginal_lik = smc(LinReg, args, observations, 10^4);
+@time smc_traces, lps, log_marginal_lik = smc(LinReg, args, observations, 10^4);
 W = exp.(lps);
 intercept = W'smc_traces[:intercept]
 slope = W'smc_traces[:slope]
@@ -107,7 +107,7 @@ slope = W'smc_traces[:slope]
 X_ref = [intercept, slope]
 
 Random.seed!(0)
-@time smc_traces, lps, marginal_lik = conditional_smc(LinReg, args, observations, 1, X_ref);
+@time smc_traces, lps, log_marginal_lik = conditional_smc(LinReg, args, observations, 1, X_ref);
 W = exp.(lps);
 smc_traces[:,1] == X_ref
 

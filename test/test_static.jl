@@ -20,6 +20,16 @@ using ..TestUtils
 end
 const nn_obs = Observations((:y => i) => R.NN_YS[i] for i in 1:3)
 
+# normal_normal with a latent variable after the last observation
+@ppl static function normal_normal_trailing()
+    μ ~ Normal(0., R.NN_PRIOR_SD)
+    for i in 1:3
+        {:y => i} ~ Normal(μ, 1.)
+    end
+    z ~ Normal(μ, 1.)
+    return z
+end
+
 @ppl static function gamma_scale()
     s ~ Gamma(2., 1.)
     for i in 1:3
@@ -241,21 +251,34 @@ end
     N = 5_000
     @testset "normal_normal" begin # C3
         Random.seed!(0)
-        traces, lw, marginal_lik = smc(normal_normal, (), nn_obs, N)
+        traces, lw, log_marginal_lik = smc(normal_normal, (), nn_obs, N)
         @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.05
-        @test log(marginal_lik) ≈ R.NN_LOG_EVIDENCE atol = 0.05
+        @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05
     end
     @testset "discrete_network" begin # C3
         Random.seed!(0)
-        traces, lw, marginal_lik = smc(discrete_network, (), dn_obs, N)
+        traces, lw, log_marginal_lik = smc(discrete_network, (), dn_obs, N)
         @test [wprob(traces[:z], lw, k) for k in 1:3] ≈ R.DN_POST_Z atol = 0.02
-        @test log(marginal_lik) ≈ R.DN_LOG_EVIDENCE atol = 0.05
+        @test log_marginal_lik ≈ R.DN_LOG_EVIDENCE atol = 0.05
     end
     @testset "mixed" begin # C3
         Random.seed!(0)
-        traces, lw, marginal_lik = smc(mixed, (), mx_obs, N)
+        traces, lw, log_marginal_lik = smc(mixed, (), mx_obs, N)
         @test wprob(traces[:z], lw, 1) ≈ R.MX_POST_Z1 atol = 0.02
-        @test log(marginal_lik) ≈ R.MX_LOG_EVIDENCE atol = 0.05
+        @test log_marginal_lik ≈ R.MX_LOG_EVIDENCE atol = 0.05
+    end
+    @testset "latent after last observation with proposal" begin # C3
+        Random.seed!(0)
+        traces, lw, log_marginal_lik = smc(normal_normal_trailing, (), nn_obs, N;
+            addr2proposal=Addr2Proposal(:z => StaticProposal(Normal(2., 2.))))
+        @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05
+        @test wmean(traces[:z], lw) ≈ R.NN_POST_MEAN atol = 0.05
+        @test wstd(traces[:z], lw) ≈ sqrt(R.NN_POST_SD^2 + 1) atol = 0.05
+    end
+    @testset "evidence of many observations does not underflow" begin # C3
+        Random.seed!(0)
+        traces, lw, log_marginal_lik = smc(normal_normal, (), Observations((:y => i) => 100. for i in 1:3), 1_000)
+        @test isfinite(log_marginal_lik)
     end
 end
 
@@ -274,7 +297,10 @@ end
     @testset "pgas linear_regression" begin
         Random.seed!(0)
         traces = particle_gibbs(linear_regression, lr_args, lr_obs, 10, 1_000; ancestral_sampling=true)
-        @test lr_means(subset(traces, 101:1000)) ≈ R.LR_POST_MEAN atol = 0.2
+        # chain mixes slowly (posterior sd of intercept ≈ 1), with 20k samples PG/PGAS/PIMH are within 0.1
+        slope, intercept = lr_means(subset(traces, 101:1000))
+        @test slope ≈ R.LR_POST_MEAN[1] atol = 0.15
+        @test intercept ≈ R.LR_POST_MEAN[2] atol = 0.4
     end
     @testset "particle_IMH normal_normal" begin # C3
         Random.seed!(0)

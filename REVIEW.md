@@ -22,7 +22,10 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - addresses unused by the proposed trace are now scored with `-log q` in H(proposed) (extended target π(X_used) ∏ q(X_unused));
   - `x_initial` (constrained trace) is transformed to unconstrained space (was `todo(x_initial)`, part of B5).
   - pedestrian (`examples/universal_non_parametric_hmc.jl`, acceptance 0.0003): not a sampler bug. The default start (a prior sample) usually walks until distance > 10; lowering the distance below 10 adds steps, so HMC is trapped there. The example now starts from the best of 1000 LW samples with L=10, ε=0.05 (acceptance ≈ 0.6, matches LW reference); the docstring notes this, and the test suite has a pedestrian case.
-- [ ] C3 ✅ `src/evaluation/static/SMC.jl:121` — after last observe `log_w` unchanged but multiplied into `marginal_lik` again (≈Z²); PIMH uses this ratio. Linear-space `marginal_lik` underflows.
+- [x] C3 ✅ `src/evaluation/static/SMC.jl:121` — after last observe `log_w` unchanged but multiplied into `marginal_lik` again (≈Z²); PIMH uses this ratio. Linear-space `marginal_lik` underflows.
+  - fixed: weights are accumulated in log space since the last resampling and the evidence is added once per resampling step and once at the end; static `smc`/`conditional_smc` now return the **log** evidence (like graph `smc`), PIMH accepts with the log ratio;
+  - latents sampled after the last observe are now scored on return (with a custom proposal their weight Q was ignored, static analogue of C14);
+  - resampling weights are computed with `normalise` (no `exp` underflow).
 - [ ] C4 ✅ `src/evaluation/static/HMC.jl:28` — `transform_to_constrained!` applied even when `unconstrained=false` (Gamma sample 2 → e²). Constrained HMC with default `x_initial = zeros` starts outside support.
 - [ ] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).
 - [ ] C6 ✅ `src/graph/core/plates.jl:336-346` — spaghetti plate path applies `to_unconstrained` for `:sample`/`:lp` kinds too.
@@ -60,7 +63,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] B17 ✅ graph `lmh`/`rwmh` fail on `lazy_ifs` models: `Flat` is not a `Distribution` (`StaticProposal(d)` convert error) and has no `random_walk_proposal_dist`.
 
 ## A. Inconsistent APIs
-- [ ] A1 Return conventions: LW normalised (universal) vs unnormalised (static, graph, completion); SMC evidence log vs linear; `lmh` → traces, `imcmc` → (traces, lps), `non_parametric_hmc` → `Vector{Any}` of Dictionaries without retvals; VE → log-space unnormalised `FactorNode`, BP/JT → linear normalised `Array`. Proposal: one `ImportanceResult(traces, logweights, log_evidence)`.
+- [ ] A1 Return conventions: LW normalised (universal) vs unnormalised (static, graph, completion); SMC evidence log vs linear (static and graph `smc` now log, graph `light_smc` still linear, C12); `lmh` → traces, `imcmc` → (traces, lps), `non_parametric_hmc` → `Vector{Any}` of Dictionaries without retvals; VE → log-space unnormalised `FactorNode`, BP/JT → linear normalised `Array`. Proposal: one `ImportanceResult(traces, logweights, log_evidence)`.
 - [ ] A2 ✅ `Observations = Dict{Any,Real}` is concrete+invariant → `Dict(:y => 1.0)` is a MethodError. Accept `AbstractDict`.
 - [ ] A3 Overloads that differ only in 5th positional arg type (`likelihood_weighting(..., completion::Function)` / `(..., trace::Addresses)`).
 - [ ] A4 Naming/order drift: `addr2proposal` vs `addr2Proposal`; `L` = leapfrog steps / MC samples / Cholesky; `N` vs `L`; positional `K` in some ADVI functions; universal `bbvi` positional `variational_dists`.
