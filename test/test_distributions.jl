@@ -49,7 +49,8 @@ end
 
 @testset "to_unconstrained densities integrate to 1" begin
     grid = range(-40, 40, length=200_001)
-    for d in [Gamma(2.0, 1.0), Exponential(2.0), Beta(2.0, 3.0), Uniform(2.0, 5.0), LogNormal(0.0, 1.0), InverseGamma(3.0, 2.0)]
+    for d in [Gamma(2.0, 1.0), Exponential(2.0), Beta(2.0, 3.0), Uniform(2.0, 5.0), LogNormal(0.0, 1.0), InverseGamma(3.0, 2.0),
+              Distributions.truncated(Normal(0.0, 1.0), -Inf, 1.0)] # B1: upper-bounded support
         d_unconstrained = TD.to_unconstrained(d)
         @test integrate_exp(x -> logpdf(d_unconstrained, x), grid) ≈ 1 atol = 1e-4
     end

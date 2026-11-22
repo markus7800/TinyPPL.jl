@@ -63,7 +63,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: edge endpoints are mapped to their unit (containing plate or unplated node) before the topological sort; edges within a plate are skipped. Before, a model with `x[1] -> z` failed the length assertion at compile time, and `a -> x[1]` could order the plate before `a`. Cyclic plate/node dependencies give an explicit assertion message.
 
 ## B. Crashes / broken features
-- [ ] B1 ✅ `src/distributions/transformed.jl:205` — upper-bounded support uses `supp.lb` instead of `supp.ub`.
+- [x] B1 ✅ `src/distributions/transformed.jl:205` — upper-bounded support uses `supp.lb` instead of `supp.ub`. **fixed:** now `LogTransform() ∘ AffineTransform(-1, supp.ub)`, i.e. x ↦ log(ub − x); tests cover the round trip/jacobian for `RealInterval(-Inf, 1)` and that `to_unconstrained(truncated(Normal(), -Inf, 1))` integrates to 1.
 - [ ] B2 ✅ `src/logjoint/ADVI.jl:122` — ForwardDiff ELBO grad uses default chunk; >12 params → truncated gradient / DimensionMismatch. ReverseDiff version uses internals.
 - [ ] B3 ✅ `src/graph/exact/junction_tree.jl:295` — `backward_with_division(neighbour, parent)` should pass `node` → StackOverflow.
 - [x] B4 ✅ `src/graph/exact/aqua.jl:283` — destructures `VariableEliminationResult` (also `examples/exact_inference/exact_inference.jl`). Fixed with C10, also the stale VE/BP/JT destructuring in `examples/graph_exact_inference.jl`.

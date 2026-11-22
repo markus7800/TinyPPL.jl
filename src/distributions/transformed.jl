@@ -202,7 +202,7 @@ function transform_to_unconstrained_from(supp::RealInterval)::Transform
     end
 
     if supp.lb == -Inf # supp.ub != Inf
-        return LogTransform() ∘ AffineTransform(-1, supp.lb)
+        return LogTransform() ∘ AffineTransform(-1, supp.ub) # x ↦ log(ub - x)
     end
 
     if supp.lb == 0 && supp.ub == 1
