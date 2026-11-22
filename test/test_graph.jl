@@ -93,8 +93,8 @@ const plated_linear_regression = @pgm plated graph_test_plated_linear_regression
     end
 end
 
-# `uninvoked`: compiling with invocation runs the plate sampler, which can crash at random because of C6
-const plated_gamma_poisson = @pgm [plated, uninvoked] graph_test_plated_gamma_poisson begin
+# compiling runs the plate sampler, which crashed at random before C6 was fixed
+const plated_gamma_poisson = @pgm plated graph_test_plated_gamma_poisson begin
     let ys = [2., 0., 5.],
         λ = [{:λ => i} ~ Gamma(i + 1., 1.) for i in 1:3]
         [({:y => i} ~ Poisson(λ[i]) ↦ ys[i]) for i in 1:3]

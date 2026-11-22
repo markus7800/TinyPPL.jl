@@ -31,7 +31,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [x] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).
   - fixed: the constrained value of each transformed latent is stored in a local variable and substituted for `X[node]` in all later distributions (differentiable, no `setindex!`); for plated models the plate functions read/write `X`, so the generated function works on `copy(X)` and writes constrained values into it (also fixes the B7/A6 input mutation);
   - graph `hmc`: `x_initial` is no longer overwritten, default `x_initial` is a prior sample (as for static `hmc`, C4).
-- [ ] C6 ✅ `src/graph/core/plates.jl:336-346` — spaghetti plate path applies `to_unconstrained` for `:sample`/`:lp` kinds too.
+- [x] C6 ✅ `src/graph/core/plates.jl:336-346` — spaghetti plate path applies `to_unconstrained` for `:sample`/`:lp` kinds too.
+  - fixed: transform only for `:lp_unconstrained`, `:to_constrained`, `:to_unconstrained` (as in the iid and identity-edge paths). Plated models with non-iid constrained plates can be invoked at compile time again (sampling produced negative Gamma values → random DomainError in Poisson).
 - [ ] C7 ✅ `src/graph/BBVI.jl:5` — iterates nodes in index order, not topological order.
 - [ ] C8 ✅ `src/graph/core/symbolic_pgm.jl:285-296` — with `lazy_ifs`, no edges from `if` condition to branch samples.
 - [ ] C9 ✅ exact: `variable_elimination.jl:59,80`, `greedy_variable_elimination.jl:259,285`, `junction_tree.jl:123,210` — disconnected factor graphs: empty-scope factors dropped / JT only walks root component (two coins: evidence 0.5 instead of 0.25).

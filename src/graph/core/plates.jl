@@ -334,7 +334,7 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
                     child_d_sym = gensym("child_dist_$child")
                     push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
                     should_transform = no_observed && should_transform_to_unconstrained(symbolic_dists[child])
-                    if should_transform
+                    if kind in (:lp_unconstrained, :to_constrained, :to_unconstrained) && should_transform
                         push!(block_args, :($child_d_sym = to_unconstrained($child_d_sym)))
                     end
 
