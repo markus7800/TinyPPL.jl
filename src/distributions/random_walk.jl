@@ -21,41 +21,12 @@ import Distributions: Distribution, ContinuousUnivariateDistribution, DiscreteUn
 #     return Gamma(α, θ) + lower
 # end
 
-# supports lower = -Inf or upper = Inf
-struct ContinuousRWProposer <: ContinuousUnivariateDistribution
-    a::Real
-    l::Distribution
-    b::Real
-    u::Distribution
-    μ::Float64
-    bp::Float64
-    function ContinuousRWProposer(lower::Real, upper::Real, x::Float64, var::Real)
-        var = var / 2
-        l = truncated(Normal(x, sqrt(var)), lower, max(x, lower+1e-3))
-        u = truncated(Normal(x, sqrt(var)), min(x, upper-1e-3), upper)
-
-        mass_left = l.tp
-        mass_right = u.tp
-        bp = mass_right / (mass_left + mass_right)
-        return new(lower, l, upper, u, x, bp)
-    end
-end
-
-function Base.rand(d::ContinuousRWProposer)::Float64
-    if rand() < d.bp
-        return rand(d.u)
-    else
-        return rand(d.l)
-    end
-end
-
-function logpdf(d::ContinuousRWProposer, x::Float64)::Float64
-    if d.a <= x <= d.μ
-        return logpdf(d.l, x) + log(1-d.bp)
-    elseif d.μ <= x <= d.b
-        return logpdf(d.u, x) + log(d.bp)
-    end
-    return -Inf
+# Random walk proposal on the interval [lower, upper] (lower = -Inf or upper = Inf allowed).
+# Normal(x, sqrt(var)) truncated to the support.
+# (The previous split-normal construction, which picks the left or right half with probability
+#  proportional to its mass, is the same distribution.)
+function ContinuousRWProposer(lower::Real, upper::Real, x::Real, var::Real)
+    return truncated(Normal(x, sqrt(var)), lower, upper)
 end
 
 function continuous_interval(lower::Real, upper::Real, x::Real, var::Real)
@@ -81,7 +52,12 @@ struct DiscreteRWProposer <: DiscreteUnivariateDistribution
         var = var / 2
         p = (sqrt(1 + 4*var) - 1) / (2*var)
         G = Geometric(p)
-        if a != 0 && b != 0
+        if a == 0 && b == 0
+            # single value in support, proposal is point mass at x
+            bp = NaN
+            la = -Inf
+            lb = -Inf
+        elseif a != 0 && b != 0
             mass_left = 1-(1-p)^a
             mass_right = 1-(1-p)^b
             bp = mass_right / (mass_left + mass_right)
@@ -97,6 +73,9 @@ struct DiscreteRWProposer <: DiscreteUnivariateDistribution
 end
 
 function Base.rand(d::DiscreteRWProposer)::Int
+    if d.a == 0 && d.b == 0
+        return d.μ
+    end
     if d.b == 0
         return d.μ - rand(d.G) % d.a - 1
     end
@@ -114,6 +93,9 @@ end
 function logpdf(d::DiscreteRWProposer, x::Real)::Float64
     x = Int(x)
     y = x - d.μ
+    if d.a == 0 && d.b == 0
+        return y == 0 ? 0. : -Inf
+    end
     if 0 < y <= d.b
         return logpdf(d.G, y-1) + d.lb
     elseif -d.a <= y < 0
