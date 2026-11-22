@@ -41,6 +41,19 @@ const impossible_branch = @pgm exact_test_impossible_branch begin
     end
 end
 
+# a is shared by three clusters {a,b}, {a,c}, {a,d} (junction tree is a chain of three clusters)
+const star = @pgm exact_test_star begin
+    let a ~ Categorical([0.2, 0.5, 0.3]),
+        b ~ Bernoulli(a == 1. ? 0.9 : (a == 2. ? 0.4 : 0.1)),
+        c ~ Bernoulli(a == 3. ? 0.8 : 0.3),
+        d ~ Bernoulli(a == 2. ? 0.0 : 0.6)
+        {:ob} ~ Bernoulli(b == 1. ? 0.7 : 0.2) ↦ 1.
+        {:oc} ~ Bernoulli(c == 1. ? 0.1 : 0.6) ↦ 0.
+        {:od} ~ Bernoulli(d == 1. ? 0.9 : 0.3) ↦ 1.
+        a
+    end
+end
+
 const two_coins = @pgm exact_test_two_coins begin
     let a ~ Bernoulli(0.5),
         b ~ Bernoulli(0.5)
@@ -252,6 +265,24 @@ end
     @test marginal(get_marginals(res), :b, [0., 1.]) ≈ [1., 0.]
     res = belief_propagation(impossible_branch; calibrate_tree=true, return_factor_as_root=true)
     @test marginal(get_marginals(res), :e, [0., 1.]) ≈ [0.375, 0.625]
+end
+
+@testset "junction tree message passing with division on three clusters and impossible values" begin # B3
+    for (pgm, addrs) in ((impossible_branch, (:a, :b, :e)), (star, (:a, :b, :c, :d)))
+        res_div = jt_with_division(pgm)
+        res = junction_tree_message_passing(pgm; calibrate_tree=true, return_factor_as_root=true)
+        @test res_div.log_evidence ≈ res.log_evidence
+        for addr in addrs
+            support = addr == :a && pgm === star ? [1., 2., 3.] : [0., 1.]
+            m_div = marginal(get_marginals(res_div), addr, support)
+            @test all(isfinite, m_div)
+            @test m_div ≈ marginal(get_marginals(res), addr, support)
+        end
+    end
+    # reference values from enumeration
+    res = jt_with_division(impossible_branch)
+    @test marginal(get_marginals(res), :e, [0., 1.]) ≈ [0.375, 0.625]
+    @test marginal(get_marginals(res), :b, [0., 1.]) ≈ [1., 0.]
 end
 
 @testset "disconnected components" begin # C9

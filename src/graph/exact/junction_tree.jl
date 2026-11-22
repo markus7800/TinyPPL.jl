@@ -312,7 +312,7 @@ function backward_with_division(node::ClusterNode, parent::Union{ClusterNode, No
         index_in_child = neighbour.neighbour_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
 
-        backward_with_division(neighbour, parent)
+        backward_with_division(neighbour, node)
     end
 end
 
