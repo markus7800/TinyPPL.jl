@@ -371,4 +371,75 @@ aqua_mean(result, addr) = ((xs, ps) = result[addr]; sum(xs .* ps) * (xs[2] - xs[
     end
 end
 
+@testset "bif" begin # B10
+    survey = joinpath(@__DIR__, "..", "examples", "bif_models", "survey.bif")
+    tables_by_scope(factor_nodes) = Dict([v.variable for v in f.neighbours] => f.table for f in factor_nodes)
+
+    variable_nodes, factor_nodes = read_bif(survey)
+    @test [v.address for v in variable_nodes] == ["A", "S", "E", "O", "R", "T"]
+    @test length(factor_nodes) == 6
+    _, evidence = get_joint_factor(variable_nodes, factor_nodes)
+    @test evidence ≈ 1.
+    # P(T = train | O = self, R = small) = 0.36, T is the 6th variable, O the 4th, R the 5th
+    T_factor = only(f for f in factor_nodes if [v.variable for v in f.neighbours] == [4, 5, 6])
+    @test exp(T_factor.table[2, 1, 2]) ≈ 0.36
+
+    mktempdir() do dir
+        # Windows line endings
+        crlf = joinpath(dir, "survey_crlf.bif")
+        write(crlf, replace(read(survey, String), "\n" => "\r\n"))
+        _, factor_nodes_crlf = read_bif(crlf)
+        @test tables_by_scope(factor_nodes_crlf) == tables_by_scope(factor_nodes)
+
+        # round trip: write_bif writes probabilities (not log probabilities)
+        out = joinpath(dir, "survey_out.bif")
+        write_bif(out, variable_nodes, factor_nodes)
+        variable_nodes_rt, factor_nodes_rt = read_bif(out)
+        @test length(variable_nodes_rt) == 6
+        rt = tables_by_scope(factor_nodes_rt)
+        for (scope, table) in tables_by_scope(factor_nodes)
+            @test rt[scope] ≈ table
+        end
+
+        # child declared before its parent -> child is not the last neighbour of its factor
+        child_first = joinpath(dir, "child_first.bif")
+        write(child_first, """
+        network unknown {
+        }
+        variable C {
+          type discrete [ 2 ] { no, yes };
+        }
+        variable P {
+          type discrete [ 3 ] { a, b, c };
+        }
+        probability ( C | P ) {
+          (a) 0.9, 0.1;
+          (b) 0.5, 0.5;
+          (c) 0.2, 0.8;
+        }
+        probability ( P ) {
+          table 0.2, 0.3, 0.5;
+        }
+        """)
+        variable_nodes, factor_nodes = read_bif(child_first)
+        out = joinpath(dir, "child_first_out.bif")
+        write_bif(out, variable_nodes, factor_nodes)
+        @test occursin("probability ( X1 | X2 )", read(out, String))
+        _, factor_nodes_rt = read_bif(out)
+        rt = tables_by_scope(factor_nodes_rt)
+        for (scope, table) in tables_by_scope(factor_nodes)
+            @test rt[scope] ≈ table
+        end
+
+        # factor that is not a conditional probability table cannot be written
+        f = FactorNode(variable_nodes[1:1], log.([0.3, 0.3]))
+        @test_throws ErrorException write_bif(joinpath(dir, "bad.bif"), variable_nodes[1:1], [f])
+
+        # unparsable file is not silently accepted
+        bad = joinpath(dir, "bad.bif")
+        write(bad, "nothing here")
+        @test_throws Exception read_bif(bad)
+    end
+end
+
 end # module ExactInferenceTests
