@@ -280,21 +280,22 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         t.variable_to_address[v] = addr
         push!(t.translation_order, v)
 
+        if !t.lazy_ifs
+            F = E # distribution not score
+        else
+            # variables in the control flow condition phi are parents as well
+            F = simplify_if(:($phi ? $E : Flat()))
+        end
+        G.P[v] = F
+
         # should only contain vars from sample or observe
         # all other vars should be substituted for their let value
-        free_vars = get_free_variables(E) ∩ t.all_let_variables # remove primitives from Julia
+        free_vars = get_free_variables(F) ∩ t.all_let_variables # remove primitives from Julia
         for z in free_vars
             @assert z in t.variables
             push!(G.A, z => v)
         end
         push!(G.V, v)
-    
-        if !t.lazy_ifs
-            G.P[v] = E # distribution not score
-        else
-            F = :($phi ? $E : Flat())
-            G.P[v] = F
-        end
     
         return G, v
 

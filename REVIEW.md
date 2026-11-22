@@ -35,7 +35,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: transform only for `:lp_unconstrained`, `:to_constrained`, `:to_unconstrained` (as in the iid and identity-edge paths). Plated models with non-iid constrained plates can be invoked at compile time again (sampling produced negative Gamma values → random DomainError in Poisson).
 - [x] C7 ✅ `src/graph/BBVI.jl:5` — iterates nodes in index order, not topological order.
   - fixed: iterate `pgm.topological_order`. In the chain test, `a` has index 1 and its parent `z` index 2, so `a` was sampled with the previous `z` (E[z] ≈ 0.03 instead of 0.44).
-- [ ] C8 ✅ `src/graph/core/symbolic_pgm.jl:285-296` — with `lazy_ifs`, no edges from `if` condition to branch samples.
+- [x] C8 ✅ `src/graph/core/symbolic_pgm.jl:285-296` — with `lazy_ifs`, no edges from `if` condition to branch samples.
+  - fixed: parents are the free variables of `phi ? dist : Flat()` (as for observes). The expression is now simplified with `simplify_if`, so samples outside of branches keep their plain distribution instead of `true ? dist : Flat()`.
 - [ ] C9 ✅ exact: `variable_elimination.jl:59,80`, `greedy_variable_elimination.jl:259,285`, `junction_tree.jl:123,210` — disconnected factor graphs: empty-scope factors dropped / JT only walks root component (two coins: evidence 0.5 instead of 0.25).
 - [ ] C10 ✅ `src/graph/exact/factor_graph.jl:323` (+VE/BP/JT) — `log.(sum(exp, …))` without max shift; evidence returned linear → `-Inf`/`NaN` with many observations.
 - [ ] C11 ✅ `src/graph/exact/belief_propagation.jl:482` — `message .-= …` gives `-Inf - -Inf = NaN`; use `factor_div_op`.
