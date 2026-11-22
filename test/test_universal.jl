@@ -1,0 +1,311 @@
+module UniversalEvaluationTests
+# Evaluation-based inference for universal models (src/evaluation/universal).
+
+using Test, Random, Statistics
+using TinyPPL.Distributions
+using TinyPPL.Evaluation
+import TinyPPL.Evaluation as E
+import ..References as R
+using ..TestUtils
+
+# ---------------------------------------------------------------------- models
+# see references.jl for the mathematical definitions
+
+@ppl function normal_normal()
+    μ ~ Normal(0., R.NN_PRIOR_SD)
+    for i in 1:3
+        {:y => i} ~ Normal(μ, 1.)
+    end
+    return μ
+end
+const nn_obs = Observations((:y => i) => R.NN_YS[i] for i in 1:3)
+
+@ppl function gamma_scale()
+    s ~ Gamma(2., 1.)
+    for i in 1:3
+        {:y => i} ~ Normal(0., s)
+    end
+    return s
+end
+const gs_obs = Observations((:y => i) => R.GS_YS[i] for i in 1:3)
+
+@ppl function beta_bernoulli()
+    p ~ Beta(2., 2.)
+    for i in 1:5
+        {:y => i} ~ Bernoulli(p)
+    end
+    return p
+end
+const bb_obs = Observations((:y => i) => R.BB_YS[i] for i in 1:5)
+
+@ppl function discrete_network()
+    z ~ Categorical([0.5, 0.3, 0.2])
+    b ~ Bernoulli(R.dn_pb(z))
+    {:o1} ~ Bernoulli(R.dn_po1(b))
+    {:o2} ~ Bernoulli(R.dn_po2(z))
+    return z
+end
+const dn_obs = Observations(:o1 => 1., :o2 => 0.)
+
+@ppl function mixed()
+    z ~ Bernoulli(0.3)
+    x ~ Normal(R.mx_mean(z), 1.)
+    {:y} ~ Normal(x, 0.5)
+    return x
+end
+const mx_obs = Observations(:y => R.MX_Y)
+
+@ppl function branching()
+    b ~ Normal(0., 1.)
+    if b > 0
+        x = {:c} ~ Normal(1., 1.)
+    else
+        x = {:d} ~ Normal(-1., 1.)
+    end
+    {:y} ~ Normal(x, 1.)
+    return b > 0
+end
+const br_obs = Observations(:y => R.BR_Y)
+
+# variant with a constrained latent in one branch (only used to check support handling)
+@ppl function branching_constrained()
+    b ~ Normal(0., 1.)
+    if b > 0
+        x = {:c} ~ Gamma(2., 1.)
+    else
+        x = {:d} ~ Normal(-1., 1.)
+    end
+    {:y} ~ Normal(x, 1.)
+    return b > 0
+end
+
+@ppl function geometric()
+    i = 0
+    while ({:b => i} ~ Bernoulli(0.5)) == 0
+        i += 1
+    end
+    {:y} ~ Normal(i, 1.)
+    return i
+end
+const geo_obs = Observations(:y => R.GEO_Y)
+
+@ppl function linear_regression(xs)
+    slope ~ Normal(0., 10.)
+    intercept ~ Normal(0., 10.)
+    for i in eachindex(xs)
+        {:y => i} ~ Normal(intercept + slope * xs[i], 1.)
+    end
+    return (slope, intercept)
+end
+const lr_obs = Observations((:y => i) => R.LR_YS[i] for i in eachindex(R.LR_YS))
+
+# -------------------------------------------------------------- deterministic
+
+@testset "logjoint" begin
+    lj = E.make_logjoint(gamma_scale, (), gs_obs)
+    s = 1.7
+    ref = logpdf(Gamma(2., 1.), s) + sum(logpdf(Normal(0., s), y) for y in R.GS_YS)
+    @test lj(UniversalTrace(:s => s)) ≈ ref
+
+    ulj = E.make_unconstrained_logjoint(gamma_scale, (), gs_obs)
+    @test ulj(UniversalTrace(:s => log(s))) ≈ ref + log(s) # + log |d exp(x)/dx|
+
+    X, _ = transform_to_unconstrained(UniversalTrace(:s => s), gamma_scale, (), gs_obs)
+    @test X[:s] ≈ log(s)
+    Y, retval = transform_to_constrained(X, gamma_scale, (), gs_obs)
+    @test Y[:s] ≈ s
+    @test retval ≈ s
+end
+
+@testset "observations as plain Dict" begin # A2
+    Random.seed!(0)
+    @test likelihood_weighting(normal_normal, (), Dict((:y => i) => R.NN_YS[i] for i in 1:3), 10) isa Tuple
+end
+
+# ---------------------------------------------------------- likelihood weighting
+
+@testset "likelihood_weighting" begin
+    N = 50_000
+    @testset "normal_normal" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(normal_normal, (), nn_obs, N)
+        @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.03
+        @test wstd(traces[:μ], lw) ≈ R.NN_POST_SD atol = 0.03
+        @test wmean(retvals(traces), lw) ≈ R.NN_POST_MEAN atol = 0.03
+    end
+    @testset "gamma_scale" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(gamma_scale, (), gs_obs, N)
+        @test wmean(traces[:s], lw) ≈ R.GS_POST_MEAN atol = 0.05
+    end
+    @testset "beta_bernoulli" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(beta_bernoulli, (), bb_obs, N)
+        @test wmean(traces[:p], lw) ≈ R.BB_POST_MEAN atol = 0.01
+    end
+    @testset "discrete_network" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(discrete_network, (), dn_obs, N)
+        @test [wprob(traces[:z], lw, k) for k in 1:3] ≈ R.DN_POST_Z atol = 0.01
+        @test wprob(traces[:b], lw, 1) ≈ R.DN_POST_B[2] atol = 0.01
+    end
+    @testset "mixed" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(mixed, (), mx_obs, N)
+        @test wprob(traces[:z], lw, 1) ≈ R.MX_POST_Z1 atol = 0.01
+        @test wmean(traces[:x], lw) ≈ R.MX_POST_MEAN_X atol = 0.03
+    end
+    @testset "branching" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(branching, (), br_obs, N)
+        @test wmean(retvals(traces), lw) ≈ R.BR_POST_POSITIVE atol = 0.01
+    end
+    @testset "geometric" begin
+        Random.seed!(0)
+        traces, lw = likelihood_weighting(geometric, (), geo_obs, N)
+        @test wmean(retvals(traces), lw) ≈ R.GEO_POST_MEAN atol = 0.05
+    end
+    @testset "retval completion" begin
+        Random.seed!(0)
+        rets, lw = likelihood_weighting(normal_normal, (), nn_obs, N, E.retval_completion)
+        @test wmean(rets, lw) ≈ R.NN_POST_MEAN atol = 0.03
+    end
+    @testset "trace completion returns distinct traces" begin # B15
+        Random.seed!(0)
+        ts, _ = likelihood_weighting(normal_normal, (), nn_obs, 3, (trace, retval) -> trace)
+        @test ts[1][:μ] != ts[2][:μ]
+    end
+end
+
+# ------------------------------------------------------------------ single-site MH
+
+const MH_MODELS = [
+    # name, model, args, observations, test function(traces)
+    ("normal_normal", normal_normal, (), nn_obs, t -> begin
+        μ = burn(t[:μ])
+        @test mean(μ) ≈ R.NN_POST_MEAN atol = 0.05
+        @test std(μ) ≈ R.NN_POST_SD atol = 0.05
+    end),
+    ("gamma_scale", gamma_scale, (), gs_obs, t -> begin
+        @test mean(burn(t[:s])) ≈ R.GS_POST_MEAN atol = 0.1
+    end),
+    ("beta_bernoulli", beta_bernoulli, (), bb_obs, t -> begin
+        @test mean(burn(t[:p])) ≈ R.BB_POST_MEAN atol = 0.02
+    end),
+    ("discrete_network", discrete_network, (), dn_obs, t -> begin
+        @test frequencies(burn(t[:z]), 1:3) ≈ R.DN_POST_Z atol = 0.02
+        @test mean(burn(t[:b])) ≈ R.DN_POST_B[2] atol = 0.02
+    end),
+    ("mixed", mixed, (), mx_obs, t -> begin
+        @test mean(burn(t[:z])) ≈ R.MX_POST_Z1 atol = 0.03
+        @test mean(burn(t[:x])) ≈ R.MX_POST_MEAN_X atol = 0.05
+    end),
+    ("branching", branching, (), br_obs, t -> begin
+        @test mean(burn(retvals(t))) ≈ R.BR_POST_POSITIVE atol = 0.03
+    end),
+    ("geometric", geometric, (), geo_obs, t -> begin
+        @test mean(burn(retvals(t))) ≈ R.GEO_POST_MEAN atol = 0.1
+    end),
+]
+
+@testset "lmh" begin
+    for (name, model, args, obs, check) in MH_MODELS
+        @testset "$name" begin
+            Random.seed!(0)
+            check(lmh(model, args, obs, 50_000))
+        end
+    end
+    @testset "gibbs geometric" begin # C17
+        Random.seed!(0)
+        traces = lmh(geometric, (), geo_obs, 20_000; gibbs=true)
+        @test mean(burn(retvals(traces))) ≈ R.GEO_POST_MEAN atol = 0.1
+    end
+    @testset "random walk proposal normal_normal" begin
+        Random.seed!(0)
+        traces = lmh(normal_normal, (), nn_obs, 50_000; addr2proposal=Addr2Proposal(:μ => ContinuousRandomWalkProposal(0.5)))
+        @test mean(burn(traces[:μ])) ≈ R.NN_POST_MEAN atol = 0.05
+    end
+end
+
+@testset "rwmh" begin
+    for (name, model, args, obs, check) in MH_MODELS
+        @testset "$name" begin
+            Random.seed!(0)
+            check(rwmh(model, args, obs, 50_000; default_var=0.5))
+        end
+    end
+end
+
+# ---------------------------------------------------------- non-parametric HMC
+
+@testset "non_parametric_hmc" begin
+    @testset "normal_normal" begin # C1
+        Random.seed!(0)
+        result = non_parametric_hmc(normal_normal, (), nn_obs, 5_000, 10, 0.1)
+        μ = burn([X[:μ] for X in result])
+        @test mean(μ) ≈ R.NN_POST_MEAN atol = 0.05
+        @test std(μ) ≈ R.NN_POST_SD atol = 0.05
+    end
+    @testset "branching" begin # C2
+        Random.seed!(0)
+        result = non_parametric_hmc(branching, (), br_obs, 5_000, 10, 0.1)
+        # every trace contains exactly the branch address that matches the sign of b
+        @test all(haskey(X, X[:b] > 0 ? :c : :d) && !haskey(X, X[:b] > 0 ? :d : :c) for X in result)
+        @test mean(burn([X[:b] > 0 for X in result])) ≈ R.BR_POST_POSITIVE atol = 0.05
+    end
+    @testset "x_initial" begin # B5
+        Random.seed!(0)
+        result = non_parametric_hmc(normal_normal, (), nn_obs, 10, 10, 0.1; x_initial=UniversalTrace(:μ => 1.0))
+        @test length(result) == 10
+    end
+end
+
+# ---------------------------------------------------------------- variational
+
+@testset "advi_meanfield" begin
+    @testset "normal_normal" begin
+        Random.seed!(0)
+        # decayed adagrad keeps a constant step size, so a small learning rate is needed for accuracy
+        res = advi_meanfield(normal_normal, (), nn_obs, 10_000, 10, 0.01)
+        traces, _ = sample_posterior(res, 10_000)
+        @test mean(traces[:μ]) ≈ R.NN_POST_MEAN atol = 0.05
+        @test std(traces[:μ]) ≈ R.NN_POST_SD atol = 0.05
+    end
+    @testset "gamma_scale" begin
+        Random.seed!(0)
+        res = advi_meanfield(gamma_scale, (), gs_obs, 3_000, 10, 0.05)
+        traces, _ = sample_posterior(res, 10_000)
+        @test mean(traces[:s]) ≈ R.GS_POST_MEAN atol = 0.2 # Gaussian approximation in log space
+    end
+    @testset "linear_regression" begin
+        Random.seed!(0)
+        res = advi_meanfield(linear_regression, (R.LR_XS,), lr_obs, 5_000, 10, 0.05)
+        traces, _ = sample_posterior(res, 10_000)
+        @test [mean(traces[:slope]), mean(traces[:intercept])] ≈ R.LR_POST_MEAN atol = 0.1
+    end
+    @testset "branching: unvisited addresses" begin # C16
+        Random.seed!(0)
+        res = advi_meanfield(branching_constrained, (), br_obs, 500, 10, 0.05)
+        traces, _ = sample_posterior(res, 1_000)
+        # returned traces must be consistent with the program: branch address matching b, in its support
+        @test all(X[:b] > 0 ? X[:c] > 0 : haskey(X, :d) for X in traces.data)
+    end
+end
+
+@testset "bbvi" begin
+    @testset "normal_normal" begin
+        Random.seed!(0)
+        res = bbvi(normal_normal, (), nn_obs, 3_000, 10, 0.05)
+        traces, _ = sample_posterior(res, 10_000)
+        @test mean(traces[:μ]) ≈ R.NN_POST_MEAN atol = 0.1
+        @test std(traces[:μ]) ≈ R.NN_POST_SD atol = 0.1
+    end
+    @testset "gamma_scale" begin
+        Random.seed!(0)
+        res = bbvi(gamma_scale, (), gs_obs, 3_000, 10, 0.05)
+        traces, _ = sample_posterior(res, 10_000)
+        @test mean(traces[:s]) ≈ R.GS_POST_MEAN atol = 0.2
+    end
+end
+
+end # module UniversalEvaluationTests
