@@ -44,6 +44,8 @@ end
 export light_smc
 
 # Same structure as in static/SMC.jl
+# Proposals are called with x_current = (addr, X) (static/SMC.jl uses (addr, trace, addresses_to_ix)),
+# so only proposals that do not depend on x_current, like StaticProposal, are meaningful.
 # Instead of using Libtask, we exploit the fixed structure of a PGM.
 # We traverse the topological_order for several particles at once.
 # Additionally, we can optimise ancestral_sampling by not computing the full joint,
@@ -53,7 +55,8 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
     relevant_future_nodes::Union{Nothing, Vector{Vector{Int}}} = nothing
     )
     conditional = !isnothing(X_ref)
-    last_observe_node = first(Iterators.reverse(Iterators.filter(node -> isobserved(pgm, node), pgm.topological_order)))
+    observe_nodes = filter(node -> isobserved(pgm, node), pgm.topological_order)
+    last_observe_node = isempty(observe_nodes) ? nothing : last(observe_nodes)
 
     # In conditional SMC, all particles are initialised with X_ref, such that the values
     # of nodes that are not sampled yet are given by X_ref (needed for ancestral sampling).
@@ -74,18 +77,18 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 log_γ_new[i] += logpdf(d, value)
 
                 log_w[i] = log_γ_new[i] - log_γ[i] - log_q[i]
-                # TODO: handle sample is last
             end
+
+            if node == last_observe_node
+                # no resampling at last observe,
+                # weights and evidence are computed at the end (there may be latents after the last observe)
+                continue
+            end
+
             log_sum_W = logsumexp(log_w)
             log_marginal_lik += log_sum_W - log(n_particles)
             W = exp.(log_w .- log_sum_W)
-
             # println("Neff=", 1/sum(W.^2))
-
-            if node == last_observe_node
-                # no resampling at last observe
-                continue
-            end
 
             # resampling
             A = rand(Categorical(W), n_particles)
@@ -164,6 +167,11 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
             end
         end
     end
+
+    # final weights include latents sampled after the last observe (with custom proposal Q ≠ prior)
+    # log_γ_new, log_q accumulate since last resampling
+    log_w .= log_γ_new .- log_γ .- log_q
+    log_marginal_lik += logsumexp(log_w) - log(n_particles)
 
     retvals = Vector{Any}(undef, n_particles)
     for i in 1:n_particles

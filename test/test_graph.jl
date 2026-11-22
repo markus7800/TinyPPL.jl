@@ -21,6 +21,17 @@ const normal_normal = @pgm graph_test_normal_normal begin
     end
 end
 
+# normal_normal with latent after last observe (C14)
+const normal_normal_trailing = @pgm graph_test_normal_normal_trailing begin
+    let μ ~ Normal(0., 2.),
+        ys = [1.0, 2.0, 1.5]
+        [({:y => i} ~ Normal(μ, 1.) ↦ ys[i]) for i in 1:3]
+        let w ~ Normal(μ, 1.)
+            w
+        end
+    end
+end
+
 const gamma_scale = @pgm graph_test_gamma_scale begin
     let s ~ Gamma(2., 1.),
         ys = [0.5, -1.2, 2.0]
@@ -447,6 +458,13 @@ end
         Random.seed!(0)
         traces, lw, log_marginal_lik = smc(normal_normal, N; addr2proposal=Addr2Proposal(:μ => StaticProposal(Normal(1., 1.))))
         @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.05
+        @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05
+    end
+    @testset "smc with proposal for latent after last observe" begin # C14
+        Random.seed!(0)
+        traces, lw, log_marginal_lik = smc(normal_normal_trailing, N; addr2proposal=Addr2Proposal(:w => StaticProposal(Normal(2., 2.))))
+        @test wmean(traces[:w], lw) ≈ R.NN_POST_MEAN atol = 0.05
+        @test wstd(traces[:w], lw) ≈ sqrt(R.NN_POST_SD^2 + 1) atol = 0.05
         @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05
     end
     @testset "light_smc chain" begin # C12
