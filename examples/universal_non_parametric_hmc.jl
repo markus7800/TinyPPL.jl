@@ -1,12 +1,7 @@
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
-using TinyPPL.Logjoint
 import Random
-using Plots
-
-function get_vals(result, addr)
-    [get(r, addr, missing) for r in result]
-end
+using StatsPlots
 
 @ppl function pedestrian(i_max)
     start_position ~ Uniform(0.,3.)
@@ -26,132 +21,23 @@ end
 
 args = (100,)
 observations = Observations(:distance => 1.1);
-Random.seed!(0)
-result = non_parametric_hmc(pedestrian, args, observations, 10000, 10, 0.001);
 
+# reference posterior of start_position
+Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 1_000_000, Evaluation.retval_completion);
+W = exp.(lps .- maximum(lps)); W ./= sum(W);
 
-@ppl function test()
-    X ~ Normal(0.,1.)
-    if X < 0.
-        Y ~ Normal(0.,1)
-    else
-    end
-end
-args = ()
-observations = Observations()
+# The initial state matters a lot for this model:
+# a random prior sample typically walks until distance > 10, which is very unlikely given distance = 1.1.
+# HMC cannot escape from there, because decreasing the distance below 10 continues the walk,
+# which adds new steps and makes the distance larger again (discontinuity).
+# Thus, we start from the most likely trace out of 1000 prior samples.
+Random.seed!(0); traces, lw = likelihood_weighting(pedestrian, args, observations, 1_000);
+x_initial = traces.data[argmax(lw)]
 
-xs = -3:0.1:3
-ys = -3:0.1:3
-U = [sum(Evaluation.get_U(test, args, observations, Evaluation.NPHMCTrace(:X => x, :Y => y))[1:2]) for y in ys, x in xs];
-heatmap(xs, ys, U)
+Random.seed!(0); @time result = non_parametric_hmc(pedestrian, args, observations, 10_000, 10, 0.05; x_initial=x_initial);
 
-traces, lps = likelihood_weighting(test, args, observations, 100_000);
-histogram(traces[:X], weights = exp.(lps))
-histogram(traces[:Y], weights = exp.(lps)[.!ismissing.(traces[:Y])])
+# result contains unconstrained values
+start_position = [transform_to_constrained(X, pedestrian, args, observations)[2] for X in result]
 
-traces, lps = rwmh(test, args, observations, 100_000);
-histogram(traces[:X])
-histogram(traces[:Y])
-mean(traces[:X] .< 0)
-
-Random.seed!(0)
-result = non_parametric_hmc(test, args, observations, 10000, 10, 0.1);
-histogram(get_vals(result, :X))
-histogram(get_vals(result, :Y))
-
-X_current = Evaluation.NPHMCTrace(:X => 0.)
-U_current, _, _, _ = Evaluation.get_U(test, args, observations, X_current)
-
-Random.seed!(0)
-X_proposed, U_aux_current, K_current, K_proposed = Evaluation.universal_leapfrog(test, args, observations, X_current, 1, 0.1)
-U_proposed, U_aux_proposed, _, _ = Evaluation.get_U(test, args, observations, X_proposed)
-
-(U_current + U_aux_current + K_current) - (U_proposed + U_aux_proposed + K_proposed)
-
-@ppl static function static_test()
-    X ~ Normal(0.,1.)
-    if X <= 0.
-        Y ~ Normal(0.,1)
-    end
-end
-args = ()
-observations = Observations()
-
-logjoint, addresses_to_ix = Evaluation.make_unconstrained_logjoint(static_test, args, observations)
-K = length(addresses_to_ix)
-Random.seed!(0)
-samples = hmc_logjoint(logjoint, K, 1000000, 1, 0.01, ad_backend=:forwarddiff);
-traces = StaticTraces(addresses_to_ix, samples, Any[])
-histogram(traces[:X])
-histogram(traces[:Y])
-
-grad_U = Logjoint.get_grad_U_fwd_diff(logjoint)
-
-X_current = [0.1,1.5]
-P_current = [-0.1,0.]
-X_proposed, P_proposed = Logjoint.leapfrog(grad_U, X_current, P_current, 10, 0.1)
-
-exp((-logjoint(X_current) + sum(P_current.^2)/2)-(-logjoint(X_proposed) + sum(P_proposed.^2)/2))
-
-
-X = Evaluation.NPHMCTrace()
-Random.seed!(0)
-grad, new_P, U_aux = Evaluation.get_U_grad_and_extend!(test, args, observations, X, 0.)
-
-X = Evaluation.NPHMCTrace()
-Random.seed!(0)
-X_proposed, U_aux_current, K_current, K_proposed = Evaluation.universal_leapfrog(pedestrian, args, observations, X, 10, 0.1)
-
-
-A = Dictionary{Address,Float64}()
-insert!(A, :x, 1)
-
-for i in pairs(A)
-    println(i)
-end
-
-B = A .+ 1
-insert!(B, :y, 2)
-
-@which copy(A)
-
-@macroexpand @ppl function simple(mean::Float64)
-    X = {:X} ~ Normal(mean, 1.)
-    {:Y} ~ Normal(X, 1.)
-    return X
-end
-
-using Turing
-
-@model function discontinuous()
-    X ~ Normal(0.,1.)
-    if X <= 0.
-        Y ~ Normal(0.,1)
-    end
-end
-
-Turing.Random.seed!(1)
-res = Turing.sample(discontinuous(), HMC(0.1, 10), 100000);
-histogram(res[:X])
-histogram(res[:Y])
-
-
-
-@ppl static function test()
-    X ~ Normal(0.,1.)
-    if X < 0.
-        Y ~ Uniform(-1,1)
-    else
-        Y ~ Uniform(-0.5,0.5)
-    end
-end
-args = ()
-observations = Observations()
-
-Random.seed!(0)
-result, _ = likelihood_weighting(test, args, observations, 10^6)
-histogram(result[:Y], normalize=true)
-
-Random.seed!(0)
-result = hmc(test, args, observations, 10^6, 10, 0.01, ad_backend=:forwarddiff, unconstrained=false)
-histogram(result[:Y], normalize=true)
+histogram(start_position, normalize=true, legend=false)
+density!(lw_retvals, weights=W)

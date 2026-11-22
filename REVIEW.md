@@ -21,6 +21,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - instantiated addresses were drawn from the prior at time t (implicit x0 = x_t − t·ε·p0) and `-log q(x0)` was missing from the initial energy; now x0 ~ q = N(0,1), x_t = x0 + t·ε·p0 and both `-log q(x0)` and `p0²/2` enter H(current);
   - addresses unused by the proposed trace are now scored with `-log q` in H(proposed) (extended target π(X_used) ∏ q(X_unused));
   - `x_initial` (constrained trace) is transformed to unconstrained space (was `todo(x_initial)`, part of B5).
+  - pedestrian (`examples/universal_non_parametric_hmc.jl`, acceptance 0.0003): not a sampler bug. The default start (a prior sample) usually walks until distance > 10; lowering the distance below 10 adds steps, so HMC is trapped there. The example now starts from the best of 1000 LW samples with L=10, ε=0.05 (acceptance ≈ 0.6, matches LW reference); the docstring notes this, and the test suite has a pedestrian case.
 - [ ] C3 ✅ `src/evaluation/static/SMC.jl:121` — after last observe `log_w` unchanged but multiplied into `marginal_lik` again (≈Z²); PIMH uses this ratio. Linear-space `marginal_lik` underflows.
 - [ ] C4 ✅ `src/evaluation/static/HMC.jl:28` — `transform_to_constrained!` applied even when `unconstrained=false` (Gamma sample 2 → e²). Constrained HMC with default `x_initial = zeros` starts outside support.
 - [ ] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).

@@ -198,6 +198,10 @@ end
 Non-parametric HMC for universal models with continuous latent variables.
 Returns a vector of traces with *unconstrained* values.
 `x_initial` is a trace with constrained values (as returned by the model).
+If no `x_initial` is given, the chain starts at a random prior sample (the first proposal is always accepted).
+For models with discontinuities this sample may lie in a region that HMC cannot leave,
+e.g. see examples/universal_non_parametric_hmc.jl. Then, it helps to initialise the chain with a likely trace
+(for instance the trace with the largest weight among some likelihood weighting samples).
 """
 function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, eps::Float64;
     x_initial::Union{Nothing,AbstractUniversalTrace}=nothing)
