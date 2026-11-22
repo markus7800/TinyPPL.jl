@@ -37,7 +37,9 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: iterate `pgm.topological_order`. In the chain test, `a` has index 1 and its parent `z` index 2, so `a` was sampled with the previous `z` (E[z] ≈ 0.03 instead of 0.44).
 - [x] C8 ✅ `src/graph/core/symbolic_pgm.jl:285-296` — with `lazy_ifs`, no edges from `if` condition to branch samples.
   - fixed: parents are the free variables of `phi ? dist : Flat()` (as for observes). The expression is now simplified with `simplify_if`, so samples outside of branches keep their plain distribution instead of `true ? dist : Flat()`.
-- [ ] C9 ✅ exact: `variable_elimination.jl:59,80`, `greedy_variable_elimination.jl:259,285`, `junction_tree.jl:123,210` — disconnected factor graphs: empty-scope factors dropped / JT only walks root component (two coins: evidence 0.5 instead of 0.25).
+- [x] C9 ✅ exact: `variable_elimination.jl:59,80`, `greedy_variable_elimination.jl:259,285`, `junction_tree.jl:123,210` — disconnected factor graphs: empty-scope factors dropped / JT only walks root component (two coins: evidence 0.5 instead of 0.25).
+  - fixed: VE and greedy VE collect empty-scope factors (initial ones via `get_scalar_factors(factor_nodes)` and each `tau` of a fully eliminated component) and multiply them into the result. If all variables are eliminated, the result factor now holds the log evidence instead of 0.
+  - JT: the trees of the connected components are linked with empty sepsets and empty-scope factors are assigned to a component root; also used by AQUA `:jt`. Removed debug `println` in greedy VE.
 - [ ] C10 ✅ `src/graph/exact/factor_graph.jl:323` (+VE/BP/JT) — `log.(sum(exp, …))` without max shift; evidence returned linear → `-Inf`/`NaN` with many observations.
 - [ ] C11 ✅ `src/graph/exact/belief_propagation.jl:482` — `message .-= …` gives `-Inf - -Inf = NaN`; use `factor_div_op`.
 - [ ] C12 `src/graph/SMC.jl:26,41` — `light_smc` returns pre-resampling weights for resampled particles; linear `marginal_lik`.

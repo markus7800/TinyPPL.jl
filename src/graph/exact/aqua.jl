@@ -255,7 +255,7 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
             end
         elseif method == :jt
             elimination_order = get_elimination_order(pgm, variable_nodes, Int[], :Greedy)
-            junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1])
+            junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1]; scalar_factors=get_scalar_factors(factor_nodes))
             jt_result = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true)
             f, evidence, marginals = get_posterior_for_root_factor(jt_result), jt_result.evidence, get_marginals(jt_result)
             for (node, ps) in marginals

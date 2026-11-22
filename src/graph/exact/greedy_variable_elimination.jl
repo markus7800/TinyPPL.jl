@@ -255,13 +255,13 @@ export get_greedy_elimination_order
 # this is equivalent to variable_elimination(variable_nodes, get_greedy_elimination_order(variable_nodes, marginal_variables))
 # but book-keeping variable and factor nodes has to be done only once.
 # This is usually the fastest variable elimination algorithm.
-function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int})
+function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, marginal_variables::Vector{Int}; scalar_factors::Vector{FactorNode}=FactorNode[])
     factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+    scalar_factors = copy(scalar_factors)
 
     # we make heap such that we can simply pop the best node to eliminate
     reduction_size, reduction_size_heap = initialise_reduction_size_heap(variable_nodes, marginal_variables)
 
-    local tau::FactorNode
     @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
         r = pop!(reduction_size_heap)
         node = r.v
@@ -286,21 +286,17 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
             push!(factor_nodes[v], tau)
             add_tau_to_reduction_score_of_v_and_heapify!(reduction_size, reduction_size_heap, v, tau)
         end
+        if isempty(tau.neighbours)
+            # all variables of connected component are eliminated
+            push!(scalar_factors, tau)
+        end
 
         delete!(factor_nodes, node)
         delete!(reduction_size, node)
     end
 
-    if isempty(factor_nodes)
-        println("log-evidence: ", logsumexp(tau.table))
-        evidence = sum(exp, tau.table)
-        return VariableEliminationResult(FactorNode(VariableNode[],0.), evidence)
-    else
-        factor_nodes = reduce(∪, values(factor_nodes))
-        res = reduce(factor_product, factor_nodes)
-        evidence = sum(exp, res.table)
-        return VariableEliminationResult(res, evidence)
-    end
+    # result is unnormalised factor over remaining variables, ∑ exp(factor) = evidence
+    return get_variable_elimination_result(factor_nodes, scalar_factors)
 end
 
 function greedy_variable_elimination(pgm::PGM; marginal_variables=nothing)
@@ -310,15 +306,15 @@ function greedy_variable_elimination(pgm::PGM; marginal_variables=nothing)
     else
         marginal_variables = parse_variables(pgm, marginal_variables)
     end
-    return greedy_variable_elimination(variable_nodes, marginal_variables)
+    return greedy_variable_elimination(variable_nodes, marginal_variables; scalar_factors=get_scalar_factors(factor_nodes))
 end
 
 function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int})
-    return greedy_variable_elimination(variable_nodes, marginal_variables)
+    return greedy_variable_elimination(variable_nodes, marginal_variables; scalar_factors=get_scalar_factors(factor_nodes))
 end
 
 function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{VariableNode})
-    return greedy_variable_elimination(variable_nodes, Int[v.variable for v in marginal_variables])
+    return greedy_variable_elimination(variable_nodes, Int[v.variable for v in marginal_variables]; scalar_factors=get_scalar_factors(factor_nodes))
 end
 
 export greedy_variable_elimination

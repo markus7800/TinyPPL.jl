@@ -9,7 +9,7 @@ function get_junction_tree(pgm::PGM; order::Symbol=:Greedy, return_factor_as_roo
         root_factor = factor_nodes[1]
     end
     elimination_order = get_elimination_order(pgm, variable_nodes, Int[], order)
-    return get_junction_tree(variable_nodes, elimination_order, root_factor)
+    return get_junction_tree(variable_nodes, elimination_order, root_factor; scalar_factors=get_scalar_factors(factor_nodes))
 end
 
 # PGM 10.1.1
@@ -62,7 +62,10 @@ function merge_cluster_node_into_neighbour(cluster_node::ClusterNode, neighbour:
 end
 
 # PGM: 10.4
-function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode}, root_factor::FactorNode, maximal_clique::Bool=true)
+# `scalar_factors` are factors with empty scope, which are not neighbours of any variable node
+# (e.g. observations which do not depend on latent variables).
+function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode}, root_factor::FactorNode, maximal_clique::Bool=true;
+    scalar_factors::Vector{FactorNode}=FactorNode[])
 
     # The execution of a variable elimination algorithm can be associated with a cluster graph.
     # A cluster C_i corresponds to the factor psi_i generated during the execution of the algorithm.
@@ -72,6 +75,7 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
 
     tau_to_cluster_node = Dict{FactorNode,ClusterNode}()
     junction_tree = ClusterNode[]
+    component_roots = ClusterNode[] # clusters whose tau has empty scope, i.e. last cluster of each connected component
 
     for node in elimination_order
         neighbour_factors = factor_nodes[node]
@@ -104,6 +108,9 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
         delete!(psi, node)
         tau = FactorNode(sort!(collect(psi)), Float64[]) # dummy factor
         tau_to_cluster_node[tau] = cluster_node
+        if isempty(tau.neighbours)
+            push!(component_roots, cluster_node)
+        end
 
         for f in neighbour_factors
             for v in f.neighbours
@@ -120,7 +127,23 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
         delete!(factor_nodes, node)
     end
 
-    # TODO: check connectedness
+    if isempty(junction_tree)
+        # no latent variables
+        cluster_node = ClusterNode(VariableNode[])
+        push!(junction_tree, cluster_node)
+        push!(component_roots, cluster_node)
+    end
+    # factors with empty scope can be assigned to any cluster
+    for f in scalar_factors
+        push!(component_roots[1].factors, f)
+    end
+    # Each connected component of the factor graph results in a separate tree.
+    # We connect the trees with edges with empty sepset (the messages along these edges are scalars).
+    # The result is still a junction tree, since the components do not share variables.
+    for i in 2:length(component_roots)
+        push!(component_roots[i-1].neighbours, component_roots[i])
+        push!(component_roots[i].neighbours, component_roots[i-1])
+    end
 
 
     if maximal_clique
@@ -162,11 +185,8 @@ function get_junction_tree(variable_nodes::Vector{VariableNode}, elimination_ord
     # If whenever there is a variable x such that x ∈ C_i and x ∈ C_j then x is also in every cluster
     # on the unique path from C_i to C_j. In particular, there is a path.
     # This (running intersection) property makes the cluster tree a junction tree.
-    if !isempty(root_factor.neighbours)
-        root_cluster_node = junction_tree[findfirst(x -> root_factor in x.factors, junction_tree)]
-    else
-        root_cluster_node = junction_tree[1]
-    end
+    root_ix = findfirst(x -> root_factor in x.factors, junction_tree)
+    root_cluster_node = isnothing(root_ix) ? junction_tree[1] : junction_tree[root_ix]
     make_directed(root_cluster_node, nothing)
 
     return junction_tree, root_cluster_node, root_factor

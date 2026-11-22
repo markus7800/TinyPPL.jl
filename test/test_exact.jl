@@ -258,6 +258,11 @@ end
     @testset "orphan_observation greedy_variable_elimination" begin
         @test greedy_variable_elimination(orphan_observation).evidence ≈ R.OO_EVIDENCE
     end
+    @testset "orphan_observation junction_tree_message_passing" begin
+        res = junction_tree_message_passing(orphan_observation; calibrate_tree=true)
+        @test res.evidence ≈ R.OO_EVIDENCE
+        @test marginal(get_marginals(res), :a, [0., 1.]) ≈ [0.5, 0.5]
+    end
 end
 
 @testset "many observations (underflow)" begin # C10

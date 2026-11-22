@@ -46,7 +46,7 @@ end
 
 function variable_elimination(pgm::PGM, variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode}, marginal_variables::Vector{Int}, order::Symbol)
     elimination_order = get_elimination_order(pgm, variable_nodes, marginal_variables, order)
-    return variable_elimination(variable_nodes, elimination_order)
+    return variable_elimination(variable_nodes, elimination_order; scalar_factors=get_scalar_factors(factor_nodes))
 end
 
 struct VariableEliminationResult
@@ -54,11 +54,24 @@ struct VariableEliminationResult
     evidence::Float64
 end
 
-# eliminates all variables specified in elimination_order
-function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode})
-    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+# factors with empty scope (e.g. observations that do not depend on latent variables)
+# they are not neighbours of any variable node
+get_scalar_factors(factor_nodes::Vector{FactorNode}) = FactorNode[f for f in factor_nodes if isempty(f.neighbours)]
 
-    local tau::FactorNode
+# multiplies the factors that are left after variable elimination
+# scalar_factors are factors with empty scope, which are not connected to any variable (e.g. if a connected component is eliminated)
+function get_variable_elimination_result(factor_nodes::Dict{VariableNode,<:Set}, scalar_factors::Vector{FactorNode})
+    remaining_factors = reduce(∪, values(factor_nodes); init=Set{FactorNode}())::Set
+    res = reduce(factor_product, remaining_factors ∪ scalar_factors; init=FactorNode(VariableNode[], 0.))
+    evidence = sum(exp, res.table)
+    return VariableEliminationResult(res, evidence)
+end
+
+# eliminates all variables specified in elimination_order
+function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_order::Vector{VariableNode}; scalar_factors::Vector{FactorNode}=FactorNode[])
+    factor_nodes = Dict(v => Set(v.neighbours) for v in variable_nodes)
+    scalar_factors = copy(scalar_factors)
+
     @progress for node in elimination_order
         neighbour_factors = factor_nodes[node]
 
@@ -80,20 +93,17 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
         for v in tau.neighbours
             push!(factor_nodes[v], tau)
         end
+        if isempty(tau.neighbours)
+            # all variables of connected component are eliminated
+            push!(scalar_factors, tau)
+        end
 
         # variable successfully eliminated
         delete!(factor_nodes, node)
     end
-    
-    if isempty(factor_nodes)
-        evidence = sum(exp, tau.table)
-        return VariableEliminationResult(FactorNode(VariableNode[],0.), evidence)
-    else
-        factor_nodes = reduce(∪, values(factor_nodes))
-        res = reduce(factor_product, factor_nodes)
-        evidence = sum(exp, res.table)
-        return VariableEliminationResult(res, evidence)
-    end
+
+    # result is unnormalised factor over remaining variables, ∑ exp(factor) = evidence
+    return get_variable_elimination_result(factor_nodes, scalar_factors)
 end
 
 export variable_elimination
