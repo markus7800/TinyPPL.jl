@@ -118,25 +118,42 @@ function estimate_elbo_grad_tracker(logjoint::Function, phi::Vector{Float64}, q:
     return grad
 end
 
+# The ELBO estimate is stochastic, so the gradient has to be computed from a single evaluation
+# (with a single set of random draws).
+# ForwardDiff evaluates the function once per chunk of partials; by default the chunk size is at most 12,
+# so for more parameters each chunk would see different random draws
+# (and the old implementation, which only did the first chunk, returned a truncated gradient).
+# We therefore use a single chunk containing all parameters.
 function estimate_elbo_grad_forwarddiff(logjoint::Function, phi::Vector{Float64}, q::VariationalDistribution, L::Int, estimator::ELBOEstimator)
-    cfg = ForwardDiff.GradientConfig(estimate_elbo, phi)
-    phi_tracked = cfg.duals
-    ForwardDiff.seed!(phi_tracked, phi, cfg.seeds)
-    q = update_params(q, phi_tracked)
-    elbo = estimate_elbo(estimator, logjoint, q, L)
-    grad = ForwardDiff.partials(elbo)
-    return grad
+    f = phi -> estimate_elbo(estimator, logjoint, update_params(q, phi), L)
+    # Chunk{N}() instead of Chunk(N), which would again cap the chunk size at 12
+    cfg = ForwardDiff.GradientConfig(f, phi, ForwardDiff.Chunk{length(phi)}())
+    return ForwardDiff.gradient(f, phi, cfg)
+
+    # Worked out, ForwardDiff.gradient(f, phi, cfg) does the following (vector mode, single chunk):
+    # phi_dual = cfg.duals                              # Vector of Dual numbers with length(phi) partials
+    # ForwardDiff.seed!(phi_dual, phi, cfg.seeds)       # phi_dual[i] = Dual(phi[i], e_i)
+    # q = update_params(q, phi_dual)
+    # elbo = estimate_elbo(estimator, logjoint, q, L)   # Dual(elbo, ∇elbo)
+    # grad = ForwardDiff.partials(elbo)                 # ∇elbo
+    # (the previous implementation used the default GradientConfig(estimate_elbo, phi),
+    #  whose chunk size is min(length(phi), 12), so the partials only covered the first chunk)
 end
 
+# ReverseDiff records the tape with one forward pass (and thus one set of random draws) and then runs the reverse pass.
+# (The tape is not compiled / reused, since the random draws would be recorded as constants.)
 function estimate_elbo_grad_reversediff(logjoint::Function, phi::Vector{Float64}, q::VariationalDistribution, L::Int, estimator::ELBOEstimator)
-    cfg = ReverseDiff.GradientConfig(phi)
-    ReverseDiff.track!(cfg.input, phi)
-    q = update_params(q, cfg.input)
-    elbo = estimate_elbo(estimator, logjoint, q, L)
-    tape = ReverseDiff._GradientTape(estimate_elbo, cfg.input, elbo, cfg.tape)
-    grad = ReverseDiff.construct_result(ReverseDiff.input_hook(tape))
-    ReverseDiff.seeded_reverse_pass!(grad, tape)
-    return grad
+    f = phi -> estimate_elbo(estimator, logjoint, update_params(q, phi), L)
+    return ReverseDiff.gradient(f, phi)
+
+    # Worked out, ReverseDiff.gradient(f, phi) does the following (uses ReverseDiff internals):
+    # cfg = ReverseDiff.GradientConfig(phi)
+    # ReverseDiff.track!(cfg.input, phi)                # cfg.input is a TrackedArray recording onto cfg.tape
+    # q = update_params(q, cfg.input)
+    # elbo = estimate_elbo(estimator, logjoint, q, L)   # forward pass, records the tape
+    # tape = ReverseDiff._GradientTape(f, cfg.input, elbo, cfg.tape)
+    # grad = ReverseDiff.construct_result(ReverseDiff.input_hook(tape))
+    # ReverseDiff.seeded_reverse_pass!(grad, tape)      # seeds ∂elbo/∂elbo = 1 and backpropagates into grad
 end
 
 """
