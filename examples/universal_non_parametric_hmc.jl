@@ -1,10 +1,7 @@
-# WIP
-
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 using TinyPPL.Logjoint
 import Random
-using Dictionaries
 using Plots
 
 function get_vals(result, addr)
@@ -45,7 +42,7 @@ observations = Observations()
 
 xs = -3:0.1:3
 ys = -3:0.1:3
-U = [Evaluation.get_U(test, args, observations, Dictionary{Address,Float64}([:X,:Y], [x, y]), nothing)[1] for y in ys, x in xs];
+U = [sum(Evaluation.get_U(test, args, observations, Evaluation.NPHMCTrace(:X => x, :Y => y))[1:2]) for y in ys, x in xs];
 heatmap(xs, ys, U)
 
 traces, lps = likelihood_weighting(test, args, observations, 100_000);
@@ -62,14 +59,14 @@ result = non_parametric_hmc(test, args, observations, 10000, 10, 0.1);
 histogram(get_vals(result, :X))
 histogram(get_vals(result, :Y))
 
-X_current = Dictionary{Address,Float64}([:X], [0.])
-U_current = Evaluation.get_U(test, args, observations, X_current, nothing)
+X_current = Evaluation.NPHMCTrace(:X => 0.)
+U_current, _, _, _ = Evaluation.get_U(test, args, observations, X_current)
 
 Random.seed!(0)
-X_proposed, K_current, K_proposed = Evaluation.universal_leapfrog(test, args, observations, X_current, 1, 0.1)
-U_proposed = Evaluation.get_U(test, args, observations, X_proposed, nothing)
+X_proposed, U_aux_current, K_current, K_proposed = Evaluation.universal_leapfrog(test, args, observations, X_current, 1, 0.1)
+U_proposed, U_aux_proposed, _, _ = Evaluation.get_U(test, args, observations, X_proposed)
 
-K_current + U_current - K_proposed - U_proposed
+(U_current + U_aux_current + K_current) - (U_proposed + U_aux_proposed + K_proposed)
 
 @ppl static function static_test()
     X ~ Normal(0.,1.)
@@ -94,16 +91,16 @@ X_current = [0.1,1.5]
 P_current = [-0.1,0.]
 X_proposed, P_proposed = Logjoint.leapfrog(grad_U, X_current, P_current, 10, 0.1)
 
-exp((-logjoint(X_current) + sum(P_current.^2))-(-logjoint(X_proposed) + sum(P_proposed.^2)))
+exp((-logjoint(X_current) + sum(P_current.^2)/2)-(-logjoint(X_proposed) + sum(P_proposed.^2)/2))
 
 
-P = Dictionary{Address,Float64}()
+X = Evaluation.NPHMCTrace()
 Random.seed!(0)
-X, grad, K = Evaluation.get_U_grad_and_extend!(test, args, observations, X, P,)
+grad, new_P, U_aux = Evaluation.get_U_grad_and_extend!(test, args, observations, X, 0.)
 
-X = Dictionary{Address,Float64}()
+X = Evaluation.NPHMCTrace()
 Random.seed!(0)
-X_proposed, K_current, K_proposed = Evaluation.universal_leapfrog(pedestrian, args, observations, X, 10, 0.1)
+X_proposed, U_aux_current, K_current, K_proposed = Evaluation.universal_leapfrog(pedestrian, args, observations, X, 10, 0.1)
 
 
 A = Dictionary{Address,Float64}()

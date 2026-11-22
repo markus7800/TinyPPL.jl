@@ -15,8 +15,12 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [x] T3 `test/Project.toml` now only lists test deps (Test, Distributions, ForwardDiff, SpecialFunctions + stdlibs), so `Pkg.test()` works. The previous examples environment (Turing, PyPlot, Plots, …) was moved unchanged to `examples/Project.toml` + `examples/Manifest.toml` (run examples with `--project=examples`).
 
 ## C. Inference silently returns wrong results
-- [ ] C1 ✅ `src/evaluation/universal/HMC.jl:89,107,128` — non-parametric HMC kinetic energy `Σp²` missing `/2` (N(0,1) → mean −1.6, var 8.5).
-- [ ] C2 ✅ `src/evaluation/universal/HMC.jl:157-164` — stale addresses deleted from `X_current` (old trace, already stored in `result`) instead of `X_proposed`.
+- [x] C1 ✅ `src/evaluation/universal/HMC.jl` — non-parametric HMC kinetic energy `Σp²` missing `/2` (N(0,1) → mean −1.6, var 8.5). Fixed together with C2 (see C2 for the other NP-HMC fixes).
+- [x] C2 ✅ `src/evaluation/universal/HMC.jl` — stale addresses deleted from `X_current` (old trace, already stored in `result`) instead of `X_proposed`. NP-HMC was rewritten with plain `Dict`s; further fixes found while fixing:
+  - momentum `P` shared its `Dictionaries` index with `X`, so addresses inserted during the gradient pass got an uninitialised momentum and were never added to `K`;
+  - instantiated addresses were drawn from the prior at time t (implicit x0 = x_t − t·ε·p0) and `-log q(x0)` was missing from the initial energy; now x0 ~ q = N(0,1), x_t = x0 + t·ε·p0 and both `-log q(x0)` and `p0²/2` enter H(current);
+  - addresses unused by the proposed trace are now scored with `-log q` in H(proposed) (extended target π(X_used) ∏ q(X_unused));
+  - `x_initial` (constrained trace) is transformed to unconstrained space (was `todo(x_initial)`, part of B5).
 - [ ] C3 ✅ `src/evaluation/static/SMC.jl:121` — after last observe `log_w` unchanged but multiplied into `marginal_lik` again (≈Z²); PIMH uses this ratio. Linear-space `marginal_lik` underflows.
 - [ ] C4 ✅ `src/evaluation/static/HMC.jl:28` — `transform_to_constrained!` applied even when `unconstrained=false` (Gamma sample 2 → e²). Constrained HMC with default `x_initial = zeros` starts outside support.
 - [ ] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).
@@ -40,7 +44,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] B2 ✅ `src/logjoint/ADVI.jl:122` — ForwardDiff ELBO grad uses default chunk; >12 params → truncated gradient / DimensionMismatch. ReverseDiff version uses internals.
 - [ ] B3 ✅ `src/graph/exact/junction_tree.jl:295` — `backward_with_division(neighbour, parent)` should pass `node` → StackOverflow.
 - [ ] B4 ✅ `src/graph/exact/aqua.jl:283` — destructures `VariableEliminationResult` (also `examples/exact_inference/exact_inference.jl`).
-- [ ] B5 ✅ undefined names: `make_unconstrained_logjoint` w/o `pgm` (`graph/ADVI.jl:54`), `marginal_lik_proposed` (`graph/SMC.jl:257`), `proposal` (`compiled/LMH.jl:57`), `todo` (`universal/HMC.jl:137`), `SpecialFunctions.digamma` (`logpdf_grad.jl:91`), static `advi(unconstrained=true)` calls universal-only `transform_to_constrained` (`static/advi.jl:61,87`).
+- [ ] B5 ✅ undefined names: `make_unconstrained_logjoint` w/o `pgm` (`graph/ADVI.jl:54`), `marginal_lik_proposed` (`graph/SMC.jl:257`), `proposal` (`compiled/LMH.jl:57`), ~~`todo` (`universal/HMC.jl:137`)~~ (fixed with C2), `SpecialFunctions.digamma` (`logpdf_grad.jl:91`), static `advi(unconstrained=true)` calls universal-only `transform_to_constrained` (`static/advi.jl:61,87`).
 - [ ] B6 ✅ `src/graph/core/symbolic_pgm.jl:217` — procedure inlining returns `G_proc` instead of `G`.
 - [ ] B7 ✅ graph models only work with Tracker (`INPUT_VECTOR_TYPE`, plate functions typed `Vector{Float64}`); plated `lp_unconstrained` mutates input.
 - [ ] B8 ✅ `src/distributions/variational.jl:277` — `rand(::MeanField, n)` returns `Array{Real}` → graph BBVI `sample_posterior` fails.
@@ -75,7 +79,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] J7 Recursive BP/JT/`is_cycle` — stack overflow on long chains.
 
 ## P. Packaging / hygiene
-- [ ] P1 `Revise` is a runtime dependency (unused in `src`).
+- [ ] P1 `Revise` is a runtime dependency (unused in `src`). Since the C2 rewrite, `Dictionaries` is unused in `src` as well.
 - [ ] P2 `[compat]` only `julia = "1"`; Libtask pinned to personal fork branch `subtape` using internals; Tracker from `master`.
 - [ ] P3 Debug `println`s in library code (`greedy_variable_elimination.jl:295`, `belief_propagation.jl:321`, `is_tree`, AQUA).
 - [ ] P4 Dead code: ~100 lines commented in `belief_propagation.jl`, commented plotting scripts, exported-but-undefined `factor_division`, `cached_factors`.

@@ -252,11 +252,22 @@ end
         # every trace contains exactly the branch address that matches the sign of b
         @test all(haskey(X, X[:b] > 0 ? :c : :d) && !haskey(X, X[:b] > 0 ? :d : :c) for X in result)
         @test mean(burn([X[:b] > 0 for X in result])) ≈ R.BR_POST_POSITIVE atol = 0.05
+        # E[c | b > 0, y] = (1 + y) / 2
+        @test mean(X[:c] for X in burn(result) if haskey(X, :c)) ≈ (1 + R.BR_Y) / 2 atol = 0.05
+    end
+    @testset "gamma_scale" begin # values are unconstrained: s = exp(X[:s])
+        Random.seed!(0)
+        result = non_parametric_hmc(gamma_scale, (), gs_obs, 5_000, 10, 0.2)
+        s = burn([exp(X[:s]) for X in result])
+        @test mean(s) ≈ R.GS_POST_MEAN atol = 0.1
+        @test std(s) ≈ R.GS_POST_SD atol = 0.1
     end
     @testset "x_initial" begin # B5
         Random.seed!(0)
         result = non_parametric_hmc(normal_normal, (), nn_obs, 10, 10, 0.1; x_initial=UniversalTrace(:μ => 1.0))
         @test length(result) == 10
+        result = non_parametric_hmc(gamma_scale, (), gs_obs, 1, 10, 0.2; x_initial=UniversalTrace(:s => 1.0))
+        @test haskey(result[1], :s) # x_initial is constrained and must be transformed
     end
 end
 
