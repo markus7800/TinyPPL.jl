@@ -409,33 +409,46 @@ struct PlateInfo
 end
 
 function get_topolocial_order(n_variables::Int, plate_info::PlateInfo)
-    edges = deepcopy(plate_info.plated_edges)
-    unique_nodes = Any[]
-    unplated_nodes = Set(collect(1:n_variables))
-    for plate in plate_info.plates
-        for node in plate.nodes
-            delete!(unplated_nodes, node)
-        end
-        push!(unique_nodes, plate) # may be plate with no edge
+    # Topological order of "units": plates and unplated nodes.
+    # Plated edges may connect single plate members (NodeToNodeEdge, e.g. x[1] -> z),
+    # thus each endpoint is mapped to the plate it belongs to.
+    node_to_plate = Dict{Int,Plate}()
+    for plate in plate_info.plates, node in plate.nodes
+        node_to_plate[node] = plate
     end
-    append!(unique_nodes, unplated_nodes)
+    unit(x::Plate) = x
+    unit(x::Int) = get(node_to_plate, x, x)
 
-    roots = [i for i in unique_nodes if !any(edge.to == i for edge in edges)]
+    unique_nodes = Union{Int,Plate}[]
+    append!(unique_nodes, plate_info.plates) # may be plate with no edge
+    append!(unique_nodes, [node for node in 1:n_variables if !haskey(node_to_plate, node)])
+
+    unit_edges = Set{Pair{Union{Int,Plate},Union{Int,Plate}}}()
+    for edge in plate_info.plated_edges
+        from, to = unit(edge.from), unit(edge.to)
+        from == to && continue # edges within plate are handled by plate functions
+        push!(unit_edges, from => to)
+    end
+
+    n_parents = Dict{Union{Int,Plate},Int}(u => 0 for u in unique_nodes)
+    for (_, to) in unit_edges
+        n_parents[to] += 1
+    end
+
     ordered_nodes = Union{Int,Plate}[] # topological order
-    nodes = Set{Union{Int,Plate}}(roots)
-    while !isempty(nodes)
-        node = pop!(nodes)
-        push!(ordered_nodes, node)
-        children_edges = [edge for edge in edges if edge.from == node]
-        for edge in children_edges
-            child = edge.to
-            delete!(edges, edge)
-            parents = [edge.from for edge in edges if edge.to == child]
-            if isempty(parents)
-                push!(nodes, child)
+    roots = Union{Int,Plate}[u for u in unique_nodes if n_parents[u] == 0]
+    while !isempty(roots)
+        u = pop!(roots)
+        push!(ordered_nodes, u)
+        for (from, to) in unit_edges
+            if from == u
+                n_parents[to] -= 1
+                if n_parents[to] == 0
+                    push!(roots, to)
+                end
             end
         end
     end
-    @assert length(ordered_nodes) == length(plate_info.plates) + length(unplated_nodes)
+    @assert length(ordered_nodes) == length(unique_nodes) "Cyclic dependency between plates and nodes (e.g. plate member -> node -> other plate member)."
     return ordered_nodes
 end

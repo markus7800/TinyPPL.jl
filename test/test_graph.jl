@@ -129,6 +129,16 @@ const plated_gamma_poisson = @pgm plated graph_test_plated_gamma_poisson begin
     end
 end
 
+# edges between unplated nodes and single plate members: a -> x[1] (via plate), x[1] -> z (C19)
+const plated_single_member = @pgm plated graph_test_plated_single_member begin
+    let a ~ Normal(0., 1.),
+        xs = [{:x => i} ~ Normal(i == 1 ? a : 0., 1.) for i in 1:3],
+        z ~ Normal(xs[1], 1.)
+        {:y} ~ Normal(z, 1.) ↦ 0.5
+        z
+    end
+end
+
 # x only exists if c == 1
 #   P(c = 1 | y) ∝ 0.3 N(y; 2, √2),   P(c = 0 | y) ∝ 0.7 N(y; -1, 1)
 const lazy_branching = @pgm lazy_ifs graph_test_lazy_branching begin
@@ -176,6 +186,23 @@ lr_means(traces) = [mean(traces[:slope]), mean(traces[:intercept])]
     X = log.(λ)
     @test G.make_unconstrained_logjoint(plated_gamma_poisson)(X) ≈ ref + sum(log.(λ)) # C6
     @test X ≈ log.(λ) # B7: input must not be mutated
+end
+
+@testset "plated topological order with single member edges" begin # C19
+    pgm = plated_single_member
+    order = G.get_topolocial_order(pgm.n_variables, pgm.plate_info)
+    position(node) = findfirst(u -> u isa G.Plate ? node in u.nodes : u == node, order)
+    @test all(position(x) < position(y) for (x, y) in pgm.edges if position(x) != position(y))
+    a, x, z = 0.3, [0.5, -0.2, 1.1], -0.4
+    X = zeros(pgm.n_latents)
+    X[node(pgm, :a)] = a
+    X[node(pgm, :z)] = z
+    for i in 1:3
+        X[node(pgm, :x => i)] = x[i]
+    end
+    ref = logpdf(Normal(0., 1.), a) + logpdf(Normal(a, 1.), x[1]) + logpdf(Normal(0., 1.), x[2]) + logpdf(Normal(0., 1.), x[3]) +
+        logpdf(Normal(x[1], 1.), z) + logpdf(Normal(z, 1.), 0.5)
+    @test G.make_logjoint(pgm)(X) ≈ ref
 end
 
 @testset "dependencies" begin

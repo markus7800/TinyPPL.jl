@@ -11,7 +11,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
   branching / geometric (universal: changing / unbounded traces), linear_regression (2-D, plated + unplated),
   plated_gamma_poisson (plate of non-identical constrained latents), lazy_branching (`lazy_ifs`),
   exact: chain4 (impossible value), two_coins / orphan_observation (disconnected), many_observations (underflow), burglary.
-- [ ] T2 Not yet covered by tests: C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, guides, conditional_smc.
+- [ ] T2 Not yet covered by tests: B6, B10, B11 (file untracked), B13, B14, J6, J7, guides, conditional_smc.
 - [x] T3 `test/Project.toml` now only lists test deps (Test, Distributions, ForwardDiff, SpecialFunctions + stdlibs), so `Pkg.test()` works. The previous examples environment (Turing, PyPlot, Plots, …) was moved unchanged to `examples/Project.toml` + `examples/Manifest.toml` (run examples with `--project=examples`).
 
 ## C. Inference silently returns wrong results
@@ -59,7 +59,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: the `gibbs::Bool` keyword of universal `lmh`/`rwmh` is replaced by `n_updates::Int=1`, the number of random-scan single-site updates per returned sample. Each update chooses its site uniformly from the current trace, so the `log|X|−log|X'|` correction is correct. The original sweep only makes sense if the shape of the trace does not change (static models); a sweep over the current trace's addresses would make the site selection state dependent.
 - [x] C18 `src/evaluation/universal/IMCMC.jl:58-65` — missing addresses silently drawn from prior without proposal term.
   - fixed: proposed model and auxiliary traces are scored with `strict_score_trace`, which throws if the involution's trace misses an address that the model visits or contains addresses that are not visited (no sound automatic completion: the reverse move would have to drop them again).
-- [ ] C19 `src/graph/core/plates.jl:411-439` — plated topological sort ignores edges to/from single plate members.
+- [x] C19 `src/graph/core/plates.jl:411-439` — plated topological sort ignores edges to/from single plate members.
+  - fixed: edge endpoints are mapped to their unit (containing plate or unplated node) before the topological sort; edges within a plate are skipped. Before, a model with `x[1] -> z` failed the length assertion at compile time, and `a -> x[1]` could order the plate before `a`. Cyclic plate/node dependencies give an explicit assertion message.
 
 ## B. Crashes / broken features
 - [ ] B1 ✅ `src/distributions/transformed.jl:205` — upper-bounded support uses `supp.lb` instead of `supp.ub`.
