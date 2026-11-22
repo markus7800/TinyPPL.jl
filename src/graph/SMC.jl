@@ -1,4 +1,5 @@
 import ..TinyPPL.Distributions: logpdf
+import ..TinyPPL: logsumexp
 
 # simple and lightweight implementation
 function light_smc(pgm::PGM, n_particles::Int)    
@@ -59,7 +60,7 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
     log_q = zeros(n_particles)
     log_γ = zeros(n_particles)
     log_γ_new = zeros(n_particles)
-    marginal_lik = 1
+    log_marginal_lik = 0.
 
     for (t, node) in enumerate(pgm.topological_order)
         if isobserved(pgm, node)
@@ -72,10 +73,9 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
                 log_w[i] = log_γ_new[i] - log_γ[i] - log_q[i]
                 # TODO: handle sample is last
             end
-            W = exp.(log_w)
-            sum_W = sum(W)
-            marginal_lik *= sum_W / n_particles
-            W = W / sum_W
+            log_sum_W = logsumexp(log_w)
+            log_marginal_lik += log_sum_W - log(n_particles)
+            W = exp.(log_w .- log_sum_W)
 
             # println("Neff=", 1/sum(W.^2))
 
@@ -172,7 +172,7 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
         retvals[i] = get_retval(pgm, X)
     end
     traces = reduce(hcat, particles)
-    return GraphTraces(pgm, traces, retvals), normalise(log_w), marginal_lik
+    return GraphTraces(pgm, traces, retvals), log_w, log_marginal_lik
 end
 
 function smc(pgm::PGM, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal())
@@ -212,7 +212,7 @@ function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sa
     if init == :SMC
         # initialise with SMC
         smc_traces, lps, _ = smc(pgm, n_particles; addr2proposal=addr2proposal)
-        W = exp.(lps)
+        W = exp.(normalise(lps))
         X = smc_traces[:, rand(Categorical(W))]
     else
         X = zeros(pgm.n_latents)
@@ -222,7 +222,7 @@ function particle_gibbs(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_sa
         smc_traces, lps, _ = _smc_worker(pgm, n_particles, X;
                                       ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal,
                                       relevant_future_nodes=relevant_future_nodes)
-        W = exp.(lps)
+        W = exp.(normalise(lps))
         k = rand(Categorical(W))
         X = smc_traces[:,k]
         pg_traces[:,i] = X
@@ -242,7 +242,7 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
 
     # initialise with SMC
     smc_traces, lps, marginal_lik = smc(pgm, n_particles; addr2proposal=addr2proposal)
-    W = exp.(lps)
+    W = exp.(normalise(lps))
     k = rand(Categorical(W))
     X_current = smc_traces[:, k]
     retval_current = smc_traces.retvals[k]
@@ -250,11 +250,12 @@ function particle_IMH(pgm::PGM, n_particles::Int, n_samples::Int; ancestral_samp
 
     n_accept = 0
     @progress for i in 1:n_samples
-        smc_traces, lps, marginal_lik_proposed = _smc_worker(
+        smc_traces, lps, log_marginal_lik_proposed = _smc_worker(
             pgm, n_particles, nothing;
             addr2proposal=addr2proposal
         )
-        W = exp.(lps)
+        marginal_lik_proposed = exp(marginal_lik_proposed)
+        W = exp.(normalise(lps))
         k = rand(Categorical(W))
         X_proposed = smc_traces[:,k]
         retval_proposed = smc_traces.retvals[k]
