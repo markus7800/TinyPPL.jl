@@ -309,13 +309,29 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     end
 
     push!(lp_block_args, :($lp = 0.0))
+    if unconstrained && !isnothing(plate_info)
+        # plate functions read constrained values from X and write constrained values into X
+        # -> work on copy to not mutate input (plate functions only support Vector{Float64} anyways)
+        push!(lp_block_args, :($X = copy($X)))
+    end
+    # For unconstrained logpdf, X contains unconstrained values, but the distributions are written
+    # in terms of constrained values X[node]. As setindex! is not differentiable, we store the constrained
+    # value of each transformed node in a local variable and substitute X[node] with it in all distributions.
+    # (only for non-plated nodes, plate functions mutate X instead, see above)
+    constrained_values = Dict{Int,Symbol}()
+    function substitute_constrained(d)
+        for (node, x_sym) in constrained_values
+            d = substitute_expr(:($X[$node]), x_sym, d)
+        end
+        return d
+    end
     d_sym = gensym("dist")
     for node in ordered_nodes
         if node isa Plate
             plate_f_name = plate_function_name(name, unconstrained ? :lp_unconstrained : :lp, node)
             push!(lp_block_args, :($lp += $plate_f_name($X, $Y)))
         else
-            d = symbolic_dists[node]
+            d = substitute_constrained(symbolic_dists[node])
             
             if is_observed[node]
                 push!(lp_block_args, :($d_sym = $d))
@@ -325,8 +341,13 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
                     push!(lp_block_args, :($d_sym = $d))
                     push!(lp_block_args, :($d_sym = to_unconstrained($d_sym)))
                     push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node]))) # unconstrained value
-                    # setindex! is not differentiable
-                    # push!(lp_block_args, :($X[$node] = $d_sym.T_inv($X[$node]))) # to constrained value
+                    x_sym = gensym("x_$node")
+                    push!(lp_block_args, :($x_sym = $d_sym.T_inv($X[$node]))) # to constrained value
+                    if isnothing(plate_info)
+                        constrained_values[node] = x_sym
+                    else
+                        push!(lp_block_args, :($X[$node] = $x_sym)) # X is a copy
+                    end
                 else
                     push!(lp_block_args, :($d_sym = $d))
                     push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node])))

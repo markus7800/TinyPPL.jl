@@ -28,7 +28,9 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - resampling weights are computed with `normalise` (no `exp` underflow).
 - [x] C4 ✅ `src/evaluation/static/HMC.jl:28` — `transform_to_constrained!` applied even when `unconstrained=false` (Gamma sample 2 → e²). Constrained HMC with default `x_initial = zeros` starts outside support.
   - fixed: without `unconstrained`, retvals are computed with `StaticForward` (no transform); default `x_initial` is a prior sample (in support) for both modes; `x_initial` is copied before transforming (static part of A6).
-- [ ] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).
+- [x] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).
+  - fixed: the constrained value of each transformed latent is stored in a local variable and substituted for `X[node]` in all later distributions (differentiable, no `setindex!`); for plated models the plate functions read/write `X`, so the generated function works on `copy(X)` and writes constrained values into it (also fixes the B7/A6 input mutation);
+  - graph `hmc`: `x_initial` is no longer overwritten, default `x_initial` is a prior sample (as for static `hmc`, C4).
 - [ ] C6 ✅ `src/graph/core/plates.jl:336-346` — spaghetti plate path applies `to_unconstrained` for `:sample`/`:lp` kinds too.
 - [ ] C7 ✅ `src/graph/BBVI.jl:5` — iterates nodes in index order, not topological order.
 - [ ] C8 ✅ `src/graph/core/symbolic_pgm.jl:285-296` — with `lazy_ifs`, no edges from `if` condition to branch samples.
@@ -51,7 +53,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] B4 ✅ `src/graph/exact/aqua.jl:283` — destructures `VariableEliminationResult` (also `examples/exact_inference/exact_inference.jl`).
 - [ ] B5 ✅ undefined names: `make_unconstrained_logjoint` w/o `pgm` (`graph/ADVI.jl:54`), `marginal_lik_proposed` (`graph/SMC.jl:257`), `proposal` (`compiled/LMH.jl:57`), ~~`todo` (`universal/HMC.jl:137`)~~ (fixed with C2), `SpecialFunctions.digamma` (`logpdf_grad.jl:91`), static `advi(unconstrained=true)` calls universal-only `transform_to_constrained` (`static/advi.jl:61,87`).
 - [ ] B6 ✅ `src/graph/core/symbolic_pgm.jl:217` — procedure inlining returns `G_proc` instead of `G`.
-- [ ] B7 ✅ graph models only work with Tracker (`INPUT_VECTOR_TYPE`, plate functions typed `Vector{Float64}`); plated `lp_unconstrained` mutates input.
+- [ ] B7 ✅ graph models only work with Tracker (`INPUT_VECTOR_TYPE`, plate functions typed `Vector{Float64}`); ~~plated `lp_unconstrained` mutates input~~ (fixed with C5).
 - [ ] B8 ✅ `src/distributions/variational.jl:277` — `rand(::MeanField, n)` returns `Array{Real}` → graph BBVI `sample_posterior` fails.
 - [ ] B9 ✅ `src/distributions/logpdf_grad.jl` — dead code with bugs: Exponential gradient uses rate not scale; `constrain(::Binomial, ::Tuple{Float64})`; undefined `d` in error; discrete methods take `x::Int` (Bernoulli gives `Bool`).
 - [ ] B10 `src/graph/exact/bif.jl` — `write_bif` writes log-probs and assumes child is last neighbour; `read_bif` silently parses 0 blocks with CRLF; file never closed.
@@ -69,7 +71,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] A3 Overloads that differ only in 5th positional arg type (`likelihood_weighting(..., completion::Function)` / `(..., trace::Addresses)`).
 - [ ] A4 Naming/order drift: `addr2proposal` vs `addr2Proposal`; `L` = leapfrog steps / MC samples / Cholesky; `N` vs `L`; positional `K` in some ADVI functions; universal `bbvi` positional `variational_dists`.
 - [ ] A5 `Transform` interface declares `in_support`/`support`, implementations use `in_domain`/`domain`; `image(ComposeTransform)` ignores decreasing transforms.
-- [ ] A6 ✅ Mutation without `!`: ~~static `hmc` overwrites `x_initial`~~ (fixed with C4; check graph `hmc`), universal `bbvi` mutates dict, plated `lp_unconstrained` mutates `X`.
+- [ ] A6 ✅ Mutation without `!`: ~~static and graph `hmc` overwrite `x_initial`~~ (fixed with C4, C5), universal `bbvi` mutates dict, ~~plated `lp_unconstrained` mutates `X`~~ (fixed with C5).
 - [ ] A7 `Address = Any` makes `GraphTraces[3]` ambiguous (node index vs address).
 - [ ] A8 `retvals` is exported from `Evaluation` but not from `Graph` (it is a separate `Graph.retvals`, not an extension of `TinyPPL.retvals`).
 - [ ] A9 `make_logjoint` returns a function (universal, graph) or `(function, addresses_to_ix)` (static).

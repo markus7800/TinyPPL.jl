@@ -29,6 +29,16 @@ const gamma_scale = @pgm graph_test_gamma_scale begin
     end
 end
 
+# constrained latents that are parents of constrained latents (C5)
+const hierarchical_scale = @pgm graph_test_hierarchical_scale begin
+    let s ~ Gamma(2., 1.),
+        b ~ Uniform(0., s),
+        x ~ Normal(b, s)
+        {:y} ~ Normal(x, 1.) ↦ 0.3
+        x
+    end
+end
+
 const beta_bernoulli = @pgm graph_test_beta_bernoulli begin
     let p ~ Beta(2., 2.),
         ys = [1., 1., 0., 1., 1.]
@@ -121,6 +131,17 @@ lr_means(traces) = [mean(traces[:slope]), mean(traces[:intercept])]
     ref = logpdf(Gamma(2., 1.), s) + sum(logpdf(Normal(0., s), y) for y in R.GS_YS)
     @test G.make_logjoint(gamma_scale)([s]) ≈ ref
     @test G.make_unconstrained_logjoint(gamma_scale)([log(s)]) ≈ ref + log(s) # C5
+
+    s, b, x = 1.7, 0.4, -0.2
+    ref = logpdf(Gamma(2., 1.), s) + logpdf(Uniform(0., s), b) + logpdf(Normal(b, s), x) + logpdf(Normal(x, 1.), 0.3)
+    X = zeros(3)
+    for (a, v) in ((:s, s), (:b, b), (:x, x))
+        X[node(hierarchical_scale, a)] = v
+    end
+    @test G.make_logjoint(hierarchical_scale)(X) ≈ ref
+    X_unconstrained = hierarchical_scale.transform_to_unconstrained!(X, similar(X))
+    # log abs det of T^{-1}: s = exp(u) -> s, b = s * sigmoid(u) -> b (1 - b/s)
+    @test G.make_unconstrained_logjoint(hierarchical_scale)(X_unconstrained) ≈ ref + log(s) + log(b * (1 - b / s)) # C5
 
     λ = [1.5, 0.7, 3.2]
     ref = sum(logpdf(Gamma(i + 1., 1.), λ[i]) + logpdf(Poisson(λ[i]), R.PGP_YS[i]) for i in 1:3)
