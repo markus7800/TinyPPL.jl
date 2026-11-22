@@ -26,7 +26,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: weights are accumulated in log space since the last resampling and the evidence is added once per resampling step and once at the end; static `smc`/`conditional_smc` now return the **log** evidence (like graph `smc`), PIMH accepts with the log ratio;
   - latents sampled after the last observe are now scored on return (with a custom proposal their weight Q was ignored, static analogue of C14);
   - resampling weights are computed with `normalise` (no `exp` underflow).
-- [ ] C4 ✅ `src/evaluation/static/HMC.jl:28` — `transform_to_constrained!` applied even when `unconstrained=false` (Gamma sample 2 → e²). Constrained HMC with default `x_initial = zeros` starts outside support.
+- [x] C4 ✅ `src/evaluation/static/HMC.jl:28` — `transform_to_constrained!` applied even when `unconstrained=false` (Gamma sample 2 → e²). Constrained HMC with default `x_initial = zeros` starts outside support.
+  - fixed: without `unconstrained`, retvals are computed with `StaticForward` (no transform); default `x_initial` is a prior sample (in support) for both modes; `x_initial` is copied before transforming (static part of A6).
 - [ ] C5 ✅ `src/graph/core/core.jl:324-329` — unconstrained logjoint passes unconstrained parent values to children (graph HMC/ADVI/BBVI with `unconstrained=true`).
 - [ ] C6 ✅ `src/graph/core/plates.jl:336-346` — spaghetti plate path applies `to_unconstrained` for `:sample`/`:lp` kinds too.
 - [ ] C7 ✅ `src/graph/BBVI.jl:5` — iterates nodes in index order, not topological order.
@@ -68,7 +69,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] A3 Overloads that differ only in 5th positional arg type (`likelihood_weighting(..., completion::Function)` / `(..., trace::Addresses)`).
 - [ ] A4 Naming/order drift: `addr2proposal` vs `addr2Proposal`; `L` = leapfrog steps / MC samples / Cholesky; `N` vs `L`; positional `K` in some ADVI functions; universal `bbvi` positional `variational_dists`.
 - [ ] A5 `Transform` interface declares `in_support`/`support`, implementations use `in_domain`/`domain`; `image(ComposeTransform)` ignores decreasing transforms.
-- [ ] A6 ✅ Mutation without `!`: `hmc` overwrites `x_initial`, universal `bbvi` mutates dict, plated `lp_unconstrained` mutates `X`.
+- [ ] A6 ✅ Mutation without `!`: ~~static `hmc` overwrites `x_initial`~~ (fixed with C4; check graph `hmc`), universal `bbvi` mutates dict, plated `lp_unconstrained` mutates `X`.
 - [ ] A7 `Address = Any` makes `GraphTraces[3]` ambiguous (node index vs address).
 - [ ] A8 `retvals` is exported from `Evaluation` but not from `Graph` (it is a separate `Graph.retvals`, not an extension of `TinyPPL.retvals`).
 - [ ] A9 `make_logjoint` returns a function (universal, graph) or `(function, addresses_to_ix)` (static).

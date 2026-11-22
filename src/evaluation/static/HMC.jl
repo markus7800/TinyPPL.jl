@@ -2,7 +2,9 @@ import TinyPPL.Logjoint: hmc_logjoint
 
 """
 The hmc methods for static models also calls the logjoint implementation.
-We sample the unconstrained logjoint, but transform back for the return traces.
+If `unconstrained=true`, we sample the unconstrained logjoint, but transform back for the return traces.
+`x_initial` is a trace with constrained values (it is not mutated).
+If no `x_initial` is given, the chain starts at a sample from the prior (which lies in the support).
 """
 function hmc(model::StaticModel, args::Tuple, observations::Observations,
     n_samples::Int, L::Int, eps::Float64;
@@ -15,7 +17,12 @@ function hmc(model::StaticModel, args::Tuple, observations::Observations,
     end
     K = length(addresses_to_ix)
 
-    if !isnothing(x_initial) && unconstrained
+    if isnothing(x_initial)
+        x_initial = Vector{Float64}(sample_from_prior(model, args, observations, 1).data[:,1])
+    else
+        x_initial = copy(x_initial)
+    end
+    if unconstrained
         transform_to_unconstrained!(x_initial, model, args, observations, addresses_to_ix)
     end
 
@@ -25,7 +32,11 @@ function hmc(model::StaticModel, args::Tuple, observations::Observations,
     retvals = Vector{Any}(undef, n_samples)
     @progress for i in axes(samples,2)
         X = view(samples,:,i)
-        _, retvals[i] = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
+        if unconstrained
+            _, retvals[i] = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
+        else
+            retvals[i] = model(args, StaticForward(addresses_to_ix, X), observations)
+        end
     end
     return StaticTraces(addresses_to_ix, samples, retvals)
 end
