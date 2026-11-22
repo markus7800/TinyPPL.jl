@@ -88,8 +88,9 @@ function logpdf_params_grad(d::Gamma, x::Float64)
 end
 
 function logpdf_params_grad(d::InverseGamma, x::Float64)
-    ∇α = log(d.θ) - SpecialFunctions.digamma(d.α) - log(x)
-    ∇θ = d.α / d.θ - 1/x
+    α, θ = params(d) # InverseGamma stores Gamma(α, 1/θ) internally, no fields α, θ
+    ∇α = log(θ) - digamma(α) - log(x)
+    ∇θ = α / θ - 1/x
     return (∇α, ∇θ)
 end
 

@@ -58,8 +58,8 @@ function advi(model::StaticModel, args::Tuple, observations::Observations, n_sam
 
     if unconstrained
         logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
-        _transform_to_constrained(X::AbstractStaticTrace) = transform_to_constrained(X, model, args, observations)
-        _viresult_map! = _transform_to_constrained
+        _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
+        _viresult_map! = _transform_to_constrained!
     else
         logjoint, addresses_to_ix = make_logjoint(model, args, observations)
         _no_transform(X::AbstractStaticTrace) = X, model(args, StaticForward(addresses_to_ix, X) , observations)
@@ -84,8 +84,8 @@ function advi(model::StaticModel, args::Tuple, observations::Observations,
 
     if unconstrained
         logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
-        _transform_to_constrained(X::AbstractStaticTrace) = transform_to_constrained(X, model, args, observations)
-        _viresult_map! = _transform_to_constrained
+        _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
+        _viresult_map! = _transform_to_constrained!
     else
         logjoint, addresses_to_ix = make_logjoint(model, args, observations)
         _no_transform(X::AbstractStaticTrace) = X, model(args, StaticForward(addresses_to_ix, X), observations)

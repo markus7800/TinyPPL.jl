@@ -1,3 +1,4 @@
+import TinyPPL.Distributions: ProposalDistribution, proposal_dist, Addr2Proposal
 
 function compiled_single_site(pgm::PGM, kernels::Vector{Function}, n_samples::Int)
     X = Vector{Float64}(undef, pgm.n_latents)
@@ -47,19 +48,32 @@ function get_compute_W_block_args(pgm::PGM, plates::Vector{Plate}, children::Vec
     return block_args
 end
 
+# sentinel for addresses without user-specified proposal (Addr2Proposal lookup needs default of type ProposalDistribution)
+struct NoProposal <: ProposalDistribution end
+
 function compile_lmh(pgm::PGM; addr2Proposal::Addr2Proposal=Addr2Proposal())
     function lmh_kernel(block_args, symbolic_dists, node, X, log_α)
         d_sym = gensym("dist_$node")
         push!(block_args, :($d_sym = $(symbolic_dists[node])))
 
-        if haskey(addr2Proposal, pgm.addresses[node])
-            q_sym = gensym("proposal_$node")
-            q = proposal[pgm.addresses[node]]
-            push!(block_args, :($q_sym = $(Expr(:call, typeof(q).name.name, params(q)...))))
+        # most specific match as in interpreted lmh
+        q = get(addr2Proposal, pgm.addresses[node], NoProposal())
+        if !(q isa NoProposal)
+            # q is a ProposalDistribution object, which is interpolated into the compiled function.
+            # proposal_dist(q, x) may depend on the current value (e.g. random walk).
+            value_current = gensym("value_current")
+            value_proposed = gensym("value_proposed")
+            forward_q_sym = gensym("forward_proposal_$node")
+            backward_q_sym = gensym("backward_proposal_$node")
+            push!(block_args, :($value_current = $X[$node]))
+            push!(block_args, :($forward_q_sym = $(proposal_dist)($q, $value_current)))
+            push!(block_args, :($value_proposed = rand($forward_q_sym)))
+            push!(block_args, :($backward_q_sym = $(proposal_dist)($q, $value_proposed)))
+            push!(block_args, :($X[$node] = $value_proposed))
 
-            push!(block_args, :($log_α += logpdf($q_sym, $X[$node]) - logpdf($d_sym, $X[$node])))
-            push!(block_args, :($X[$node] = rand($q_sym)))
-            push!(block_args, :($log_α += logpdf($d_sym, $X[$node]) - logpdf($q_sym, $X[$node])))
+            # logpdf(d, value_proposed) - logpdf(d, value_current) + logpdf(q(.|value_proposed), value_current) - logpdf(q(.|value_current), value_proposed)
+            push!(block_args, :($log_α += logpdf($backward_q_sym, $value_current) - logpdf($d_sym, $value_current)))
+            push!(block_args, :($log_α += logpdf($d_sym, $value_proposed) - logpdf($forward_q_sym, $value_proposed)))
         else
             # logpdf(d, value_proposed) - logpdf(d, value_current) +  logpdf(q, value_current) - logpdf(q, value_proposed) cancels
             push!(block_args, :($X[$node] = rand($d_sym)))
