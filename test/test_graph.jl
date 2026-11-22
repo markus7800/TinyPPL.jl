@@ -435,9 +435,10 @@ end
     end
     @testset "light_smc chain" begin # C12
         Random.seed!(0)
-        traces, lw, marginal_lik = light_smc(chain, N)
-        @test wmean(traces[:z], lw) ≈ R.CH_POST_MEAN_Z atol = 0.05
-        @test log(marginal_lik) ≈ R.CH_LOG_EVIDENCE atol = 0.05
+        traces, lw, log_marginal_lik = light_smc(chain, N)
+        @test all(lw .≈ -log(N)) # particles are resampled at last observation
+        @test mean(traces[:z]) ≈ R.CH_POST_MEAN_Z atol = 0.05
+        @test log_marginal_lik ≈ R.CH_LOG_EVIDENCE atol = 0.05
     end
 end
 

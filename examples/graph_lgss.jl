@@ -46,19 +46,19 @@ X_ref = traces.data * exp.(lps)
 
 
 Random.seed!(0)
-@time smc_traces, lps, marginal_lik = light_smc(LGSS, 10^5);
+@time smc_traces, lps, log_marginal_lik = light_smc(LGSS, 10^5);
 # 55.446960 seconds (279.93 M allocations: 132.336 GiB, 26.71% gc time, 0.01% compilation time)
 
 Random.seed!(0)
-@time smc_traces, lps, marginal_lik = smc(LGSS, 10^5);
+@time smc_traces, lps, log_marginal_lik = smc(LGSS, 10^5);
 # 71.321295 seconds (1.08 G allocations: 147.531 GiB, 20.25% gc time, 0.04% compilation time)
 
 Random.seed!(0)
-@time smc_traces, lps, marginal_lik = conditional_smc(LGSS, 10^3, X_ref);
+@time smc_traces, lps, log_marginal_lik = conditional_smc(LGSS, 10^3, X_ref);
 # 0.675084 seconds (10.19 M allocations: 1.467 GiB, 45.04% gc time, 0.37% compilation time)
 
 Random.seed!(0)
-@time smc_traces, lps, marginal_lik = conditional_smc(LGSS, 10^3, X_ref, ancestral_sampling=true);
+@time smc_traces, lps, log_marginal_lik = conditional_smc(LGSS, 10^3, X_ref, ancestral_sampling=true);
 # 2.487067 seconds (12.79 M allocations: 2.755 GiB, 9.84% gc time)
 
 

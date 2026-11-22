@@ -2,10 +2,12 @@ import ..TinyPPL.Distributions: logpdf
 import ..TinyPPL: logsumexp
 
 # simple and lightweight implementation
-function light_smc(pgm::PGM, n_particles::Int)    
+# resamples at every observation, thus the returned particles are equally weighted.
+# returns traces, normalised log weights and log evidence
+function light_smc(pgm::PGM, n_particles::Int)
     particles = [Vector{Float64}(undef, pgm.n_latents) for _ in 1:n_particles]
-    log_w = Vector{Float64}(undef, n_particles)
-    marginal_lik = 1
+    log_w = zeros(n_particles)
+    log_marginal_lik = 0.
 
     @progress for node in pgm.topological_order
         if isobserved(pgm, node)
@@ -17,13 +19,12 @@ function light_smc(pgm::PGM, n_particles::Int)
             end
 
             # resampling
-            W = exp.(log_w)
-            sum_W = sum(W)
-            marginal_lik *= sum_W / n_particles
-            W = W / sum_W
+            log_marginal_lik += logsumexp(log_w) - log(n_particles)
+            W = exp.(normalise(log_w))
 
             A = rand(Categorical(W), n_particles)
             particles = copy.(particles[A])
+            log_w .= 0. # resampled particles are equally weighted
         else
             for i in 1:n_particles
                 X = particles[i]
@@ -38,7 +39,7 @@ function light_smc(pgm::PGM, n_particles::Int)
         retvals[i] = get_retval(pgm, X)
     end
     traces = reduce(hcat, particles)
-    return GraphTraces(pgm, traces, retvals), normalise(log_w), marginal_lik
+    return GraphTraces(pgm, traces, retvals), normalise(log_w), log_marginal_lik
 end
 export light_smc
 

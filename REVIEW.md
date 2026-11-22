@@ -11,7 +11,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
   branching / geometric (universal: changing / unbounded traces), linear_regression (2-D, plated + unplated),
   plated_gamma_poisson (plate of non-identical constrained latents), lazy_branching (`lazy_ifs`),
   exact: chain4 (impossible value), two_coins / orphan_observation (disconnected), many_observations (underflow), burglary.
-- [ ] T2 Not yet covered by tests: C12, C16 (constrained unvisited branch passed), C18, C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, IMCMC, guides, conditional_smc.
+- [ ] T2 Not yet covered by tests: C16 (constrained unvisited branch passed), C18, C19, B6, B10, B11 (file untracked), B13, B14, J6, J7, IMCMC, guides, conditional_smc.
 - [x] T3 `test/Project.toml` now only lists test deps (Test, Distributions, ForwardDiff, SpecialFunctions + stdlibs), so `Pkg.test()` works. The previous examples environment (Turing, PyPlot, Plots, …) was moved unchanged to `examples/Project.toml` + `examples/Manifest.toml` (run examples with `--project=examples`).
 
 ## C. Inference silently returns wrong results
@@ -45,7 +45,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - not converted: JT sampling / density helpers (`junction_tree.jl` ≈ l. 520–840) still multiply linear probabilities and divide by `res.evidence`.
 - [x] C11 ✅ `src/graph/exact/belief_propagation.jl:482` — `message .-= …` gives `-Inf - -Inf = NaN`; use `factor_div_op`.
   - fixed: `broadcast(factor_div_op, …)` (0/0 = 0). Reproduced with an observation factor with two latent parents that rules out a value (NaN marginals of the other parent); in chain4 the observation factor is a leaf, so the NaN message was never used.
-- [ ] C12 `src/graph/SMC.jl:26,41` — `light_smc` returns pre-resampling weights for resampled particles; linear `marginal_lik`.
+- [x] C12 `src/graph/SMC.jl:26,41` — `light_smc` returns pre-resampling weights for resampled particles; linear `marginal_lik`.
+  - fixed: weights are reset after resampling (returned weights are uniform), evidence accumulated in log space and returned as log evidence (like `smc`), `log_w` initialised (no observations). The old weights were not permuted with the particles, so they only added noise (test with 20k particles passed anyway); the test now checks uniform weights.
 - [ ] C13 `src/graph/SMC.jl:117-119` — PGAS indexes `X_ref` with observed node (BoundsError); future latents never written into `X`.
 - [ ] C14 `src/graph/SMC.jl:73-84` — SMC with custom proposal: latents after last observe don't update `log_w`; `propose_and_logpdf(q, (addr,X))` passes a tuple.
 - [ ] C15 ✅ `src/distributions/random_walk.jl:34,53` — truncated split-normal proposal inconsistent with its `logpdf` within 1e-3 of a bound; `var/2` halves variance for bounded proposals; `DiscreteRWProposer` `% 0` for single category.
@@ -74,7 +75,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] B17 ✅ graph `lmh`/`rwmh` fail on `lazy_ifs` models: `Flat` is not a `Distribution` (`StaticProposal(d)` convert error) and has no `random_walk_proposal_dist`.
 
 ## A. Inconsistent APIs
-- [ ] A1 Return conventions: LW normalised (universal) vs unnormalised (static, graph, completion); SMC evidence log vs linear (static and graph `smc` now log, graph `light_smc` still linear, C12); `lmh` → traces, `imcmc` → (traces, lps), `non_parametric_hmc` → `Vector{Any}` of Dictionaries without retvals; VE → log-space unnormalised `FactorNode`, BP/JT → linear normalised `Array`. Proposal: one `ImportanceResult(traces, logweights, log_evidence)`.
+- [ ] A1 Return conventions: LW normalised (universal) vs unnormalised (static, graph, completion); SMC evidence log vs linear (static and graph `smc`/`light_smc` now log); `lmh` → traces, `imcmc` → (traces, lps), `non_parametric_hmc` → `Vector{Any}` of Dictionaries without retvals; VE → log-space unnormalised `FactorNode`, BP/JT → linear normalised `Array`. Proposal: one `ImportanceResult(traces, logweights, log_evidence)`.
 - [ ] A2 ✅ `Observations = Dict{Any,Real}` is concrete+invariant → `Dict(:y => 1.0)` is a MethodError. Accept `AbstractDict`.
 - [ ] A3 Overloads that differ only in 5th positional arg type (`likelihood_weighting(..., completion::Function)` / `(..., trace::Addresses)`).
 - [ ] A4 Naming/order drift: `addr2proposal` vs `addr2Proposal`; `L` = leapfrog steps / MC samples / Cholesky; `N` vs `L`; positional `K` in some ADVI functions; universal `bbvi` positional `variational_dists`.
