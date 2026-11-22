@@ -437,7 +437,7 @@ model = @pgm GMM begin
         end
     end
     let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
-        k = ({:k} ~ Poisson(λ) ↦ 3) + 1,
+        k = ({:k} ~ Poisson(λ-1) ↦ 3) + 1,
         y = $(Main.gt_ys[1:10]),
         n = length(y),
         w = dirichlet(δ, k),

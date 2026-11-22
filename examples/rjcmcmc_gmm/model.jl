@@ -25,8 +25,8 @@ import Distributions
 struct PositivePoisson <: Distributions.DiscreteUnivariateDistribution
     λ
 end
-Distributions.rand(d::PositivePoisson) = Distributions.rand(Poisson(d.λ)) + 1
-Distributions.logpdf(d::PositivePoisson, x) = Distributions.logpdf(Poisson(d.λ), x-1)
+Distributions.rand(d::PositivePoisson) = Distributions.rand(Poisson(d.λ-1)) + 1
+Distributions.logpdf(d::PositivePoisson, x) = Distributions.logpdf(Poisson(d.λ-1), x-1)
 
 @ppl function gmm(n::Int)
     k = {:k} ~ PositivePoisson(λ)

@@ -1,6 +1,7 @@
 using TinyPPL.Distributions
 using TinyPPL.Graph
 using TinyPPL.Evaluation
+using TinyPPL: logsumexp
 import Random
 
 include("gmm/data.jl")
@@ -16,7 +17,7 @@ include("gmm/common.jl")
             end
         end
         let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
-            k = ({:k} ~ Poisson(λ) ↦ 3) + 1,
+            k = ({:k} ~ Poisson(λ-1) ↦ 0) + 1,
             y = $(Main.gt_ys),
             n = length(y),
             w = dirichlet(δ, k),
@@ -43,7 +44,7 @@ end
             end
         end
         let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
-            k = ({:k} ~ Poisson(λ) ↦ 3) + 1,
+            k = ({:k} ~ Poisson(λ-1) ↦ 3) + 1,
             y = $(Main.gt_ys),
             n = length(y),
             w = dirichlet(δ, k),
@@ -68,12 +69,20 @@ function graph_to_plotting_format(X)
     return d
 end
 
-# model = unplated_model;
-model = plated_model;
+model = unplated_model;
+# model = plated_model;
 
 @info "LW"
 _ = Graph.likelihood_weighting(model, 100);
-Random.seed!(0); @time traces1, lps1 = Graph.likelihood_weighting(model, 100_000);
+Random.seed!(0); @time traces1, lps1 = Graph.likelihood_weighting(model, 1_000_000);
+logsumexp(lps1) - log(length(lps1))
+
+# 3: -642.5230803377565
+# 4: -631.6612338187915
+# 5: -922.253201189099
+# 6: -826.1488477542066
+
+Graph.smc(model, 100_000)
 
 println("Compile LW")
 @time lw = compile_likelihood_weighting(model)
@@ -133,7 +142,7 @@ const β = 10.0
 end
 
 @ppl function gmm(n)
-    k = {:k} ~ Poisson(λ)
+    k = {:k} ~ Poisson(λ-1)
     k = k + 1
     w = @subppl dirichlet(δ, k)
 

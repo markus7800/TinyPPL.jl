@@ -249,7 +249,7 @@ The Gaussian Mixture model
         end
     end
     let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
-        k = ({:k} ~ Poisson(λ) ↦ 3) + 1,
+        k = ({:k} ~ Poisson(λ-1) ↦ 3) + 1,
         y = $(Main.gt_ys),
         n = length(y),
         w = dirichlet(δ, k),
@@ -284,7 +284,7 @@ function plated_GMM_logpdf(var"##X#797"::INPUT_VECTOR_TYPE, var"##Y#798"::Vector
     var"##lp#870" = 0.0
     var"##lp#870" += plated_GMM_lp_plate_w(var"##X#797", var"##Y#798")
     var"##lp#870" += plated_GMM_lp_plate_μ(var"##X#797", var"##Y#798")
-    var"##dist#871" = Poisson(3)
+    var"##dist#871" = Poisson(2)
     var"##lp#870" += logpdf(var"##dist#871", var"##Y#798"[1])
     var"##lp#870" += plated_GMM_lp_plate_σ²(var"##X#797", var"##Y#798")
     var"##lp#870" += plated_GMM_lp_plate_z(var"##X#797", var"##Y#798")
@@ -324,7 +324,7 @@ function unplated_GMM_logpdf(var"##X#1089"::INPUT_VECTOR_TYPE, var"##Y#1090"::Ve
     var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[111])
     var"##dist#1094" = Gamma(5.0, 1)
     var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[4])
-    var"##dist#1094" = Poisson(3)
+    var"##dist#1094" = Poisson(2)
     var"##lp#1093" += logpdf(var"##dist#1094", var"##Y#1090"[1])
     var"##dist#1094" = Gamma(5.0, 1)
     var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[2])
