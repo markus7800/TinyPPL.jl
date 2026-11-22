@@ -5,6 +5,7 @@ using Test, Random, Statistics
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import TinyPPL.Evaluation as E
+import Tracker, ForwardDiff, ReverseDiff
 import ..References as R
 using ..TestUtils
 
@@ -206,6 +207,89 @@ end
         traces = sample_posterior(advi_fullrank(linear_regression, lr_args, lr_obs, 10_000, 10, 0.01), 10_000)
         @test lr_means(traces) ≈ R.LR_POST_MEAN atol = 0.1
         @test [std(traces[:slope]), std(traces[:intercept])] ≈ R.LR_POST_SD atol = 0.1
+    end
+end
+
+# guides (B14)
+@ppl static function normal_normal_guide()
+    m = param("m")
+    s = param("s", constraint=Positive())
+    μ ~ Normal(m, s)
+end
+# guide that stores a parameter directly as value (ReverseDiff: element of tracked array with origin)
+@ppl static function dirac_guide()
+    m = param("m")
+    s = param("s", constraint=Positive())
+    a ~ Dirac(m)
+    b ~ Normal(m, s)
+end
+# guide for unconstrained gamma_scale (values of s are unconstrained)
+@ppl static function gamma_scale_guide()
+    m = param("m")
+    s = param("s", constraint=Positive())
+    s ~ Normal(m, s)
+end
+
+@testset "guides" begin # B14
+    q = E.make_guide(normal_normal_guide, (), Dict{Any,Int}(:μ => 1))
+    phi = [0.3, -0.2]
+    function f(p)
+        Random.seed!(1)
+        x, lp = E.rand_and_logpdf(E.update_params(q, p))
+        return x[1]^2 + lp
+    end
+    @testset "rand_and_logpdf gradients agree for all AD backends" begin
+        g = Tracker.data(Tracker.gradient(f, phi)[1])
+        @test ForwardDiff.gradient(f, phi) ≈ g
+        @test ReverseDiff.gradient(f, phi) ≈ g
+        # reparametrised sample μ = m + exp(ω) ε, so d/dm (μ^2 + logpdf) = 2μ
+        Random.seed!(1); μ = E.rand(E.update_params(q, phi))[1]
+        @test g[1] ≈ 2μ
+    end
+    @testset "concrete value types" begin
+        rcfg = ReverseDiff.GradientConfig(phi); ReverseDiff.track!(rcfg.input, phi)
+        for p in (phi, Tracker.param(phi), ForwardDiff.GradientConfig(nothing, phi).duals, rcfg.input)
+            sampler = E.update_params(q, p).sampler
+            @test isconcretetype(eltype(sampler.X)) && isconcretetype(typeof(sampler.W))
+        end
+    end
+    @testset "parameter stored as value" begin
+        q_dirac = E.make_guide(dirac_guide, (), Dict{Any,Int}(:a => 1, :b => 2))
+        function f_dirac(p)
+            Random.seed!(1)
+            x = rand(E.update_params(q_dirac, p))
+            return 3 * x[1] + x[2]^2
+        end
+        g = Tracker.data(Tracker.gradient(f_dirac, phi)[1])
+        @test ForwardDiff.gradient(f_dirac, phi) ≈ g
+        @test ReverseDiff.gradient(f_dirac, phi) ≈ g
+        Random.seed!(1); b = rand(E.update_params(q_dirac, phi))[2]
+        @test g[1] ≈ 3 + 2b # a = m, b = m + exp(ω) ε
+    end
+    @testset "logpdf" begin
+        q_phi = E.update_params(q, phi)
+        X = [0.7]
+        @test logpdf(q_phi, X) ≈ logpdf(Normal(0.3, exp(-0.2)), 0.7)
+        @test logpdf(q_phi, view([0.1, 0.7], 2:2)) ≈ logpdf(Normal(0.3, exp(-0.2)), 0.7)
+        @test eltype(rand(q_phi, 5)) == Float64
+    end
+    for backend in (:tracker, :forwarddiff, :reversediff)
+        @testset "advi normal_normal $backend" begin
+            Random.seed!(0)
+            res = advi(normal_normal, (), nn_obs, 2_000, 10, 0.05, normal_normal_guide, (), MonteCarloELBO(); ad_backend=backend)
+            p = E.get_constrained_parameters(res.Q)
+            @test p["m"] ≈ R.NN_POST_MEAN atol = 0.05
+            @test p["s"] ≈ R.NN_POST_SD atol = 0.05
+            traces = sample_posterior(res, 10_000)
+            @test mean(traces[:μ]) ≈ R.NN_POST_MEAN atol = 0.05
+        end
+    end
+    @testset "advi gamma_scale unconstrained" begin
+        Random.seed!(0)
+        res = advi(gamma_scale, (), gs_obs, 5_000, 10, 0.05, gamma_scale_guide, (), MonteCarloELBO(); unconstrained=true)
+        traces = sample_posterior(res, 10_000)
+        @test all(traces[:s] .> 0)
+        @test mean(traces[:s]) ≈ R.GS_POST_MEAN atol = 0.2
     end
 end
 

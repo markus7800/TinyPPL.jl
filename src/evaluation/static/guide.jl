@@ -43,6 +43,14 @@ import Tracker
 import ForwardDiff
 import ReverseDiff
 
+# Concrete element type of values computed from `X` (for type-stable buffers and weights, an abstract Real is slow).
+# Float64 values (that do not depend on the tracked parameters) are converted to this type.
+guide_value_type(::AbstractVector{T}) where T <: Real = T # Float64, ForwardDiff.Dual, Tracker.TrackedReal, ...
+guide_value_type(::Tracker.TrackedVector{T}) where T = Tracker.TrackedReal{T}
+# values computed from a ReverseDiff.TrackedArray have no origin (only indexed elements of the array have one)
+guide_value_type(::ReverseDiff.TrackedArray{V,D}) where {V,D} = ReverseDiff.TrackedReal{V,D,Nothing}
+guide_value_type(::AbstractVector{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = ReverseDiff.TrackedReal{V,D,Nothing}
+
 """
 For given parameteers `phi` this sampler generates a trace into `X`.
 Type-optimised for generating (tracked) samples.
@@ -54,23 +62,11 @@ mutable struct StaticGuideSampler{T,V} <: StaticSampler
     addresses_to_ix::Addr2Ix
     phi::V
     X::Vector{T}
-    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{Float64}
-        return new{Float64,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Float64,length(addresses_to_ix)))
-    end
-
-    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Tracker.TrackedVector{Float64,Vector{Float64}}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
-    end
-    # function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{Tracker.TrackedReal{Float64}}
-    #     return new{Tracker.TrackedReal{Float64},V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
-    # end
-
-    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: Vector{<:ForwardDiff.Dual}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
-    end
-
-    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: ReverseDiff.TrackedArray
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, zeros(Tracker.TrackedReal{Float64}, length(addresses_to_ix)))
+    # phi may be tracked by some AD backend (Tracker.TrackedVector, Vector{<:ForwardDiff.Dual}, ReverseDiff.TrackedArray),
+    # then sampled values and W have the concrete tracked type of the backend.
+    function StaticGuideSampler(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V) where V <: AbstractVector{<:Real}
+        T = guide_value_type(phi)
+        return new{T,V}(zero(T), params_to_ix, addresses_to_ix, phi, zeros(T, length(addresses_to_ix)))
     end
 end
 
@@ -142,7 +138,7 @@ end
 
 function Distributions.rand(guide::StaticGuide, n::Int)
     K = length(guide.sampler.addresses_to_ix)
-    X = Array{Real}(undef, K, n) # TODO: Real here is ugly
+    X = Matrix{eltype(guide.sampler.X)}(undef, K, n) # Float64 for untracked parameters
     for i in 1:n
         X[:,i] = Distributions.rand(guide)
     end
@@ -158,24 +154,11 @@ mutable struct StaticGuideScorer{T,V} <: StaticSampler
     addresses_to_ix::Addr2Ix
     phi::V
     X::AbstractStaticTrace
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Vector{Float64}}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
-    end
-    
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Tracker.TrackedVector}
-        return new{Tracker.TrackedReal,V}(0., params_to_ix, addresses_to_ix, phi, X)
-    end
-
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: Vector{<:ForwardDiff.Dual}}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
-    end
-
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:Real}) where {V <: ReverseDiff.TrackedArray}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
-    end
-
-    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::Vector{<:ForwardDiff.Dual}) where {V <: Vector{<:ForwardDiff.Dual}}
-        return new{Real,V}(0., params_to_ix, addresses_to_ix, phi, X)
+    # phi and/or X may be tracked by some AD backend (the same backend if both are tracked),
+    # then W has the concrete tracked type of the backend.
+    function StaticGuideScorer(params_to_ix::Param2Ix, addresses_to_ix::Addr2Ix, phi::V, X::AbstractVector{<:Real}) where {V <: AbstractVector{<:Real}}
+        T = phi isa AbstractVector{Float64} ? guide_value_type(X) : guide_value_type(phi)
+        return new{T,V}(zero(T), params_to_ix, addresses_to_ix, phi, X)
     end
 end
 
