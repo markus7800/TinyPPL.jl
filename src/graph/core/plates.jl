@@ -373,19 +373,19 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
         f_name = plate_function_name(pgm_name, kind, plate)
         if kind in (:to_constrained, :to_unconstrained)
             f = rmlines(:(
-                function $f_name($X::Vector{Float64}, $X_unconstrained::Vector{Float64})
+                function $f_name($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
                     $(Expr(:block, block_args...)) # TODO: replace ...
                 end
             ))
         elseif kind in (:lp, :lp_unconstrained)
             f = rmlines(:(
-                function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
+                function $f_name($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
                     $(Expr(:block, block_args...)) # TODO: replace ...
                 end
             ))
         elseif kind == :sample
             f = rmlines(:(
-                function $f_name($X::Vector{Float64})
+                function $f_name($X::INPUT_VECTOR_TYPE)
                     $(Expr(:block, block_args...)) # TODO: replace ...
                 end
             ))

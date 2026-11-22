@@ -5,6 +5,7 @@ using Test, Random, Statistics
 using TinyPPL.Distributions
 using TinyPPL.Graph
 import TinyPPL.Graph as G
+import Tracker, ForwardDiff, ReverseDiff
 import ..References as R
 using ..TestUtils
 
@@ -197,6 +198,37 @@ lr_means(traces) = [mean(traces[:slope]), mean(traces[:intercept])]
     X = log.(λ)
     @test G.make_unconstrained_logjoint(plated_gamma_poisson)(X) ≈ ref + sum(log.(λ)) # C6
     @test X ≈ log.(λ) # B7: input must not be mutated
+end
+
+@testset "logjoint gradients with all AD backends" begin # B7
+    function fd_grad(f, x; h=1e-6)
+        return [(f(x .+ h .* (1:length(x) .== i)) - f(x .- h .* (1:length(x) .== i))) / 2h for i in eachindex(x)]
+    end
+    # plated / non-plated, constrained / unconstrained (plated unconstrained mutates a copy of X)
+    for (pgm, values) in ((hierarchical_scale, (:s => 1.7, :b => 0.4, :x => -0.2)),
+                          (plated_gamma_poisson, ((:λ => 1) => 1.5, (:λ => 2) => 0.7, (:λ => 3) => 3.2)),
+                          (plated_linear_regression, (:slope => 0.8, :intercept => -0.3)))
+        X = zeros(pgm.n_latents) # constrained values, lie in support
+        for (addr, v) in values
+            X[node(pgm, addr)] = v
+        end
+        for unconstrained in (false, true)
+            if unconstrained
+                logjoint = G.make_unconstrained_logjoint(pgm)
+                X = pgm.transform_to_unconstrained!(X, similar(X))
+            else
+                logjoint = G.make_logjoint(pgm)
+            end
+            X_copy = copy(X)
+            ref = fd_grad(logjoint, X)
+            @testset "$(pgm.name) unconstrained=$unconstrained" begin
+                @test Tracker.data(Tracker.gradient(logjoint, X)[1]) ≈ ref rtol = 1e-5
+                @test ForwardDiff.gradient(logjoint, X) ≈ ref rtol = 1e-5
+                @test ReverseDiff.gradient(logjoint, X) ≈ ref rtol = 1e-5
+                @test X == X_copy # input is not mutated
+            end
+        end
+    end
 end
 
 @testset "plated topological order with single member edges" begin # C19

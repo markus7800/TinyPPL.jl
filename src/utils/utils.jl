@@ -40,6 +40,10 @@ no_grad(x::Vector{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 no_grad(x::Matrix{Tracker.TrackedReal{Float64}}) = Tracker.data.(x)
 no_grad(x::Dict{K,Tracker.TrackedVector{Float64, Vector{Float64}}}) where {K <: Any} = Dict{K,Vector{Float64}}(addr => no_grad(v) for (addr, v) in x)
 
+# Distributions / StatsFuns promote the value to the type of the parameters, e.g. poislogpdf(λ::TrackedReal, x::Float64)
+# checks isinteger(x::TrackedReal), which Tracker does not define (ForwardDiff and ReverseDiff do).
+Base.isinteger(x::Tracker.TrackedReal) = isinteger(Tracker.data(x))
+
 import ForwardDiff
 no_grad(x::ForwardDiff.Dual) = ForwardDiff.value(x)
 no_grad(x::Vector{<:ForwardDiff.Dual}) = ForwardDiff.value.(x)

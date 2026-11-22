@@ -3,13 +3,10 @@ import TinyPPL.Distributions: logpdf
 using TinyPPL.Distributions
 import TinyPPL: rmlines, isbraced
 
-import Tracker
-const INPUT_VECTOR_TYPE = Union{
-    Vector{Float64},
-    AbstractVector{Float64}, # includes Tracker.TrackedVector
-    Vector{Tracker.TrackedReal{Float64}}
-    #Tracker.TrackedVector{Float64,Vector{Float64}}}
-}
+# Input type of the compiled model functions (sample!, logpdf, transforms, plate functions, ...).
+# Any real vector is accepted, so that the functions work with all AD backends:
+# Vector{Float64}, Tracker.TrackedVector, Vector{Tracker.TrackedReal}, Vector{ForwardDiff.Dual}, ReverseDiff.TrackedArray, ...
+const INPUT_VECTOR_TYPE = AbstractVector{<:Real}
 
 include("metaprogramming_utils.jl")
 include("symbolic_pgm.jl")
@@ -311,8 +308,10 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     push!(lp_block_args, :($lp = 0.0))
     if unconstrained && !isnothing(plate_info)
         # plate functions read constrained values from X and write constrained values into X
-        # -> work on copy to not mutate input (plate functions only support Vector{Float64} anyways)
-        push!(lp_block_args, :($X = copy($X)))
+        # -> work on copy to not mutate input.
+        # The copy is a Vector of scalars (e.g. Vector{Tracker.TrackedReal} for a Tracker.TrackedVector),
+        # because tracked arrays (Tracker, ReverseDiff) do not support setindex!, but gradients flow through getindex.
+        push!(lp_block_args, :($X = [$X[i] for i in eachindex($X)]))
     end
     # For unconstrained logpdf, X contains unconstrained values, but the distributions are written
     # in terms of constrained values X[node]. As setindex! is not differentiable, we store the constrained
