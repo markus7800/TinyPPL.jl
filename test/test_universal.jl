@@ -241,6 +241,44 @@ end
     end
 end
 
+# ---------------------------------------------------------------------- iMCMC
+
+# random walk proposal as involution: swap current value of μ and auxiliary value
+@ppl function rw_aux(tr::UniversalTrace)
+    {:proposed} ~ Normal(tr[:μ], 0.5)
+end
+function swap_involution!(tt::TraceTransformation, old_model_trace::UniversalTrace, old_proposal_trace::UniversalTrace,
+    new_model_trace::UniversalTrace, new_proposal_trace::UniversalTrace)
+    write_continuous(tt, new_model_trace, :μ, read_continuous(tt, old_proposal_trace, :proposed))
+    write_continuous(tt, new_proposal_trace, :proposed, read_continuous(tt, old_model_trace, :μ))
+end
+# forgets to write μ
+function incomplete_involution!(tt::TraceTransformation, old_model_trace::UniversalTrace, old_proposal_trace::UniversalTrace,
+    new_model_trace::UniversalTrace, new_proposal_trace::UniversalTrace)
+    write_continuous(tt, new_proposal_trace, :proposed, read_continuous(tt, old_model_trace, :μ))
+    write_continuous(tt, new_model_trace, :ν, read_continuous(tt, old_proposal_trace, :proposed))
+end
+# writes superfluous address
+function superfluous_involution!(tt::TraceTransformation, old_model_trace::UniversalTrace, old_proposal_trace::UniversalTrace,
+    new_model_trace::UniversalTrace, new_proposal_trace::UniversalTrace)
+    swap_involution!(tt, old_model_trace, old_proposal_trace, new_model_trace, new_proposal_trace)
+    write_continuous(tt, new_model_trace, :ν, 0.)
+end
+
+@testset "imcmc" begin
+    @testset "random walk normal_normal" begin
+        Random.seed!(0)
+        traces, lps = imcmc(normal_normal, (), nn_obs, rw_aux, (), swap_involution!, 50_000)
+        @test mean(burn(traces[:μ])) ≈ R.NN_POST_MEAN atol = 0.05
+        @test std(burn(traces[:μ])) ≈ R.NN_POST_SD atol = 0.05
+    end
+    @testset "incomplete trace from involution" begin # C18
+        Random.seed!(0)
+        @test_throws ErrorException imcmc(normal_normal, (), nn_obs, rw_aux, (), incomplete_involution!, 10)
+        @test_throws ErrorException imcmc(normal_normal, (), nn_obs, rw_aux, (), superfluous_involution!, 10)
+    end
+end
+
 # ---------------------------------------------------------- non-parametric HMC
 
 @testset "non_parametric_hmc" begin

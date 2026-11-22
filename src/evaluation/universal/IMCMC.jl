@@ -1,6 +1,43 @@
 import LinearAlgebra: logabsdet
 
 """
+Computes log p(X,Y) for trace X produced by an involution.
+In contrast to TraceSampler, missing addresses are not sampled, since there would be no
+corresponding proposal term in the acceptance probability. Throws an error instead.
+Also records visited addresses, such that we can check that X contains no superfluous addresses.
+"""
+mutable struct StrictTraceScorer <: UniversalSampler
+    W::Float64
+    X::AbstractUniversalTrace
+    visited::Set{Any}
+    StrictTraceScorer(X::AbstractUniversalTrace) = new(0., X, Set{Any}())
+end
+
+function sample(sampler::StrictTraceScorer, addr::Address, dist::Distribution, obs::Union{Nothing,RVValue})::RVValue
+    if !isnothing(obs)
+        sampler.W += logpdf(dist, obs)
+        return obs
+    end
+    if !haskey(sampler.X, addr)
+        error("Address $addr is missing in trace produced by involution. The involution has to provide values for all addresses that the (auxiliary) model visits.")
+    end
+    push!(sampler.visited, addr)
+    value = sampler.X[addr]
+    sampler.W += logpdf(dist, value)
+    return value
+end
+
+function strict_score_trace(model::UniversalModel, args::Tuple, observations::Observations, X::AbstractUniversalTrace)
+    sampler = StrictTraceScorer(X)
+    retval = model(args, sampler, observations)
+    if length(sampler.visited) != length(X)
+        superfluous = setdiff(keys(X), sampler.visited)
+        error("Trace produced by involution contains addresses that are not visited by the (auxiliary) model: $superfluous")
+    end
+    return sampler.W, retval
+end
+
+"""
 Involutive MCMC
 extend model with auxilliary model p(v|x)p(x)
 
@@ -54,15 +91,11 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Observations,
             end
         end
 
-        # compute p(x')
-        sampler.W = 0.; sampler.X = trace_proposed
-        retval_proposed = model(args, sampler, observations)
-        W_proposed = sampler.W
+        # compute p(x'), x' has to be complete (no missing / superfluous addresses)
+        W_proposed, retval_proposed = strict_score_trace(model, args, observations, trace_proposed)
 
         # compute p(v'|x')
-        sampler.W = 0.; sampler.X = aux_proposed
-        aux_model((trace_proposed, aux_args...), sampler, aux_no_obs)
-        Q_proposed = sampler.W
+        Q_proposed, _ = strict_score_trace(aux_model, (trace_proposed, aux_args...), aux_no_obs, aux_proposed)
 
         # perform MH step
         if log(rand()) < W_proposed + Q_proposed - W_current - Q_current + logabsdet(J)[1]
