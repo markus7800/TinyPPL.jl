@@ -158,6 +158,17 @@ const LAZY_POST_C1 = let l1 = 0.3 * exp(logpdf(Normal(2., sqrt(2.)), 0.8)), l0 =
     l1 / (l1 + l0)
 end
 
+# procedure call whose argument contains a sample statement
+const procedure_sample_arg = @pgm graph_test_procedure_sample_arg begin
+    function double(x)
+        2 * x
+    end
+    let y = double({:x} ~ Normal(0., 1.))
+        {:o} ~ Normal(y, 1.) ↦ 1.
+        y
+    end
+end
+
 node(pgm, addr) = findfirst(==(addr), pgm.addresses)
 lr_means(traces) = [mean(traces[:slope]), mean(traces[:intercept])]
 
@@ -207,6 +218,15 @@ end
 
 @testset "dependencies" begin
     @test (node(lazy_branching, :c) => node(lazy_branching, :x)) in lazy_branching.edges # C8
+end
+
+@testset "procedure inlining keeps graph of arguments" begin # B6
+    pgm = procedure_sample_arg
+    @test pgm.addresses == Any[:x, :o]
+    @test (node(pgm, :x) => node(pgm, :o)) in pgm.edges
+    x = 0.3
+    @test G.make_logjoint(pgm)([x]) ≈ logpdf(Normal(0., 1.), x) + logpdf(Normal(2x, 1.), 1.)
+    @test G.get_retval(pgm, [x]) ≈ 2x
 end
 
 @testset "sample! respects support" begin # C6

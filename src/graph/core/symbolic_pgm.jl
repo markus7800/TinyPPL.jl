@@ -214,7 +214,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
             end
             G_proc, E = transpile(t, phi, body)
             G = graph_disjoint_union(G, G_proc)
-            return G_proc, E
+            return G, E
         end
 
         E = Expr(:call, Eh, Es...)
