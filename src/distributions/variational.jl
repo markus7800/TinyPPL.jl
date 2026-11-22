@@ -274,7 +274,7 @@ function Distributions.rand(q::MeanField)
 end
 function Distributions.rand(q::MeanField, n::Int)
     K = length(q.dists)
-    X = Array{Real}(undef, K, n) # TODO: Real here is ugly
+    X = Matrix{Float64}(undef, K, n) # discrete values are stored as Float64 as well (like in graph traces)
     for i in 1:n
         X[:,i] = Distributions.rand(q)
     end

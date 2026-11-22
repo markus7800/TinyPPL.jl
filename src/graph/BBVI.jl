@@ -2,7 +2,8 @@ import TinyPPL.Distributions: init_variational_distribution, logpdf_param_grads,
 import Distributions
 
 function get_elbo_and_grad_estimate!(pgm::PGM, X::Vector{Float64}, var_dists::Vector{<:VariationalDistribution}, l::Int, elbo::AbstractVector{Float64}, var_param_grads::Vector{Matrix{Float64}})
-    for node in 1:pgm.n_variables # pgm.topological_order
+    # nodes have to be visited in topological order, such that the values of the parents are set in X
+    for node in pgm.topological_order
         d = get_distribution(pgm, node, X)
         if isobserved(pgm, node)
             value = get_observed_value(pgm, node)
@@ -43,7 +44,6 @@ function bbvi_naive(pgm::PGM, n_samples::Int, L::Int, learning_rate::Float64)
     @progress for _ in 1:n_samples
         var_param_grads = [zeros(length(get_params(var_dists[node])), L) for node in 1:K]
         for l in 1:L
-            elbo = 0.
             get_elbo_and_grad_estimate!(pgm, X, var_dists, l, _elbo, var_param_grads)
             elbos[l] = sum(_elbo)
         end

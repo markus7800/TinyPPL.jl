@@ -33,7 +33,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - graph `hmc`: `x_initial` is no longer overwritten, default `x_initial` is a prior sample (as for static `hmc`, C4).
 - [x] C6 ✅ `src/graph/core/plates.jl:336-346` — spaghetti plate path applies `to_unconstrained` for `:sample`/`:lp` kinds too.
   - fixed: transform only for `:lp_unconstrained`, `:to_constrained`, `:to_unconstrained` (as in the iid and identity-edge paths). Plated models with non-iid constrained plates can be invoked at compile time again (sampling produced negative Gamma values → random DomainError in Poisson).
-- [ ] C7 ✅ `src/graph/BBVI.jl:5` — iterates nodes in index order, not topological order.
+- [x] C7 ✅ `src/graph/BBVI.jl:5` — iterates nodes in index order, not topological order.
+  - fixed: iterate `pgm.topological_order`. In the chain test, `a` has index 1 and its parent `z` index 2, so `a` was sampled with the previous `z` (E[z] ≈ 0.03 instead of 0.44).
 - [ ] C8 ✅ `src/graph/core/symbolic_pgm.jl:285-296` — with `lazy_ifs`, no edges from `if` condition to branch samples.
 - [ ] C9 ✅ exact: `variable_elimination.jl:59,80`, `greedy_variable_elimination.jl:259,285`, `junction_tree.jl:123,210` — disconnected factor graphs: empty-scope factors dropped / JT only walks root component (two coins: evidence 0.5 instead of 0.25).
 - [ ] C10 ✅ `src/graph/exact/factor_graph.jl:323` (+VE/BP/JT) — `log.(sum(exp, …))` without max shift; evidence returned linear → `-Inf`/`NaN` with many observations.
@@ -55,7 +56,7 @@ Reference IDs (e.g. `C3`) are used in test comments.
 - [ ] B5 ✅ undefined names: `make_unconstrained_logjoint` w/o `pgm` (`graph/ADVI.jl:54`), `marginal_lik_proposed` (`graph/SMC.jl:257`), `proposal` (`compiled/LMH.jl:57`), ~~`todo` (`universal/HMC.jl:137`)~~ (fixed with C2), `SpecialFunctions.digamma` (`logpdf_grad.jl:91`), static `advi(unconstrained=true)` calls universal-only `transform_to_constrained` (`static/advi.jl:61,87`).
 - [ ] B6 ✅ `src/graph/core/symbolic_pgm.jl:217` — procedure inlining returns `G_proc` instead of `G`.
 - [ ] B7 ✅ graph models only work with Tracker (`INPUT_VECTOR_TYPE`, plate functions typed `Vector{Float64}`); ~~plated `lp_unconstrained` mutates input~~ (fixed with C5).
-- [ ] B8 ✅ `src/distributions/variational.jl:277` — `rand(::MeanField, n)` returns `Array{Real}` → graph BBVI `sample_posterior` fails.
+- [x] B8 ✅ `src/distributions/variational.jl:277` — `rand(::MeanField, n)` returns `Array{Real}` → graph BBVI `sample_posterior` fails. Fixed with C7: returns `Matrix{Float64}`.
 - [ ] B9 ✅ `src/distributions/logpdf_grad.jl` — dead code with bugs: Exponential gradient uses rate not scale; `constrain(::Binomial, ::Tuple{Float64})`; undefined `d` in error; discrete methods take `x::Int` (Bernoulli gives `Bool`).
 - [ ] B10 `src/graph/exact/bif.jl` — `write_bif` writes log-probs and assumes child is last neighbour; `read_bif` silently parses 0 blocks with CRLF; file never closed.
 - [ ] B11 `src/graph/exact/interval_arithmetic.jl` (untracked) — division by interval containing 0, even powers, negative/non-integer exponents, log/sqrt of negatives, top-level `using Plots`.
