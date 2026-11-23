@@ -243,15 +243,15 @@ is_tree(variable_nodes, factor_nodes)
 evaluate_return_expr_over_factor(model, res.factor)
 print_reference_solution(N)
 
-@time belief_tree = get_blief_tree(return_factor);
+@time belief_tree = get_belief_tree(return_factor);
 @time res = belief_propagation(belief_tree, return_factor, false);
 evaluate_return_expr_over_factor(model, res)
 print_reference_solution(N)
 
-belief_tree = get_blief_tree(return_factor);
+belief_tree = get_belief_tree(return_factor);
 @time res = belief_propagation(belief_tree, return_factor, true);
 
-belief_tree = get_blief_tree(return_factor);
+belief_tree = get_belief_tree(return_factor);
 @time res2, evidence2, marginals2 = belief_propagation(belief_tree, return_factor, true; with_division=true);
 
 for ((i, _, m1), (j,_,m2)) in zip(marginals, marginals2)

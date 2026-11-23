@@ -50,7 +50,6 @@ end
 
 function Base.show(io::IO, factor_node::FactorNode)
     print(io, "FactorNode(", [(n.variable, n.address) for n in factor_node.neighbours], "; ", size(factor_node.table), ")")
-    # println(io, factor_node.table)
 end
 
 Base.similar(factor_node::FactorNode) = FactorNode(factor_node.neighbours, similar(factor_node.table))
@@ -286,30 +285,6 @@ function factor_division!(C::FactorNode, A::FactorNode, B::FactorNode)::FactorNo
 end
 export factor_division!
 
-# X = VariableNode(1,:X); X.support = [1.,2.];
-# Y = VariableNode(2,:Y); Y.support = [1.,2.,3.];
-# Z = VariableNode(3,:Z); Z.support = [1.,2.,3.,4];
-# A = FactorNode([X, Y], -rand(2,3))
-# B = FactorNode([Y, Z], -rand(3,4))
-# C = factor_product(A,B)
-
-# B2 = factor_division!(C, A, FactorNode(B.neighbours, similar(B.table)))
-# B2.table ≈ B.table
-
-# B2 = factor_division!(C, A, FactorNode(C.neighbours, similar(C.table)))
-# B2.table[1,:,:] ≈ B.table
-# B2.table[2,:,:] ≈ B.table
-
-# A2 = factor_division!(C, B, FactorNode(A.neighbours, similar(A.table)))
-# A2.table ≈ A.table
-
-# A2 = factor_division!(C, B, FactorNode(C.neighbours, similar(C.table)))
-# A2.table[:,:,1] ≈ A.table
-# A2.table[:,:,2] ≈ A.table
-# A2.table[:,:,3] ≈ A.table
-# A2.table[:,:,4] ≈ A.table
-
-
 # numerically stable log(sum(exp(table), dims=dims))
 function logsumexp(table::AbstractArray{Float64}, dims)
     m = maximum(table, dims=dims, init=-Inf)
@@ -336,7 +311,7 @@ function factor_sum(factor_node::FactorNode, variables::Vector{VariableNode})::F
     return factor_sum(factor_node, dims)
 end
 
-export get_factor_graph, factor_product, factor_division, factor_sum
+export get_factor_graph, factor_product, factor_sum
 
 
 # returns all variables the return expression depends on

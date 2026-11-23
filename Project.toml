@@ -13,14 +13,23 @@ PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
 ProgressLogging = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
-Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 
 [compat]
+Distributions = "0.25"
+ForwardDiff = "0.10"
+# Libtask is the fork https://github.com/markus7800/Libtask.jl (branch `subtape`), static SMC uses its internals
+Libtask = "0.8.7"
+MacroTools = "0.5"
+PDMats = "0.11"
+ProgressLogging = "0.1"
+ReverseDiff = "1.15"
 RuntimeGeneratedFunctions = "0.5"
-julia = "1"
+SpecialFunctions = "2"
+Tracker = "0.2.39"
+julia = "1.9"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

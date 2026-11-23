@@ -148,7 +148,6 @@ function get_aqua_factor_graph(pgm::PGM, N::Int,
                 else
                     expansion_counter[node.address] = 0
                 end
-                # println("init ", node.address, " is bounded: ", is_bounded)
 
                 did_update_support = true
             else
@@ -263,7 +262,6 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
         elseif method == :bp
             
             if !is_tree(variable_nodes, factor_nodes)
-                # print_dot(variable_nodes, factor_nodes)
                 error("Factor graph is not a tree :(")
             end
             be_result = belief_propagation(factor_nodes[1], true)
@@ -374,7 +372,7 @@ function aqua_get_return_distribution(pgm::PGM, N::Int, marginals::Dict{Address,
             else
                 zs = Vector{Float64}(LinRange(z0, z1, N))
             end
-            println("new support: ", z0, " ... ", z1)
+            @debug "new support" z0 z1
 
             kernel_smoothing = isnothing(kernel_smoothing) ? (zs[end] - zs[1]) / 200 : kernel_smoothing
             kernel_func = kernel == :linear ? ∇linear_kernel : ∇sigmoid_kernel
@@ -423,7 +421,7 @@ function aqua_get_return_distribution(pgm::PGM, N::Int, marginals::Dict{Address,
         else
             zs = Vector{Float64}(LinRange(z0, z1, N))
         end
-        println("new support: ", z0, " ... ", z1)
+        @debug "new support" z0 z1
 
         Δz = zs[2] - zs[1]
         zps = zeros(length(zs))
@@ -440,25 +438,6 @@ function aqua_get_return_distribution(pgm::PGM, N::Int, marginals::Dict{Address,
 
         zps = zps / zps[end]
         return zs, zps
-
-        # i = 1
-        # while zps[i] < density_thresh && i < length(zs) / 2
-        #     i += 1
-        # end
-        # z0 = zs[i]
-
-        # j = length(zs)
-        # while zps[j] < density_thresh && j > length(zs) / 2
-        #     j -= 1
-        # end
-        # z1 = zs[j]
-
-        # did_update_support = 1 < i || j < length(zs)
-        
-        # if !did_update_support
-        #     return zs, zps
-        # end
-    
     end
 end
 export aqua_get_return_distribution

@@ -30,10 +30,8 @@ function unwrap_let(expr)
                 @assert length(bindings.args) > 0 bindings
                 # @assert length(bindings.args) > 1 bindings.args, single assignments can alos be in block
 
-                # println("body: ", body)
                 current_let = Expr(:let, unwrap_let(bindings.args[end]), body)
                 for binding in reverse(bindings.args[1:end-1])
-                    # println(binding)
                     current_let = Expr(:let, unwrap_let(binding), current_let)
                 end
                 return current_let
@@ -105,7 +103,7 @@ function get_free_variables(expr, free=Set{Symbol}(), bound=Symbol[])
 end
 
 #=
-    subsitutes all occurences of varriable `var` with expression `with`,
+    subsitutes all occurences of variable `var` with expression `with`,
     respecting the scope of `var`.
     e.g. transform
     let x = x + 1

@@ -144,12 +144,3 @@ function transform_to_unconstrained(X::AbstractUniversalTrace, model::UniversalM
 end
 
 export transform_to_constrained, transform_to_unconstrained
-
-# function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, observations::AbstractObservations)::Tuple{Vector{UniversalTrace},Vector{Any}}
-#     samples = Vector{UniversalTrace}(undef, length(Xs))
-#     retvals = Vector{Any}(undef, length(Xs))
-#     for i in eachindex(Xs)
-#         @inbounds samples[i], retvals[i] = transform_to_constrained(Xs[i], model, args, observations)
-#     end
-#     return samples, retvals
-# end

@@ -118,7 +118,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::AbstractObse
         end
         if check_addresses
             unique_addresses = unique(addresses)
-            println(unique_addresses)
+            # all particles have to be at the same sample / observe statement
             @assert (length(unique_addresses) == 1) unique_addresses
         end
 
@@ -160,7 +160,6 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::AbstractObse
             update_particle!(tasks[i], particles[i])
         end
 
-        # println("Neff=", 1/sum(W.^2))
         # TODO: resample if collapse?
     end
 

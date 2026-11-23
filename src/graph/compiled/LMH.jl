@@ -85,7 +85,6 @@ end
 function get_rw_dist_expr(d_sym, symbol_dist, value, var)
     if symbol_dist.head == :call
         dist_name = symbol_dist.args[1]
-        # println(dist_name)
         if dist_name == :Bernoulli
             return :(Bernoulli(1 - $value))
         elseif dist_name in [:Geometric, :Poisson]
@@ -205,14 +204,12 @@ function compile_single_site(pgm::PGM, kernel::Function)
                 $(block_args...)
             end
         )
-        # display(f)
         push!(lmh_functions, make_function(f))
     end
 
     X = Vector{Float64}(undef, pgm.n_latents);
     pgm.sample!(X) # initialise
     for f in lmh_functions
-        # println(f)
         f(X, pgm.observations)
     end
     return lmh_functions

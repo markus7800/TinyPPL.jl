@@ -1,26 +1,5 @@
 import Distributions: Distribution, ContinuousUnivariateDistribution, DiscreteUnivariateDistribution, ncategories, truncated
 
-# function continuous_interval(lower::Real, upper::Real, x::Real, var::Real)
-#     width = upper - lower
-#     # rescale
-#     μ = clamp((x - lower) / width, 1e-3, 1-1e-3) # ∈ [0, 1]
-#     σ2 = clamp(var * 1. / width^2, 1e-3, μ * (1-μ) - 1e-3)
-
-#     # @assert σ^2 < μ * (1-μ) (var < width/2 necessary)
-
-#     α = ((1.0 - μ) / σ2 - 1/μ) * μ^2
-#     β = α * (1/μ - 1.)
-
-#     return width * Beta(α, β) + lower
-# end
-
-# function continuous_greater_than(lower::Real, x::Real, var::Real)
-#     μ = x - lower # ∈ [0, ∞)
-#     α = max(μ^2 / var, 1e-3)
-#     θ = max(μ / α, 1e-3)
-#     return Gamma(α, θ) + lower
-# end
-
 # Random walk proposal on the interval [lower, upper] (lower = -Inf or upper = Inf allowed).
 # Normal(x, sqrt(var)) truncated to the support.
 # (The previous split-normal construction, which picks the left or right half with probability
@@ -148,39 +127,3 @@ function Addr2Var(args...)
     return MostSpecificDict(Dict{Any, Float64}(args...))
 end
 export Addr2Var
-
-# using Plots
-# d = continuous_interval(-1, 3, 1.5, 0.5)
-# Distributions.mean(d)
-# Distributions.var(d)
-# plot(x -> exp(Distributions.logpdf(d, x)), xlims=(-1,3))
-
-# import Distributions: mean, var
-
-# d = continuous_greater_than(-1, 1.5, 0.5)
-# mean(d)
-# var(d)
-# plot(x -> exp(Distributions.logpdf(d, x)), xlims=(-1,3))
-
-
-# d = discrete_interval(1, 6, 3, .5)
-# ps = exp.(Distributions.logpdf.(d, 0:7))
-# bar(0:7, ps)
-
-# sum(ps[1:3])
-# sum(ps[4:7])
-
-# xs = [rand(d) for i in 1:10^7]
-# [Distributions.mean(xs .== i) for i in 1:6]
-
-
-# d = discrete_greater_than(-2, 3, 5.)
-# ps = exp.(Distributions.logpdf.(d, -3:15))
-# bar(-3:15, ps)
-# sum(ps)
-
-# using TinyPPL.Distributions
-# d = random_walk_proposal_dist(Categorical([0.25, 0.25, 0.25, 0.25]), 2, 1.)
-# ps = exp.(logpdf.(d, 0:5))
-# X = [rand(d) for _ in 1:10^7]
-# ps_hat = [mean(X .== i) for i in 1:5]

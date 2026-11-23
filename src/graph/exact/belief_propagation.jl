@@ -114,13 +114,13 @@ function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{Fact
     
     visited = Dict(v => false for v in vcat(variable_nodes, factor_nodes))
     if is_cycle(factor_nodes[end], visited)
-        println(factor_nodes[end], " visited: ", [f for (f,b) in visited if b])
+        @debug "factor graph has a cycle" start=factor_nodes[end]
         return false
     end
 
     for (n, b) in visited
         if !b
-            println(factor_nodes[end], " not connected: ", n)
+            @debug "factor graph is not connected" start=factor_nodes[end] not_connected=n
             return false
         end
     end
@@ -155,11 +155,11 @@ function belief_propagation(pgm::PGM; calibrate_tree::Bool=false, return_factor_
     belief_propagation(root_factor, calibrate_tree)
 end
 
-function get_blief_tree(root_factor::FactorNode)
+function get_belief_tree(root_factor::FactorNode)
     root = BeliefNode(root_factor, nothing)
     return root
 end
-export get_blief_tree
+export get_belief_tree
 
 function belief_propagation(root_factor::FactorNode, calibrate_tree::Bool)
     root = BeliefNode(root_factor, nothing)
@@ -175,7 +175,6 @@ end
 Base.show(io::IO, tree::BeliefPropagationResult) = print(io, "BeliefPropagationResult()")
 
 function belief_propagation(root::BeliefNode, root_factor::FactorNode, calibrate_tree::Bool; with_division::Bool=false)
-    # print_belief_tree(root)
     
     # Run forward pass. As the root factor has no parents to send a message to,
     # its message actually corresponds to the joint density with all variables summed out - i.e. the evidence. 
@@ -232,115 +231,6 @@ function get_marginals(res::BeliefPropagationResult)
 end
 export get_marginals
 
-# function get_return_factor_from_calibrated_belief_tree(pgm::PGM, belieftree::CalibratedBeliefTree)
-#     variable_nodes::Vector{BeliefNode} = get_variable_nodes(belieftree.root)
-#     variable_to_node = Dict{Int,BeliefNode}(beliefnode.node.variable => beliefnode for beliefnode in variable_nodes)
-#     return_variables = return_expr_variables(pgm)
-#     return_beliefnodes::Vector{BeliefNode} = [variable_to_node[v] for v in return_variables]
-    
-#     seen = Set{BeliefNode}()
-#     ve_factor_nodes = FactorNode[]
-#     for belief_node in variable_nodes # return_beliefnodes
-#         for factor_belief_node in belief_node.neighbours
-#             factor_belief_node in seen && continue
-#             push!(seen, factor_belief_node)
-#             ve_factor_node = _compute_factor_from_messages(factor_belief_node)
-#             ve_factor_node.table .-= log(sum(exp, ve_factor_node.table))
-#             println(ve_factor_node, ", ", exp.(ve_factor_node.table))
-#             push!(ve_factor_nodes, ve_factor_node)
-#         end
-#     end
-#     display(ve_factor_nodes)
-
-#     # setup new factor graph for variable elimination
-#     ve_variable_nodes_dict = Dict{Int,VariableNode}()
-#     for ve_factor_node in ve_factor_nodes
-#         for (i,v) in enumerate(ve_factor_node.neighbours)
-#             if !haskey(ve_variable_nodes_dict, v.variable)
-#                 new_variable_node = VariableNode(v.variable, v.address)
-#                 new_variable_node.support = copy(v.support)
-#                 ve_variable_nodes_dict[v.variable] = new_variable_node
-#             end
-#             ve_variable_node = ve_variable_nodes_dict[v.variable]
-#             ve_factor_node.neighbours[i] = ve_variable_node
-#             push!(ve_variable_node.neighbours, ve_factor_node)
-#         end
-#     end
-#     ve_marginal_variables = return_variables
-#     ve_variable_nodes = collect(values(ve_variable_nodes_dict))
-#     # print_dot(ve_variable_nodes, ve_factor_nodes)
-#     elimination_order = get_greedy_elimination_order(ve_variable_nodes, ve_marginal_variables)
-#     return variable_elimination(ve_variable_nodes, elimination_order)
-# end
-# export get_return_factor_from_calibrated_belief_tree
-
-# function sample_from_calibrated_belief_tree(belieftree::CalibratedBeliefTree, N::Int)
-#     variable_nodes = get_variable_nodes(belieftree.root)
-#     variable_to_support = Dict{Int,Vector{Float64}}(beliefnode.node.variable => beliefnode.node.support for beliefnode in variable_nodes)
-#     n_latents = length(variable_nodes)
-
-#     I = zeros(Int, n_latents)
-#     if N == 1
-#         res = zeros(n_latents)
-#         _sample_from_factor(belieftree.root, I)
-#         for i in 1:n_latents
-#             res[i] = variable_to_support[i][I[i]]
-#         end
-#     else
-#         res = zeros(n_latents, N)
-#         for n in 1:N
-#             I .= 0
-#             _sample_from_factor(belieftree.root, I)
-#             for i in 1:n_latents
-#                 res[i,n] = variable_to_support[i][I[i]]
-#             end
-#         end
-#     end
-
-#     return res
-# end
-# sample_from_calibrated_belief_tree(belieftree::CalibratedBeliefTree) = sample_from_calibrated_belief_tree(belieftree, 1)
-
-# export sample_from_calibrated_belief_tree
-
-# function _sample_from_factor(beliefnode::BeliefNode, I::Vector{Int64})
-#     if beliefnode.node isa FactorNode
-#         factor::FactorNode = _compute_factor_from_messages(beliefnode)
-        
-#         var_sel = Int64[]
-#         table_sel = []
-#         for (i,v) in enumerate(factor.neighbours)
-#             if I[v.variable] == 0
-#                 push!(var_sel, v.variable)
-#                 push!(table_sel, Colon())
-#             else
-#                 push!(table_sel, I[v.variable])
-#             end
-#         end
-
-#         table = factor.table[table_sel...]
-#         if size(table) == ()
-#             return
-#         end
-
-#         cpd = exp.(table)
-#         cpd /= sum(cpd)
-
-#         c = CartesianIndices(cpd)[rand(Categorical(reshape(cpd,:)))]
-#         @assert length(c) == length(var_sel)
-#         for (i,v) in enumerate(var_sel)
-#             I[v] = c[i]
-#         end
-#         # println("Sampled ", c,  " for ", var_sel, "  from ", factor, " with table ", table)
-#     end
-
-#     for child in beliefnode.neighbours
-#         child == beliefnode.parent && continue
-#         _sample_from_factor(child, I)
-#     end
-# end
-
-
 # message from children to parents, start at leaves
 # (nodes in reverse pre-order: all children are processed before their parent)
 # returns the message of the root, i.e. the log evidence
@@ -363,7 +253,8 @@ function forward_message(belief_node::BeliefNode)
     # Edge case: belief node with only one variable, has to be parent node
     if length(belief_node.neighbours) == 1 && !isnothing(belief_node.parent)
         if belief_node.node isa VariableNode
-            println("Who am I? ", belief_node) # cant really happen?
+            # variable whose only factor is the parent (e.g. a latent variable without children),
+            # sends the uniform message (log 1 = 0)
             message = zeros(length(belief_node.node.support))
         else
             # factor node with one variable == parent

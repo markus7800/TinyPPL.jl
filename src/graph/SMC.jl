@@ -88,7 +88,6 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
             log_sum_W = logsumexp(log_w)
             log_marginal_lik += log_sum_W - log(n_particles)
             W = exp.(log_w .- log_sum_W)
-            # println("Neff=", 1/sum(W.^2))
 
             # resampling
             A = rand(Categorical(W), n_particles)

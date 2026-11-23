@@ -213,7 +213,7 @@ end
 function bp_with_division(pgm)
     variable_nodes, factor_nodes = get_factor_graph(pgm)
     return_factor = add_return_factor!(pgm, variable_nodes, factor_nodes)
-    root = get_blief_tree(return_factor)
+    root = get_belief_tree(return_factor)
     return belief_propagation(root, return_factor, true; with_division=true)
 end
 
@@ -592,7 +592,7 @@ end
     end
     @testset "belief_propagation with_division=$with_division" for with_division in (false, true)
         vs, fs, log_evidence, posterior_xN = chain_factor_graph(N)
-        res = belief_propagation(get_blief_tree(fs[1]), fs[1], true; with_division=with_division)
+        res = belief_propagation(get_belief_tree(fs[1]), fs[1], true; with_division=with_division)
         @test res.log_evidence ≈ log_evidence
         marginals = Dict(v.variable => table for (v, table) in get_marginals(res))
         @test length(marginals) == N
@@ -642,7 +642,7 @@ end
     @test !startswith(out[1], " ") && all(startswith(line, "  ") for line in out[2:end])
     variable_nodes, factor_nodes = get_factor_graph(chain8)
     out = mktemp() do path, io
-        redirect_stdout(() -> print_belief_tree(get_blief_tree(factor_nodes[1])), io)
+        redirect_stdout(() -> print_belief_tree(get_belief_tree(factor_nodes[1])), io)
         close(io)
         readlines(path)
     end

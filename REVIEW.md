@@ -124,9 +124,23 @@ Reference IDs (e.g. `C3`) are used in test comments.
   - fixed: all tree traversals in `belief_propagation.jl` and `junction_tree.jl` are iterative: `preorder(root)` (explicit stack, same order as the recursion) for `BeliefNode` and `ClusterNode` (the latter returns `(node, parent)` pairs from any start node). Forward passes process the reverse pre-order (children store their message in the parent, `BeliefNode.index_in_parent` / `neighbour_to_ix`), backward passes the pre-order; also the `BeliefNode` tree construction, `is_tree` (DFS with stack), `make_directed`, `initialise_potentials`, `get_variable_nodes`, `dfs_order`, the printers and the junction tree samplers / `get_logjoint_density`. Seeded samples of `sample_junctiontree` and `sample_junctiontree_optimised_messaging` are unchanged. (`sample_junctiontree_optimised_messaging` and the naive sampler are still quadratic in the number of clusters.) Tests: binary chain with 10^5 variables (built as factor graph) for `is_tree` (+ cycle), BP and JT with and without division (evidence, marginal vs. forward recursion, sampling); junction tree samplers return the posterior density of their sample and match the marginals; printers.
 
 ## P. Packaging / hygiene
-- [ ] P1 `Revise` is a runtime dependency (unused in `src`). Since the C2 rewrite, `Dictionaries` is unused in `src` as well.
-- [ ] P2 `[compat]` only `julia = "1"`; Libtask pinned to personal fork branch `subtape` using internals; Tracker from `master`.
-- [ ] P3 Debug `println`s in library code (`greedy_variable_elimination.jl:295`, `belief_propagation.jl:321`, `is_tree`, AQUA).
-- [ ] P4 Dead code: ~100 lines commented in `belief_propagation.jl`, commented plotting scripts, exported-but-undefined `factor_division`, `cached_factors`.
-- [ ] P5 Typos: `walk_ppl_sytnax`, `get_topolocial_order`, `subtitute_for_syms`.
-- [ ] P6 `readme.md` out of date with return types.
+- [x] P1 `Revise` is a runtime dependency (unused in `src`). Since the C2 rewrite, `Dictionaries` is unused in `src` as well.
+  - fixed: `Revise` removed from the dependencies (with CodeTracking, JuliaInterpreter, LoweredCodeUtils, Distributed from the Manifest; it stays in examples/Project.toml), `Dictionaries` was already gone.
+- [x] P2 `[compat]` only `julia = "1"`; Libtask pinned to personal fork branch `subtape` using internals; Tracker from `master`.
+  - fixed: `[compat]` for all direct dependencies (current minor versions, `julia = "1.9"`). Tracker is the registered release 0.2.39 instead of `master` (all suites pass with it). Libtask stays the fork `markus7800/Libtask.jl#subtape` with compat `0.8.7` and a comment in Project.toml: static SMC uses its internals (`_arg`/`_arg!` to swap the particle of a copied task, `retval_binding_slot`, `result`), replacing it is a separate design change.
+- [x] P3 Debug `println`s in library code (`greedy_variable_elimination.jl:295`, `belief_propagation.jl:321`, `is_tree`, AQUA).
+  - fixed: debug output in library code is `@debug` (junction tree naive sampler, AQUA support updates, `is_tree` diagnostics) or removed (`check_addresses` in static SMC prints via the assertion, unsupported expression is part of the error message; the "Who am I?" case in BP forward is a valid leaf variable and documented). Kept: printing functions (`print_*`, DOT, pretty printing, bif writer). Also removed 37 commented-out debug print lines.
+- [x] P4 Dead code: ~100 lines commented in `belief_propagation.jl`, commented plotting scripts, exported-but-undefined `factor_division`, `cached_factors`.
+  - fixed: removed ~310 lines of dead code:
+    - `belief_propagation.jl`: `get_return_factor_from_calibrated_belief_tree` (posterior of the return expression by running VE on the calibrated factor beliefs, superseded by `return_factor_as_root` / JT `query`) and `sample_from_calibrated_belief_tree` / `_sample_from_factor` (forward sampling factor by factor from the calibrated beliefs, superseded by `sample_junctiontree`), both for a removed `CalibratedBeliefTree` type.
+    - `random_walk.jl`: old moment-matched random walk proposals (scaled Beta on intervals, shifted Gamma on half-lines), replaced by truncated Normals; plotting scratch at the end of `random_walk.jl` and `transformed.jl`.
+    - `elbo.jl`: `ReinforceSurrogateELBO` (score function estimator as surrogate loss), superseded by `ReinforceELBO`.
+    - universal `ADVI.jl`: old sampling API of `UniversalMeanField` (with a removed `ContinuousUniversalTrace` type), superseded by `UniversalMeanFieldSampler` (C16); universal `logjoint.jl`: batched `transform_to_constrained`.
+    - `core.jl`: the old `pgm_macro` (before lazy ifs and J2).
+    - `aqua.jl`: support update in the CDF branch after its `return` (unreachable copy of the density branch).
+    - `factor_graph.jl`: scratch checks of `factor_division!` (covered by the "factor operations" test); `factor_division` removed from the exports (only `factor_division!` exists); unused `cached_factors` in JT `get_marginals`.
+    - Kept explanatory comments: proof in greedy VE, worked-out AD calls, slow/fast alternative in graph PGAS, message passing without division in the JT sampler.
+- [x] P5 Typos: `walk_ppl_sytnax`, `get_topolocial_order`, `subtitute_for_syms`.
+  - fixed: `walk_ppl_syntax`, `get_topological_order`, `substitute_for_syms`, also `get_belief_tree` (exported, was `get_blief_tree`), `calibrate_beliefs` and comment typos.
+- [x] P6 `readme.md` out of date with return types.
+  - fixed: readme: current `@ppl` expansion (fresh names, qualified `sample`/`get`, any dictionary as observations), `@pgm` scoping (`$(data)`, caller module globals, qualified functions), corrected sampling loop, generated functions are RuntimeGeneratedFunctions, `lazy_ifs`, non-parametric HMC in the table, new section on the result conventions per algorithm category (A1).

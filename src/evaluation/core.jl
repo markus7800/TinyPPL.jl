@@ -13,7 +13,7 @@ const SAMPLE = GlobalRef(@__MODULE__, :sample)
 const PARAM = GlobalRef(@__MODULE__, :param)
 const GET = GlobalRef(Base, :get)
 
-function walk_ppl_sytnax(expr, sampler, observations)
+function walk_ppl_syntax(expr, sampler, observations)
     if MacroTools.@capture(expr, {symbol_} ~ dist_)
         distribution, obs = gensym(:distribution), gensym(:obs)
         # the address expression is not bound to a variable, since Libtask (static SMC) cannot handle
@@ -96,7 +96,7 @@ function ppl_macro(annotations::Set{Symbol}, func)
     observations = gensym(:observations)
     # implicit addressing, escaping body is needed as it could be referencing symbols not defined in body
     new_body = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) && !isbraced(var) ? :($var = {$(QuoteNode(var))} ~ $dist) : expr, esc(body));
-    new_body = MacroTools.postwalk(ex -> walk_ppl_sytnax(ex, sampler, observations), new_body)
+    new_body = MacroTools.postwalk(ex -> walk_ppl_syntax(ex, sampler, observations), new_body)
 
     sampler_type = Sampler # :static in annotations ? StaticSampler : UniversalSampler
     model_type = :static in annotations ? StaticModel : UniversalModel

@@ -46,6 +46,7 @@ function estimate_elbo(::ReinforceELBO, logjoint::Function, q::VariationalDistri
     return elbo
 end
 
+# TODO: either remove or verify
 # struct ReinforceSurrogateELBO <: ELBOEstimator end
 # function estimate_elbo(::ReinforceSurrogateELBO, logjoint::Function, q::VariationalDistribution, L::Int)
 #     surrogate_elbo = 0.
@@ -63,10 +64,8 @@ struct PathDerivativeELBO <: ELBOEstimator end # requires differentiable model
 function estimate_elbo(::PathDerivativeELBO, logjoint::Function, q::VariationalDistribution, L::Int)
     elbo = 0.
     q_ = update_params(q, no_grad(get_params(q)))
-    # println(get_params(q))
     for _ in 1:L
         zeta = rand(q)
-        # println("zeta: ", zeta)
         elbo += logjoint(zeta) - logpdf(q_, zeta) # tracked zeta, untracked q
     end
     elbo = elbo / L

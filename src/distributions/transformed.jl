@@ -246,30 +246,3 @@ function to_unconstrained(base::ContinuousUnivariateDistribution)::ContinuousUni
 end
 
 export transform_to_unconstrained_from, transform_to, to_unconstrained, support
-
-
-# using Distributions
-# using Plots
-
-# to_unconstrained(Normal(0,1))
-
-# d_constrained = Gamma(1,1)
-# d_unconstrained = to_unconstrained(d_constrained)
-# d_unconstrained = TransformedDistribution(d_constrained, LogTransform())
-
-# d_constrained = Beta(2,3)
-# d_unconstrained = to_unconstrained(d_constrained)
-# d_unconstrained = TransformedDistribution(d_constrained, InverseSigmoidTransform())
-
-# d_constrained = Uniform(2,4)
-# d_unconstrained = to_unconstrained(d_constrained)
-# d_unconstrained = TransformedDistribution(d_constrained, InverseSigmoidTransform() ∘ AffineTransform(1/(4-2),-2/2))
-
-# xs = [rand(d_unconstrained) for _ in 1:100000]
-# histogram(xs, normalize=true)
-# plot!(x -> exp(logpdf(d_unconstrained, x)), linewidth=3)
-
-# d = TransformedDistribution(d_unconstrained, d_unconstrained.T_inv)
-# plot(x -> exp(logpdf(d_constrained, x)))
-# plot!(x -> exp(logpdf(d, x)))
-

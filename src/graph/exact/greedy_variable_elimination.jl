@@ -197,10 +197,6 @@ function get_greedy_elimination_order(variable_nodes::Vector{VariableNode}, marg
         delete!(tau_neighbours, node)
         tau = FactorNode(sort!(collect(tau_neighbours)), Float64[])
         
-        # println(node, ": ", tau)
-        # println("neighbour_factors: ", neighbour_factors)
-        # @assert r.reduction == reduction_size_func(node)
-
         # We add tau to all nodes in tau.neighbours and remove all neighbour_factors f from its neighbours. (1)
         # After the deletion, the set of variables connected to node via some factor (reduction_size[v].nodes) is decreased by node.
         # Proof:

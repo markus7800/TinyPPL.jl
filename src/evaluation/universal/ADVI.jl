@@ -60,24 +60,6 @@ function rand_and_logpdf(umf::UniversalMeanField)
     return sampler.X, sampler.lp
 end
 
-# function rand_and_logpdf(umf::UniversalMeanField, n::Int)
-#     Xs = Vector{ContinuousUniversalTrace}(undef, n)
-#     lps = Vector{Float64}(undef, n)
-#     for i in 1:n
-#         @inbounds Xs[i], lps[i] = rand_and_logpdf(umf)
-#     end
-#     return Xs, lps
-# end
-
-# function Distributions.rand(umf::UniversalMeanField)
-#     X = Dict{Any,Float64}(addr => Distributions.rand(var_dist) for (addr, var_dist) in umf.variational_dists)
-#     return X
-# end
-
-# function Distributions.rand(umf::UniversalMeanField, n::Int)
-#     return [Distributions.rand(umf) for _ in 1:n]
-# end
-
 """
 Wrapper for the result of universal ADVI and BBVI.
 The only supported variational families are Meanfield and Guides.

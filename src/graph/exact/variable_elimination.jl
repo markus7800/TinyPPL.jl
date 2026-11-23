@@ -91,7 +91,6 @@ function variable_elimination(variable_nodes::Vector{VariableNode}, elimination_
         psi = reduce(factor_product, neighbour_factors)
         # eliminate node
         tau = factor_sum(psi, [node])
-        # println(node, ": ", tau)
 
         # delete all neighbour_factors ...
         for f in neighbour_factors

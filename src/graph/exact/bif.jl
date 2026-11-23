@@ -24,7 +24,6 @@ function read_bif(pathname::String)
             #     type discrete [ 3 ] { young, adult, old };
             # }
             components = split(block)
-            # println(components)
             name = String(components[2])
             @assert components[4] == "type"
             @assert components[5] == "discrete"

@@ -263,7 +263,7 @@ end
 
 @testset "plated topological order with single member edges" begin # C19
     pgm = plated_single_member
-    order = G.get_topolocial_order(pgm.n_variables, pgm.plate_info)
+    order = G.get_topological_order(pgm.n_variables, pgm.plate_info)
     position(node) = findfirst(u -> u isa G.Plate ? node in u.nodes : u == node, order)
     @test all(position(x) < position(y) for (x, y) in pgm.edges if position(x) != position(y))
     a, x, z = 0.3, [0.5, -0.2, 1.1], -0.4

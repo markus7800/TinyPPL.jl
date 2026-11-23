@@ -354,7 +354,6 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
     elseif expr.head == :macrocall
         # expr.args[2] === nothing
         if expr.args[1] == Symbol("@iterate")
-            # println("@iterate ", expr.args)
             # @iterate(count, f, init)
             count = expr.args[3]
             func = expr.args[4]
@@ -362,7 +361,6 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
             new_expr = repeatf_symbolic(count, func, init)
             return transpile(t, phi, new_expr)
         elseif expr.args[1] == Symbol("@loop")
-            # println("@loop ", expr.args)
             # @loop(count, f, init, args...)
             count = expr.args[3]
             func = expr.args[4]
@@ -375,8 +373,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
             error("Unsupported macro $(expr.args[1])")
         end
     else
-        println(expr.args)
-        error("Unsupported expression $(expr.head).")
+        error("Unsupported expression $(expr.head): $expr")
     end
 end
 

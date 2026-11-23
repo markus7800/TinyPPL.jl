@@ -37,24 +37,27 @@ end
 is (essentially) transformed to
 
 ```julia
-function simple(mean::Float64, sampler::Sampler, observations::Observations)
+function simple(mean::Float64, sampler::Sampler, observations=Dict())
     X = let distribution = Normal(mean, 1.),
             # check if we have observation
             obs = get(observations, :X, nothing)
-            # let sampler decide what to do
-            value = sample(sampler, :X, distribution, obs)
-            # assign value to X
-            value
+        # let sampler decide what to do, the result is assigned to X
+        sample(sampler, :X, distribution, obs)
     end
     let distribution = Normal(X, 1.),
         obs = get(observations, :Y, nothing)
-        value = sample(sampler, :Y, distribution, obs)
-        value
+        sample(sampler, :Y, distribution, obs)
     end
     return X
 end
+simple = UniversalModel(simple)
 ```
 This can be checked with the `@macroexpand` function.
+(The macro uses fresh names for `distribution`, `obs` and the function, and calls `TinyPPL.Evaluation.sample` and `Base.get` by their full names,
+so the model can use any variable names and only `@ppl` has to be imported.)
+
+A model is called with `model(args::Tuple, sampler, observations)`.
+Observations can be any dictionary from addresses to values, e.g. `Observations(:Y => 1.)` or `Dict(:Y => 1.)`.
 
 
 Interaction with the model is possible by implementing custom samplers.
@@ -128,11 +131,12 @@ and observe statements (which return `value` when evaluated)
 ```
 distribution(args...) ↦ value
 ```
-Data has to be inlined or referenced with `$(Main.data)`, where `data` is a variable in Main which holds data.
+Data can be inlined or interpolated with `$(data)`, which is evaluated where `@pgm` is called (also local variables are visible).
+Addresses, loop ranges and observed values may also refer to global variables of the module where `@pgm` is called.
 
-All functions have to be defined in the model block.
-Only base Julia functions and distributions are available.  
-Functions `f` defined in Main have to be called with `Main.f`.
+Functions should be defined in the model block.
+Only base Julia functions and distributions are available in distribution expressions,
+other functions have to be qualified with their module, e.g. `Main.f` for a function `f` defined in Main.
 
 
 For example,
@@ -167,8 +171,8 @@ model = @pgm LinReg begin
     function f(slope, intercept, x)
         intercept + slope * x
     end
-    let xs = $(Main.xs),
-        ys = $(Main.ys),
+    let xs = $(xs),
+        ys = $(ys),
         slope ~ Normal(0.0, 10.),
         intercept ~ Normal(0.0, 10.)
 
@@ -217,20 +221,19 @@ Note that the function `model.distributions[node]` returns a distribution which 
 We can sample from the complete model by calling `rand(model.distributions[node](X))` in topological order:
 
 ```julia
-X = Vector{Float64}(undef, pgm.n_latents)
+X = Vector{Float64}(undef, pgm.n_latents) # values of latent variables
+W = 0. # log likelihood
 for node in pgm.topological_order
     d = get_distribution(pgm, node, X)
-
     if isobserved(pgm, node)
-        value = get_observed_value(pgm, node, X)
+        W += logpdf(d, get_observed_value(pgm, node))
     else
-        value = rand(d)
+        X[node] = rand(d)
     end
-    X[node] = value
-    W += logpdf(d, value) # joint probability
 end
 r = get_retval(pgm, X)
 ```
+(This is likelihood weighting, see `src/graph/LW.jl`.)
 
 #### Plated Graphical Models
 
@@ -239,6 +242,10 @@ With the `plated` annotation, we tell the compiler that the model has additional
 For example, if we have addresses `:x => i` then all random variables with address prefix `:x` belong to a plate.
 
 This can be used to optimise compilation.
+
+All model functions (distributions, `sample!`, `logpdf`, the plate functions, ...) are generated at runtime as
+[RuntimeGeneratedFunctions](https://github.com/SciML/RuntimeGeneratedFunctions.jl), see [notes/graph_codegen.md](notes/graph_codegen.md).
+They have no global names; below, the plate functions are shown with names for readability (in the generated code, the function values are interpolated).
 
 The Gaussian Mixture model
 ```julia
@@ -250,7 +257,7 @@ The Gaussian Mixture model
     end
     let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
         k = ({:k} ~ Poisson(λ-1) ↦ 3) + 1,
-        y = $(Main.gt_ys),
+        y = $(gt_ys),
         n = length(y),
         w = dirichlet(δ, k),
         means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
@@ -280,7 +287,7 @@ For instance, from this we know that `:y => i` only depends on `:z => i`.
 
 The compiled logpdf function then looks like
 ```julia
-function plated_GMM_logpdf(var"##X#797"::INPUT_VECTOR_TYPE, var"##Y#798"::Vector{Float64})
+function (var"##X#797"::INPUT_VECTOR_TYPE, var"##Y#798"::Vector{Float64}) # logpdf
     var"##lp#870" = 0.0
     var"##lp#870" += plated_GMM_lp_plate_w(var"##X#797", var"##Y#798")
     var"##lp#870" += plated_GMM_lp_plate_μ(var"##X#797", var"##Y#798")
@@ -294,7 +301,7 @@ end
 ```
 where for instance
 ```julia
-function plated_GMM_lp_plate_y(var"##X#1312"::Vector{Float64}, var"##Y#1313"::Vector{Float64})
+function (var"##X#1312"::INPUT_VECTOR_TYPE, var"##Y#1313"::Vector{Float64}) # plated_GMM_lp_plate_y
     var"##lp#1327" = 0.0
     for var"##i#1328" = 1:100
         var"##loop_dist#1329" = Normal(var"##X#1312"[104 + Int(var"##X#1312"[4 + var"##i#1328"])], sqrt(var"##X#1312"[108 + Int(var"##X#1312"[4 + var"##i#1328"])]))
@@ -302,11 +309,11 @@ function plated_GMM_lp_plate_y(var"##X#1312"::Vector{Float64}, var"##Y#1313"::Ve
     end
     var"##lp#1327"
   end
-``````
+```
 
 Compare this to the usual spaghetti code
 ```julia
-function unplated_GMM_logpdf(var"##X#1089"::INPUT_VECTOR_TYPE, var"##Y#1090"::Vector{Float64})
+function (var"##X#1089"::INPUT_VECTOR_TYPE, var"##Y#1090"::Vector{Float64}) # logpdf of unplated GMM
     var"##lp#1093" = 0.0
     var"##dist#1094" = InverseGamma(2.0, 10.0)
     var"##lp#1093" += logpdf(var"##dist#1094", var"##X#1089"[112])
@@ -340,7 +347,7 @@ function unplated_GMM_logpdf(var"##X#1089"::INPUT_VECTOR_TYPE, var"##Y#1090"::Ve
 
 By default if statements in the evaluation-based approach are evaluated lazily and in the graph-based approach eagerly.
 
-The annotation `lazyifs` makes the graphical model semantics equivalant to the evaluation-based models.
+The annotation `lazy_ifs` makes the graphical model semantics equivalant to the evaluation-based models.
 
 ```julia
 model = @pgm eager_branching_model begin
@@ -408,23 +415,36 @@ end
 ```
 
 
-### Inference Algorihms
+### Inference Algorithms
 
 | Algorithm | Evaluation-Universal | Evaluation-Static | Graph | Reference
 |-----------|:----------------:|:-------------:|:-------:|----------|
 |Likelihood-Weighting | X | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
 |Single-Site Metropolis Hastings| X |  | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
-|HMC|  | X | X | [MCMC Handbook](http://www.mcmchandbook.net/HandbookChapter5.pdf)|
+|HMC| X (non-parametric) | X | X | [MCMC Handbook](http://www.mcmchandbook.net/HandbookChapter5.pdf), NP-HMC (Mak et al., 2021)|
 |ADVI| X | X | X | [ADVI](https://arxiv.org/pdf/1603.00788.pdf)|
 |BBVI| X | X | X | [BBVI](https://arxiv.org/pdf/1401.0118.pdf)|
 |Variable Elimination|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
-|Belief Propapagation|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/), [Bishop](https://link.springer.com/in/book/9780387310732)|
+|Belief Propagation|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/), [Bishop](https://link.springer.com/in/book/9780387310732)|
 |Junction Tree Message Passing|  |  | X | [Probabilistic Graphical Models](https://mitpress.mit.edu/9780262013192/probabilistic-graphical-models/)|
 |Involutive MCMC| X |  |  | [iMCMC](https://arxiv.org/pdf/2006.16653.pdf)|
 |SMC| | X | X | [van de Meent et al.](https://arxiv.org/abs/1809.10756)|
 |Particle Gibbs| | X | X | [PMCMC](https://www.stats.ox.ac.uk/~doucet/andrieu_doucet_holenstein_PMCMC.pdf)|
 |PGAS| | X | X | [PGAS](https://arxiv.org/abs/1401.0604)|
 |AQUA| | | X | [AQUA](https://www.cs.cornell.edu/~saikatd/papers/aqua-atva21.pdf) |
+
+### Results of Inference Algorithms
+
+The results are consistent for each category of inference algorithm and backend
+(`UniversalTraces`, `StaticTraces` or `GraphTraces`, indexed by address: `traces[addr]`, `traces[addr, i]`, `retvals(traces)`, `subset(traces, ixs)`):
+
+- Importance sampling / particle methods (`likelihood_weighting`, `smc`, `light_smc`, `conditional_smc`) return `(traces, logw, log_Z)`,
+  where `logw` are the normalised log weights (`sum(exp.(logw)) == 1`) and `log_Z` is the estimate of the log evidence log p(Y).
+- MCMC methods (`lmh`, `rwmh`, `hmc`, `non_parametric_hmc`, `imcmc`, `particle_gibbs`, `particle_IMH`, compiled single site) return traces with constrained values.
+- Variational inference (`advi`, `advi_meanfield`, `advi_fullrank`, `bbvi`) returns a `VIResult`, from which `sample_posterior(result, n)` draws traces.
+- Exact inference (`variable_elimination`, `greedy_variable_elimination`, `belief_propagation`, `junction_tree_message_passing`)
+  returns a result with `log_evidence` and `get_posterior(result)`, the normalised posterior table over the query variables
+  (`get_marginals(result)` for calibrated belief propagation / junction tree results).
 
 
 ## Installation

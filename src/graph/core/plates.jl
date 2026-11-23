@@ -112,7 +112,6 @@ function get_plates(n_variables::Int, edges::Set{Pair{Int,Int}}, addresses::Vect
                 for plate_node in plate.nodes
                     delete!(edges, plate_node=>node) # processed edge
                 end
-                # println(plate, "->", node)
                 push!(plated_edges, PlateToNodeEdge(plate, node))
             end
         end
@@ -200,7 +199,6 @@ function get_plate_functions(plates::Vector{Plate}, plated_edges::Set{PlatedEdge
         no_observed = all(!is_observed[child] for child in plate.nodes)
         @assert all_observed || no_observed "$plate is not either all_observed or not_observed"
         
-        # println("Plate:", plate, ", static_observes: ", static_observes, ", all_observed: ", all_observed, ", no_observed: ", no_observed)
 
         if (kind == :sample && no_observed) || # don't "sample" observes
             (kind in (:to_constrained, :to_unconstrained) && no_observed) || # don't transform observes
@@ -385,7 +383,6 @@ function get_plate_functions(plates::Vector{Plate}, plated_edges::Set{PlatedEdge
                 end
             )
         end
-        # display(f)
         push!(plate_functions, make_function(f))
     end
     return plate_functions
@@ -423,7 +420,7 @@ function plate_function(plate_info::PlateInfo, kind::Symbol, plate::Plate)
     return fs[i]
 end
 
-function get_topolocial_order(n_variables::Int, plate_info::PlateInfo)
+function get_topological_order(n_variables::Int, plate_info::PlateInfo)
     # Topological order of "units": plates and unplated nodes.
     # Plated edges may connect single plate members (NodeToNodeEdge, e.g. x[1] -> z),
     # thus each endpoint is mapped to the plate it belongs to.

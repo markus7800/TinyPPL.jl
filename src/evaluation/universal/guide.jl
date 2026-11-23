@@ -29,7 +29,6 @@ function sample(sampler::UniversalGuideSampler, addr::Address, dist::Distributio
     end
     value = sampler.X[addr]
     sampler.W += logpdf(dist, value)
-    # println("guide: ", addr, " ", value, " ", dist)
     return value
 end
 

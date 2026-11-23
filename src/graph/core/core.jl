@@ -90,21 +90,6 @@ macro pgm(name, foppl)
     return pgm_macro(Set{Symbol}(), name, foppl, __module__)
 end
 
-# function pgm_macro(annotations, name, foppl)
-#     foppl = rmlines(foppl);
-#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_ ↦ y_) ? Expr(:observe, symbol, dist, y) : expr,  foppl);
-#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ = dist_ ↦ y_) ? :($var = $(Expr(:observe, QuoteNode(var), dist, y))) : expr,  foppl);
-#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, dist_ ↦ y_) ? Expr(:observe, QuoteNode(:OBSERVED), dist, y) : expr,  foppl);
-#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, {symbol_} ~ dist_) ? Expr(:sample, symbol, dist) : expr,  foppl);
-#     foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
-#     foppl = unwrap_let(foppl)
-
-#     G, E, variable_to_address, translation_order = transpile_program(foppl);
-#     pgm = compile_symbolic_pgm(name, G, E, variable_to_address, translation_order, annotations);
-
-#     return pgm
-# end
-
 # `mod` is the module in which @pgm is called, static parts of the program (addresses, ranges, observations)
 # are evaluated there (global variables of `mod` are visible).
 # $(...) interpolations are evaluated when the @pgm expression is run, in the scope where @pgm is called
@@ -131,7 +116,7 @@ end
 export @pgm
 
 
-function get_topolocial_order(n_variables::Int, edges::Set{Pair{Int,Int}})
+function get_topological_order(n_variables::Int, edges::Set{Pair{Int,Int}})
     edges = deepcopy(edges)
     roots = [i for i in 1:n_variables if !any(i == y for (x,y) in edges)]
     ordered_nodes = Int[] # topological order
@@ -155,7 +140,7 @@ end
 #=
     for `j=>sym` in `ix_to_sym` replaces sym with `X[j]`
 =#
-function subtitute_for_syms(var_to_expr::Dict{Symbol,Any}, d::Any, X::Symbol)
+function substitute_for_syms(var_to_expr::Dict{Symbol,Any}, d::Any, X::Symbol)
     d = substitute(var_to_expr, d)
     d = reduce_array_accesses(d, X)
     d = unnest_array_accesses(d, X)
@@ -218,7 +203,7 @@ function get_symbolic_distributions(symbolic_pgm::SymbolicPGM, n_latents::Int, i
     for node in 1:n_latents
         sym = ix_to_sym[node]
         d = symbolic_pgm.P[sym]
-        d = subtitute_for_syms(var_to_expr, d, X)
+        d = substitute_for_syms(var_to_expr, d, X)
         push!(symbolic_dists, d)
     end
     return symbolic_dists
@@ -280,9 +265,9 @@ function get_sample(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
     sample_block_args = []
 
     ordered_nodes = if isnothing(plate_info)
-        get_topolocial_order(n_variables, edges)
+        get_topological_order(n_variables, edges)
     else
-        get_topolocial_order(n_variables, plate_info)
+        get_topological_order(n_variables, plate_info)
     end
 
     d_sym = gensym("dist")
@@ -306,7 +291,6 @@ function get_sample(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
             $(sample_block_args...)
         end
     )
-    # display(f)
     return make_function(f)
 end
 
@@ -316,9 +300,9 @@ function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
     lp_block_args = []
 
     ordered_nodes = if isnothing(plate_info)
-        get_topolocial_order(n_variables, edges)
+        get_topological_order(n_variables, edges)
     else
-        get_topolocial_order(n_variables, plate_info)
+        get_topological_order(n_variables, plate_info)
     end
 
     push!(lp_block_args, :($lp = 0.0))
@@ -379,7 +363,6 @@ function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
             $(lp_block_args...)
         end
     )
-    # display(f)
     return make_function(f)
 end
 
@@ -398,9 +381,9 @@ function get_transform(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::
     end
 
     ordered_nodes = if isnothing(plate_info)
-        get_topolocial_order(n_variables, edges)
+        get_topological_order(n_variables, edges)
     else
-        get_topolocial_order(n_variables, plate_info)
+        get_topological_order(n_variables, plate_info)
     end
 
     d_sym = gensym("dist")
@@ -443,7 +426,6 @@ function get_transform(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::
             $(block_args...)
         end
     )
-    # display(f)
     return make_function(f)
 end
 
@@ -489,7 +471,7 @@ function compile_symbolic_pgm(
     is_observed = [isobserved(spgm, ix_to_sym[j]) for j in 1:n_variables]
 
     @assert is_topological_order(spgm, translation_order)
-    # topolical_ordered = get_topolocial_order(n_variables, edges) # includes observed variables
+    # topolical_ordered = get_topological_order(n_variables, edges) # includes observed variables
     topolical_ordered = [sym_to_ix[sym] for sym in translation_order]
 
     X = gensym(:X)
@@ -512,7 +494,6 @@ function compile_symbolic_pgm(
                 $(symbolic_dists[i])
             end
         )
-        # display(f)
         distributions[i] = make_function(f)
         if isobserved(spgm, ix_to_sym[i])
             observations[i-n_latents] = spgm.Y[sym]
@@ -520,13 +501,12 @@ function compile_symbolic_pgm(
     end
 
     # wrap return expression in function
-    new_E = subtitute_for_syms(var_to_expr, deepcopy(E), X)
+    new_E = substitute_for_syms(var_to_expr, deepcopy(E), X)
     f = :(
         function ($X::INPUT_VECTOR_TYPE,) # length($X) = n_latents
             $new_E
         end
     )
-    # display(f)
     return_expr = make_function(f)
 
 

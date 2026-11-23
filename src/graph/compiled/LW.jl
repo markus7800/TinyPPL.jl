@@ -17,7 +17,7 @@ function compile_likelihood_weighting(pgm::PGM)
     if isnothing(pgm.plate_info)
         ordered_nodes = pgm.topological_order
     else
-        ordered_nodes = get_topolocial_order(pgm.n_variables, pgm.plate_info)
+        ordered_nodes = get_topological_order(pgm.n_variables, pgm.plate_info)
     end
 
     d_sym = gensym("dist")
@@ -40,7 +40,7 @@ function compile_likelihood_weighting(pgm::PGM)
             end
         end
     end
-    new_E = subtitute_for_syms(var_to_expr, deepcopy(pgm.symbolic_return_expr), X)
+    new_E = substitute_for_syms(var_to_expr, deepcopy(pgm.symbolic_return_expr), X)
 
     return_value = gensym(:return)
     push!(block_args, :($return_value = $new_E))
@@ -52,7 +52,6 @@ function compile_likelihood_weighting(pgm::PGM)
             $(block_args...)
         end
     )
-    # display(f)
     lw = make_function(f)
     X = Vector{Float64}(undef, pgm.n_variables); lw(X, pgm.observations); # compilation
     return lw
