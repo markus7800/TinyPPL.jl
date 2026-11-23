@@ -49,7 +49,7 @@ function compile_likelihood_weighting(pgm::PGM)
 
     f = :(
         function ($X::Vector{Float64}, $Y::Vector{Float64})
-            $(Expr(:block, block_args...))
+            $(block_args...)
         end
     )
     # display(f)

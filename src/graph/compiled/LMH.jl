@@ -202,7 +202,7 @@ function compile_single_site(pgm::PGM, kernel::Function)
 
         f = :(
             function ($X::Vector{Float64}, $Y::Vector{Float64})
-                $(Expr(:block, block_args...))
+                $(block_args...)
             end
         )
         # display(f)

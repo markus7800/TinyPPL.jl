@@ -303,7 +303,7 @@ function get_sample(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
     push!(sample_block_args, :($nothing))
     f = :(
         function ($X::INPUT_VECTOR_TYPE,)
-            $(Expr(:block, sample_block_args...))
+            $(sample_block_args...)
         end
     )
     # display(f)
@@ -376,7 +376,7 @@ function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
     
     f = :(
         function ($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
-            $(Expr(:block, lp_block_args...)) # TODO: replace ...
+            $(lp_block_args...)
         end
     )
     # display(f)
@@ -440,7 +440,7 @@ function get_transform(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::
     
     f = :(
         function ($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
-            $(Expr(:block, block_args...))
+            $(block_args...)
         end
     )
     # display(f)
@@ -535,14 +535,7 @@ function compile_symbolic_pgm(
     if :plated in annotations
         # find all symbols that lead pairs: :x => i, :z => i => j -> collects :x and :z 
         plate_symbols = unique(Symbol[addr[1] for addr in addresses if addr isa Pair])
-        println("plate_symbols: ", plate_symbols)
         plates, plated_edges = get_plates(n_variables, edges, addresses, plate_symbols)
-        for plate in plates
-            println(plate)
-        end
-        for edge in plated_edges
-            println(edge)
-        end
         plate_lp_fs = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp)
         plate_lp_unconstrained_fs = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp_unconstrained)
         plate_sample_fs = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :sample)
@@ -576,8 +569,7 @@ function compile_symbolic_pgm(
         Z = Vector{Float64}(undef, n_latents)
         transform_to_constrained!(Z, Y)
         @assert all(broadcast(approx_same_value, X, Z)) (X,Z)
-
-        # unconstrained_logpdf(Y, observations) # TODO: need to transform to constrained if variables are parameters of distributions!
+        unconstrained_logpdf(Y, observations)
 
         return_expr(X)
         for i in 1:n_variables

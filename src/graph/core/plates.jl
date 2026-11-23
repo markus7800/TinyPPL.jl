@@ -369,19 +369,19 @@ function get_plate_functions(plates::Vector{Plate}, plated_edges::Set{PlatedEdge
         if kind in (:to_constrained, :to_unconstrained)
             f = :(
                 function ($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
-                    $(Expr(:block, block_args...)) # TODO: replace ...
+                    $(block_args...)
                 end
             )
         elseif kind in (:lp, :lp_unconstrained)
             f = :(
                 function ($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
-                    $(Expr(:block, block_args...)) # TODO: replace ...
+                    $(block_args...)
                 end
             )
         elseif kind == :sample
             f = :(
                 function ($X::INPUT_VECTOR_TYPE,)
-                    $(Expr(:block, block_args...)) # TODO: replace ...
+                    $(block_args...)
                 end
             )
         end
