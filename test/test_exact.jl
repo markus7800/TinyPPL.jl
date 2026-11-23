@@ -546,4 +546,102 @@ end
     end
 end
 
+
+# ---------------------------------------------------------------- deep trees (J7)
+
+# binary Markov chain x1 -> ... -> xN with an observation factor on xN, built directly as factor graph
+# (a @pgm with 10^5 variables would take long to compile)
+function chain_factor_graph(N)
+    vs = [VariableNode(i, Symbol(:x, i)) for i in 1:N]
+    for v in vs
+        v.support = [0., 1.]
+    end
+    T = [0.7 0.3; 0.2 0.8] # P(x_i | x_{i-1}), rows x_{i-1}
+    fs = FactorNode[FactorNode([vs[1]], log.([0.4, 0.6]))]
+    for i in 2:N
+        push!(fs, FactorNode([vs[i-1], vs[i]], log.(T)))
+    end
+    push!(fs, FactorNode([vs[N]], log.([0.2, 0.9])))
+    for f in fs, v in f.neighbours
+        push!(v.neighbours, f)
+    end
+    # reference by forward recursion (p is the stationary distribution [0.4, 0.6])
+    p = [0.4, 0.6]
+    for _ in 2:N
+        p = T' * p
+    end
+    log_evidence = log(sum(p .* [0.2, 0.9]))
+    posterior_xN = p .* [0.2, 0.9] ./ sum(p .* [0.2, 0.9])
+    return vs, fs, log_evidence, posterior_xN
+end
+
+@testset "deep trees do not overflow the stack" begin # J7
+    N = 100_000 # recursive implementations overflowed
+    @testset "is_tree" begin
+        vs, fs, _, _ = chain_factor_graph(N)
+        @test is_tree(vs, fs)
+        # closing the chain to a cycle
+        f = FactorNode([vs[1], vs[N]], zeros(2, 2))
+        push!(fs, f); push!(vs[1].neighbours, f); push!(vs[N].neighbours, f)
+        @test !redirect_stdout(() -> is_tree(vs, fs), devnull)
+    end
+    @testset "belief_propagation with_division=$with_division" for with_division in (false, true)
+        vs, fs, log_evidence, posterior_xN = chain_factor_graph(N)
+        res = belief_propagation(get_blief_tree(fs[1]), fs[1], true; with_division=with_division)
+        @test res.log_evidence ≈ log_evidence
+        marginals = Dict(v.variable => table for (v, table) in get_marginals(res))
+        @test length(marginals) == N
+        @test marginals[N] ≈ posterior_xN
+    end
+    @testset "junction_tree_message_passing with_division=$with_division" for with_division in (false, true)
+        vs, fs, log_evidence, posterior_xN = chain_factor_graph(N)
+        junction_tree, root, root_factor = get_junction_tree(vs, vs, fs[1])
+        res = junction_tree_message_passing(junction_tree, root, root_factor, true; with_division=with_division)
+        @test res.log_evidence ≈ log_evidence
+        marginals = Dict(v.variable => table for (v, table) in get_marginals(res))
+        @test marginals[N] ≈ posterior_xN
+        X, _ = sample_junctiontree(res)
+        @test length(X) == N
+        @test isfinite(G._get_logjoint_density(X, res.root, nothing))
+    end
+end
+
+@testset "junction tree sampling" begin
+    # all samplers return the posterior probability of the sample and sample from the posterior
+    res = junction_tree_message_passing(discrete_network; calibrate_tree=true)
+    Random.seed!(0)
+    for _ in 1:10
+        X, P = sample_junctiontree(res)
+        @test P ≈ get_posterior_density(res, X)
+        X, P = sample_junctiontree_optimised_messaging(res)
+        @test P ≈ get_posterior_density(res, X)
+        for order in (:dfs, :bfs, :random)
+            # naive sampler prints and asserts its invariants
+            X, P, _ = redirect_stdout(() -> sample_junctiontree_naive(res, order), devnull)
+            @test P ≈ get_posterior_density(res, X)
+        end
+    end
+    z_node = only(v for v in keys(G.get_variable_nodes(res.junction_tree)) if v.address == :z)
+    samples = [sample_junctiontree(res)[1][z_node.variable] for _ in 1:20_000]
+    @test [mean(samples .== i) for i in 1:3] ≈ R.DN_POST_Z atol = 0.015
+end
+
+@testset "printing trees" begin
+    junction_tree, root, _ = get_junction_tree(chain8)
+    out = mktemp() do path, io
+        redirect_stdout(() -> print_junction_tree(root), io)
+        close(io)
+        readlines(path)
+    end
+    @test length(out) == length(junction_tree)
+    @test !startswith(out[1], " ") && all(startswith(line, "  ") for line in out[2:end])
+    variable_nodes, factor_nodes = get_factor_graph(chain8)
+    out = mktemp() do path, io
+        redirect_stdout(() -> print_belief_tree(get_blief_tree(factor_nodes[1])), io)
+        close(io)
+        readlines(path)
+    end
+    @test length(out) == length(variable_nodes) + length(factor_nodes)
+end
+
 end # module ExactInferenceTests

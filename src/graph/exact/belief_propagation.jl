@@ -11,71 +11,109 @@
 # In the forward pass, all messages are sent towards the root.
 # If we also care about the marginals of other nodes, we sent messages in the reverse direction.
 
+# All traversals of the belief tree are iterative (see `preorder`), since recursion overflows the stack
+# for deep trees (e.g. chains with ~10^5 variables).
 mutable struct BeliefNode
     node::FactorGraphNode
     parent::Union{Nothing,BeliefNode}
-    parent_index::Int
+    parent_index::Int # index of parent in neighbours
+    index_in_parent::Int # index of this node in parent.neighbours
     neighbours::Vector{BeliefNode}
     message_sent::Bool
-    messages::Vector{Vector{Float64}}
+    messages::Vector{Vector{Float64}} # messages[i] is the message from neighbours[i]
 
-    # Constructor already creates tree from factor graph.
-    # Make sure that factor graph is indeed tree.
-    function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,BeliefNode})
+    # creates node without neighbours (they are set by the constructor below)
+    function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,BeliefNode}, index_in_parent::Int)
         this = new()
         this.node = node
         this.parent = parent
         this.parent_index = 0
-        this.neighbours = Vector{Vector{BeliefNode}}(undef, length(node.neighbours))
+        this.index_in_parent = index_in_parent
+        this.neighbours = Vector{BeliefNode}(undef, length(node.neighbours))
         this.message_sent = false
         this.messages = Vector{Vector{Float64}}(undef, length(node.neighbours))
-
-        for (i, n) in enumerate(node.neighbours)
-            if !isnothing(parent) && parent.node == n
-                this.parent_index = i
-                this.neighbours[i] = parent
-            else
-                this.neighbours[i] = BeliefNode(n, this)
-            end
-        end
-
         return this
     end
+end
+
+# Constructor already creates tree from factor graph.
+# Make sure that factor graph is indeed tree.
+function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,BeliefNode})
+    root = BeliefNode(node, parent, 0)
+    stack = BeliefNode[root]
+    while !isempty(stack)
+        this = pop!(stack)
+        for (i, n) in enumerate(this.node.neighbours)
+            if !isnothing(this.parent) && this.parent.node == n
+                this.parent_index = i
+                this.neighbours[i] = this.parent
+            else
+                child = BeliefNode(n, this, i)
+                this.neighbours[i] = child
+                push!(stack, child)
+            end
+        end
+    end
+    return root
+end
+
+# Nodes of the belief tree in depth-first pre-order (parent before children, children in order of neighbours),
+# the same order as was visited by recursion.
+function preorder(root::BeliefNode)
+    nodes = BeliefNode[]
+    stack = BeliefNode[root]
+    while !isempty(stack)
+        node = pop!(stack)
+        push!(nodes, node)
+        for child in Iterators.reverse(node.neighbours)
+            child === node.parent && continue
+            push!(stack, child)
+        end
+    end
+    return nodes
 end
 
 function Base.show(io::IO, belief_node::BeliefNode)
     print(io, "BeliefNode(", belief_node.node, ")")
 end
 
-function print_belief_tree(root::BeliefNode, tab="")
-    println(tab, root.node)
-    for child in root.neighbours
-        child == root.parent && continue
-        print_belief_tree(child, tab*"  ")
+function print_belief_tree(root::BeliefNode)
+    depth = Dict{BeliefNode,Int}(root => 0)
+    for node in preorder(root)
+        if !isnothing(node.parent) && node !== root
+            depth[node] = depth[node.parent] + 1
+        end
+        println("  "^depth[node], node.node)
     end
 end
 
 
 # Method to check whether a factor graph is a tree.
 function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
-    function is_cycle(node, visited, parent, tab="")
-        visited[node] = true
-
-        for neighbour in node.neighbours
-            if visited[neighbour] == false
-                if is_cycle(neighbour, visited, node, tab*"  ")
+    # depth-first search from start, a cycle exists if we reach a visited node that is not the parent
+    # works only for undirected graphs (Because DFS dives as deep as possible along one branch before
+    # backtracking, any previously visited node you encounter in an undirected graph must be an ancestor
+    # in the current recursion stack, which guarantees a closed path back to it)
+    function is_cycle(start, visited)
+        visited[start] = true
+        # stack is (node, parent of node), parent is also neighbour of node
+        stack = Tuple{FactorGraphNode,Union{Nothing,FactorGraphNode}}[(start, nothing)]
+        while !isempty(stack)
+            node, parent = pop!(stack)
+            for neighbour in node.neighbours
+                if visited[neighbour] == false
+                    visited[neighbour] = true
+                    push!(stack, (neighbour, node))
+                elseif neighbour != parent
                     return true
                 end
-            elseif neighbour != parent
-                return true
             end
         end
-
         return false
     end
     
     visited = Dict(v => false for v in vcat(variable_nodes, factor_nodes))
-    if is_cycle(factor_nodes[end], visited, nothing)
+    if is_cycle(factor_nodes[end], visited)
         println(factor_nodes[end], " visited: ", [f for (f,b) in visited if b])
         return false
     end
@@ -83,7 +121,6 @@ function is_tree(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{Fact
     for (n, b) in visited
         if !b
             println(factor_nodes[end], " not connected: ", n)
-            # not connected
             return false
         end
     end
@@ -101,15 +138,8 @@ end
 export is_tree
 
 # Returns all variable nodes from the belief tree.
-function get_variable_nodes(belief_node::BeliefNode, variable_nodes=BeliefNode[])
-    if belief_node.node isa VariableNode
-        push!(variable_nodes, belief_node)
-    end
-    for child in belief_node.neighbours
-        child == belief_node.parent && continue
-        get_variable_nodes(child, variable_nodes)
-    end
-    return variable_nodes
+function get_variable_nodes(root::BeliefNode)
+    return BeliefNode[belief_node for belief_node in preorder(root) if belief_node.node isa VariableNode]
 end
 
 function belief_propagation(pgm::PGM; calibrate_tree::Bool=false, return_factor_as_root::Bool=false)
@@ -312,7 +342,21 @@ export get_marginals
 
 
 # message from children to parents, start at leaves
-function forward(belief_node::BeliefNode)
+# (nodes in reverse pre-order: all children are processed before their parent)
+# returns the message of the root, i.e. the log evidence
+function forward(root::BeliefNode)
+    message = Float64[]
+    for belief_node in Iterators.reverse(preorder(root))
+        message = forward_message(belief_node)
+        if belief_node !== root
+            belief_node.parent.messages[belief_node.index_in_parent] = message
+        end
+    end
+    return message
+end
+
+# computes the message to the parent from the messages of the children (stored in belief_node.messages)
+function forward_message(belief_node::BeliefNode)
     @assert !belief_node.message_sent
     belief_node.message_sent = true
 
@@ -342,8 +386,7 @@ function forward(belief_node::BeliefNode)
         for (i, child) in enumerate(belief_node.neighbours)
             # child is FactorNode
             child == belief_node.parent && continue # ne(x) - f
-            child_message = forward(child)
-            belief_node.messages[i] = child_message
+            child_message = belief_node.messages[i] # set by forward pass of child
             message .+= child_message # no broadcasting
         end
     else
@@ -360,8 +403,7 @@ function forward(belief_node::BeliefNode)
         for (i, child) in enumerate(belief_node.neighbours)
             # child is VariableNode
             child == belief_node.parent && continue # ne(f) - x
-            child_message = forward(child)
-            belief_node.messages[i] = child_message
+            child_message = belief_node.messages[i] # set by forward pass of child
             @assert length(child_message) == length(child.node.support)
             # each variables has its own dimension j
             # we reshape the one dimensional message to
@@ -403,7 +445,15 @@ function forward(belief_node::BeliefNode)
     return message
 end
 
-function backward(belief_node::BeliefNode)
+# messages from parents to children, start at root (pre-order: parent before children)
+function backward(root::BeliefNode)
+    for belief_node in preorder(root)
+        backward_messages(belief_node)
+    end
+end
+
+# sends messages to all children (stored in child.messages)
+function backward_messages(belief_node::BeliefNode)
     @assert belief_node.message_sent
     # belief_node has received all messages from children !and! parent
 
@@ -424,7 +474,6 @@ function backward(belief_node::BeliefNode)
 
             # put the message into child
             child.messages[child.parent_index] = message
-            backward(child)
         end
     else
         for child in belief_node.neighbours
@@ -462,12 +511,17 @@ function backward(belief_node::BeliefNode)
 
             # put the message into child
             child.messages[child.parent_index] = message
-            backward(child)
         end
     end
 end
 
-function backward_with_division(belief_node::BeliefNode)
+function backward_with_division(root::BeliefNode)
+    for belief_node in preorder(root)
+        backward_messages_with_division(belief_node)
+    end
+end
+
+function backward_messages_with_division(belief_node::BeliefNode)
     @assert belief_node.message_sent
     # belief_node has received all messages from children !and! parent
 
@@ -484,7 +538,6 @@ function backward_with_division(belief_node::BeliefNode)
 
             # put the message into child
             child.messages[child.parent_index] = message
-            backward_with_division(child)
         end
     else
 
@@ -532,8 +585,6 @@ function backward_with_division(belief_node::BeliefNode)
             # put the message into child
             child.messages[child.parent_index] = message
             selection[i] = Colon()
-
-            backward_with_division(child)
         end
     end
 end

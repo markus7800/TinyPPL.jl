@@ -36,13 +36,29 @@ function Base.show(io::IO, cluster_node::ClusterNode)
     print(io, "ClusterNode(", [node.address for node in cluster_node.cluster], ")")
 end
 
-function make_directed(node::ClusterNode, parent::Union{ClusterNode, Nothing})
-    node.parent = parent
-    for neighbour in node.neighbours
-        if neighbour == parent
-            continue
+# All traversals of the junction tree are iterative (see `preorder`), since recursion overflows the stack
+# for deep trees (e.g. chains with ~10^5 variables).
+
+# (node, parent) pairs of the tree in depth-first pre-order starting at `start`, where parent is the previous node
+# on the path from start (nothing for start), children in iteration order of neighbours (as was visited by recursion).
+# Does not depend on node.parent, so it works for any start node (and before make_directed).
+function preorder(start::ClusterNode)
+    nodes = Tuple{ClusterNode,Union{Nothing,ClusterNode}}[]
+    stack = Tuple{ClusterNode,Union{Nothing,ClusterNode}}[(start, nothing)]
+    while !isempty(stack)
+        node, parent = pop!(stack)
+        push!(nodes, (node, parent))
+        for neighbour in Iterators.reverse(collect(node.neighbours))
+            neighbour == parent && continue
+            push!(stack, (neighbour, node))
         end
-        make_directed(neighbour, node)
+    end
+    return nodes
+end
+
+function make_directed(root::ClusterNode, parent::Nothing)
+    for (node, parent) in preorder(root)
+        node.parent = parent
     end
 end
 
@@ -194,12 +210,11 @@ end
 
 export get_junction_tree
 
-function print_junction_tree(root::ClusterNode, tab="")
-    println(tab, root)
-    for child in root.neighbours
-        if child != root.parent
-            print_junction_tree(child, tab*"  ")
-        end
+function print_junction_tree(root::ClusterNode)
+    depth = Dict{ClusterNode,Int}()
+    for (node, parent) in preorder(root)
+        depth[node] = isnothing(parent) ? 0 : depth[parent] + 1
+        println("  "^depth[node], node)
     end
 end
 export print_junction_tree
@@ -227,18 +242,30 @@ function junction_tree_message_passing(pgm::PGM; calibrate_tree::Bool=false, ret
 end
 
 
-function initialise_potentials(node::ClusterNode)
-    node.potential = reduce(factor_product, node.factors, init=node.potential)
-    node.messages = Vector{FactorNode}(undef, length(node.neighbours))
-    for neighbour in node.neighbours
-        neighbour == node.parent && continue
-        initialise_potentials(neighbour)
+function initialise_potentials(root::ClusterNode)
+    for (node, _) in preorder(root)
+        node.potential = reduce(factor_product, node.factors, init=node.potential)
+        node.messages = Vector{FactorNode}(undef, length(node.neighbours))
     end
 end
 
 # PGM 10.2.1: Variable Elimination in a Clique Tree
 # pass messages towards root
-function forward(node::ClusterNode, parent::Union{ClusterNode, Nothing})::FactorNode
+# (nodes in reverse pre-order: all children are processed before their parent)
+# returns the message of the root (scalar factor, the log evidence)
+function forward(root::ClusterNode, ::Nothing)::FactorNode
+    local message::FactorNode
+    for (node, parent) in Iterators.reverse(preorder(root))
+        message = forward_message(node, parent)
+        if !isnothing(parent)
+            parent.messages[parent.neighbour_to_ix[node]] = message
+        end
+    end
+    return message
+end
+
+# computes the message to parent from the messages of the children (stored in node.messages)
+function forward_message(node::ClusterNode, parent::Union{ClusterNode, Nothing})::FactorNode
     # (10.2) δ_{i → j} = ∑_{C_i - S_ij} ψ_i ∏_{k ∈ ne_i - j} δ_{k → j}
     # is a factor with scope S_ij where S_ij = C_i ∩ C_j for clique tree
     # i = node
@@ -246,8 +273,7 @@ function forward(node::ClusterNode, parent::Union{ClusterNode, Nothing})::Factor
     message = node.potential # ψ_i
     for (i, neighbour) in enumerate(node.neighbours)
         neighbour == parent && continue # k ∈ ne_i - j
-        child_message = forward(neighbour, node) #  δ_{k → j}
-        node.messages[i] = child_message
+        child_message = node.messages[i] #  δ_{k → j}, set by forward pass of neighbour
         message = factor_product(message, child_message)
     end
 
@@ -261,7 +287,15 @@ function forward(node::ClusterNode, parent::Union{ClusterNode, Nothing})::Factor
     return message
 end
 
-function backward(node::ClusterNode, parent::Union{ClusterNode, Nothing})
+# pass messages from root to leaves (pre-order: parent before children)
+function backward(root::ClusterNode, ::Nothing)
+    for (node, parent) in preorder(root)
+        backward_messages(node, parent)
+    end
+end
+
+# sends messages to all children (stored in neighbour.messages)
+function backward_messages(node::ClusterNode, parent::Union{ClusterNode, Nothing})
     for (i, neighbour) in enumerate(node.neighbours)
         neighbour == parent && continue
         
@@ -274,12 +308,16 @@ function backward(node::ClusterNode, parent::Union{ClusterNode, Nothing})
 
         index_in_child = neighbour.neighbour_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
-
-        backward(neighbour, node)
     end
 end
 
-function backward_with_division(node::ClusterNode, parent::Union{ClusterNode, Nothing})
+function backward_with_division(root::ClusterNode, ::Nothing)
+    for (node, parent) in preorder(root)
+        backward_messages_with_division(node, parent)
+    end
+end
+
+function backward_messages_with_division(node::ClusterNode, parent::Union{ClusterNode, Nothing})
     base_message = reduce(factor_product, node.messages, init=node.potential)
     for (i, neighbour) in enumerate(node.neighbours)
         neighbour == parent && continue
@@ -311,8 +349,6 @@ function backward_with_division(node::ClusterNode, parent::Union{ClusterNode, No
 
         index_in_child = neighbour.neighbour_to_ix[node]
         neighbour.messages[index_in_child] = factor_sum(child_message, setdiff(node.cluster, neighbour.cluster))
-
-        backward_with_division(neighbour, node)
     end
 end
 
@@ -499,11 +535,9 @@ export query
 
 query(res::JunctionTreeMessagePassingResult, marginal_variables::Vector{VariableNode}) = query(res, Int[v.variable for v in marginal_variables])
 
-function dfs_order(node::ClusterNode, parent::Union{Nothing,ClusterNode}, nodes::Vector{ClusterNode})
-    push!(nodes, node)
-    for neighbour in node.neighbours
-        neighbour == parent && continue
-        dfs_order(neighbour, node, nodes)
+function dfs_order(root::ClusterNode, ::Nothing, nodes::Vector{ClusterNode})
+    for (node, _) in preorder(root)
+        push!(nodes, node)
     end
     return nodes
 end
@@ -552,7 +586,15 @@ function sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, order=
 end
 export sample_junctiontree_naive
 
-function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampled::Dict{ClusterNode,Bool}, P::Vector{Float64}, messages::Dict{ClusterNode,Vector{FactorNode}}, X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode}, order::Symbol)
+# visits all nodes from start (pre-order) and sends messages to the children
+# (equivalent to recursion, since the messages *to* a node are not changed by visiting its subtree)
+function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampled::Dict{ClusterNode,Bool}, P::Vector{Float64}, messages::Dict{ClusterNode,Vector{FactorNode}}, X::Dict{Int,Int}, start::ClusterNode, ::Nothing, order::Symbol)
+    for (node, parent) in preorder(start)
+        _sample_junctiontree_naive_visit(res, sampled, P, messages, X, node, parent, order)
+    end
+end
+
+function _sample_junctiontree_naive_visit(res::JunctionTreeMessagePassingResult, sampled::Dict{ClusterNode,Bool}, P::Vector{Float64}, messages::Dict{ClusterNode,Vector{FactorNode}}, X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode}, order::Symbol)
 
     freshly_sample = isnothing(parent)
     if freshly_sample
@@ -696,7 +738,6 @@ function _sample_junctiontree_naive(res::JunctionTreeMessagePassingResult, sampl
                 
             end
         end
-        _sample_junctiontree_naive(res, sampled, P, messages, X, neighbour, node, order)
     end
 
 end
@@ -705,13 +746,17 @@ end
 function sample_junctiontree(res::JunctionTreeMessagePassingResult)
     @assert res.is_calibrated
     X = Dict{Int,Int}()
-    P = _sample_junctiontree(res, X, res.root, nothing)
+    # depth first visiting of nodes, each node is sampled conditioned on the values sampled before
+    P = 1.
+    for (node, _) in preorder(res.root)
+        P *= _sample_junctiontree(res, X, node)
+    end
     return X, P
 end
 export sample_junctiontree
 
-function _sample_junctiontree(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
-    # depth first visiting of nodes
+# samples the variables of node that were not sampled before, returns their probability
+function _sample_junctiontree(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, node::ClusterNode)
     # computes the normalisation Z by summing over the belief
     # no messages
     table_sel = [get(X, v.variable, Colon()) for v in node.belief.neighbours]
@@ -727,21 +772,15 @@ function _sample_junctiontree(res::JunctionTreeMessagePassingResult, X::Dict{Int
         j += 1
     end
 
-    P = ps[c]
-    for (i,neighbour) in enumerate(node.neighbours)
-        neighbour == parent && continue
-        P *= _sample_junctiontree(res, X, neighbour, node)
-    end
-    return P
+    return ps[c]
 end
 
-function _get_logjoint_density(X::Dict{Int,Int}, node::ClusterNode, parent::Union{Nothing,ClusterNode}=nothing)
-    table_sel = [X[v.variable] for v in node.belief.neighbours]
-    lp = node.potential.table[table_sel...]
-    # forward
-    for neighour in node.neighbours
-        neighour == parent && continue
-        lp += _get_logjoint_density(X, neighour, node)
+# sum of log potentials of all nodes at X
+function _get_logjoint_density(X::Dict{Int,Int}, root::ClusterNode, ::Nothing=nothing)
+    lp = 0.
+    for (node, _) in preorder(root)
+        table_sel = [X[v.variable] for v in node.belief.neighbours]
+        lp += node.potential.table[table_sel...]
     end
     return lp
 end
@@ -763,19 +802,33 @@ function sample_junctiontree_optimised_messaging(res::JunctionTreeMessagePassing
     visited = Dict{ClusterNode,Bool}()
     messages = Dict{ClusterNode,Vector{Float64}}(node => zeros(length(node.messages)) for node in res.junction_tree)
     Ps = Float64[res.evidence]
-    _sample_junctiontree_optimised_messaging(res, X, Ps, visited, messages, res.root, nothing)
+    # depth first visiting of nodes
+    for (node, _) in preorder(res.root)
+        _sample_junctiontree_optimised_messaging(res, X, Ps, visited, messages, node)
+    end
     return X, prod(Ps) / res.evidence
 end
 export sample_junctiontree_optimised_messaging
 
 
-function _pass_message_to_all_visited(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
+function _pass_message_to_all_visited(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, start::ClusterNode, ::Nothing)
     # this is an improved message passing scheme for sampling from the junction tree
     # it only sends messages from already sampled nodes (to either other sampled nodes or neighouring un-sampled nodes)
     # the messages are all scalar
-    if !get(visited, node, false)
-        return
+    # depth-first from start, does not continue at un-sampled nodes
+    stack = Tuple{ClusterNode,Union{Nothing,ClusterNode}}[(start, nothing)]
+    while !isempty(stack)
+        node, parent = pop!(stack)
+        get(visited, node, false) || continue
+        for neighbour in _pass_message_from_visited(X, visited, messages, node, parent)
+            push!(stack, (neighbour, node))
+        end
     end
+end
+
+# sends messages from node to all neighbours except parent, returns these neighbours
+function _pass_message_from_visited(X::Dict{Int,Int}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
+    children = ClusterNode[]
 
     # message passing with division
     t = node.potential.table[[X[v.variable] for v in node.potential.neighbours]...]
@@ -810,11 +863,13 @@ function _pass_message_to_all_visited(res::JunctionTreeMessagePassingResult, X::
         index_in_child = neighbour.neighbour_to_ix[node]
         messages[neighbour][index_in_child] = t - ts[i]
 
-        _pass_message_to_all_visited(res, X, visited, messages, neighbour, node)
+        push!(children, neighbour)
     end
+    return children
 end
 
-function _sample_junctiontree_optimised_messaging(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, Ps::Vector{Float64}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, node::ClusterNode, parent::Union{Nothing,ClusterNode})
+# samples the variables of node that were not sampled before and passes messages from all sampled nodes
+function _sample_junctiontree_optimised_messaging(res::JunctionTreeMessagePassingResult, X::Dict{Int,Int}, Ps::Vector{Float64}, visited::Dict{ClusterNode,Bool}, messages::Dict{ClusterNode,Vector{Float64}}, node::ClusterNode)
     # sampling from junction tree with optimised message passing by learning from the comments in _sample_junctiontree_naive
     visited[node] = true
     # println("Visit ", node)
@@ -849,9 +904,4 @@ function _sample_junctiontree_optimised_messaging(res::JunctionTreeMessagePassin
     end
 
     _pass_message_to_all_visited(res, X, visited, messages, node, nothing)
-
-    for (i,neighbour) in enumerate(node.neighbours)
-        neighbour == parent && continue
-        _sample_junctiontree_optimised_messaging(res, X, Ps, visited, messages, neighbour, node)
-    end
 end
