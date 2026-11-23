@@ -157,6 +157,12 @@ end
     @test length(E.rand(q)) == 1
 end
 
+@testset "model types are concrete" begin # J1
+    @test isconcretetype(typeof(normal_normal))
+    @test isconcretetype(fieldtype(typeof(normal_normal), :f))
+    @test to_universal(E.StaticModel(normal_normal.f)) isa E.UniversalModel{typeof(normal_normal.f)}
+end
+
 @testset "single-site samplers reuse current value without sampling" begin # J5
     for sampler in (E.LMH(Addr2Proposal()), E.RWMH(1., Addr2Var()))
         sampler.trace_current[:a] = 0.3

@@ -53,16 +53,17 @@ end
 abstract type Model end
 
 # no assumptions about program
-struct UniversalModel <: Model
-    f::Function
+# (F is the type of the generated function, so calls to the model are statically dispatched)
+struct UniversalModel{F<:Function} <: Model
+    f::F
 end
 function (model::UniversalModel)(args::Tuple, sampler::UniversalSampler, observations::Observations)
     return model.f(args..., sampler, observations)
 end
 
 # for all executions, the same (finite number of) random variables will be instantiated
-struct StaticModel <: Model
-    f::Function
+struct StaticModel{F<:Function} <: Model
+    f::F
 end
 function (model::StaticModel)(args::Tuple, sampler::StaticSampler, observations::Observations)
     return model.f(args..., sampler, observations)
