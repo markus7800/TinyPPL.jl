@@ -382,6 +382,36 @@ end
     end
 end
 
+@testset "conditional_smc" begin # T2
+    addresses_to_ix = E.get_address_to_ix(normal_normal_trailing, (), nn_obs)
+    X_ref = zeros(2)
+    X_ref[addresses_to_ix[:μ]], X_ref[addresses_to_ix[:z]] = 0.3, -0.7
+    @testset "reference particle is retained" begin
+        Random.seed!(0)
+        traces, lw, log_Z = conditional_smc(normal_normal_trailing, (), nn_obs, 10, X_ref)
+        @test traces[:, 1] == X_ref
+        @test traces.retvals[1] == -0.7 # return value of the reference particle
+        @test sum(exp, lw) ≈ 1 && isfinite(log_Z)
+    end
+    # conditional SMC leaves the posterior invariant: if X_ref ~ p(X|Y), then a particle picked by weight ~ p(X|Y)
+    @testset "posterior invariance ancestral_sampling=$ancestral_sampling" for ancestral_sampling in (false, true)
+        Random.seed!(0)
+        n = 2_000
+        μs, zs = zeros(n), zeros(n)
+        for j in 1:n
+            μ = rand(Normal(R.NN_POST_MEAN, R.NN_POST_SD))
+            X_ref[addresses_to_ix[:μ]], X_ref[addresses_to_ix[:z]] = μ, rand(Normal(μ, 1.))
+            traces, lw, _ = conditional_smc(normal_normal_trailing, (), nn_obs, 5, X_ref; ancestral_sampling=ancestral_sampling)
+            k = rand(Categorical(exp.(lw)))
+            μs[j], zs[j] = traces[:μ, k], traces[:z, k]
+        end
+        @test mean(μs) ≈ R.NN_POST_MEAN atol = 0.05
+        @test std(μs) ≈ R.NN_POST_SD atol = 0.05
+        @test mean(zs) ≈ R.NN_POST_MEAN atol = 0.08
+        @test std(zs) ≈ sqrt(R.NN_POST_SD^2 + 1) atol = 0.08
+    end
+end
+
 @testset "particle MCMC" begin
     @testset "particle_gibbs normal_normal" begin
         Random.seed!(0)

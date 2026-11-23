@@ -11,7 +11,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
   branching / geometric (universal: changing / unbounded traces), linear_regression (2-D, plated + unplated),
   plated_gamma_poisson (plate of non-identical constrained latents), lazy_branching (`lazy_ifs`),
   exact: chain4 (impossible value), two_coins / orphan_observation (disconnected), many_observations (underflow), burglary.
-- [ ] T2 Not yet covered by tests: conditional_smc. (~~B6, B10, B11, B13, B14, guides, J6, J7~~ covered or removed)
+- [x] T2 Not yet covered by tests: ~~conditional_smc~~. (~~B6, B10, B11, B13, B14, guides, J6, J7~~ covered or removed)
+  - fixed: `conditional_smc` tests (static and graph) on `normal_normal_trailing` (latent after the last observation): without ancestral sampling the reference particle is particle 1 (values and return value), weights are normalised; posterior invariance with and without ancestral sampling: X_ref drawn from the exact posterior, a particle picked by weight has the posterior mean / sd of both latents (with 5 particles; plain `smc` or a fixed wrong X_ref deviate by 0.2–0.4, tolerance 0.05–0.08).
 - [x] T3 `test/Project.toml` now only lists test deps (Test, Distributions, ForwardDiff, SpecialFunctions + stdlibs), so `Pkg.test()` works. The previous examples environment (Turing, PyPlot, Plots, …) was moved unchanged to `examples/Project.toml` + `examples/Manifest.toml` (run examples with `--project=examples`).
 
 ## C. Inference silently returns wrong results
