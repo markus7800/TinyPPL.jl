@@ -463,6 +463,10 @@ function compile_symbolic_pgm(
     annotations::Set{Symbol}
     )
 
+    # unique prefix for all generated functions (global functions in TinyPPL.Graph),
+    # such that compiling another model with the same name does not overwrite the functions of this model
+    f_prefix = gensym(name)
+
     n_variables = length(spgm.V)
     n_observes = length(spgm.Y)
     n_latents = n_variables - n_observes
@@ -497,7 +501,7 @@ function compile_symbolic_pgm(
         sym = ix_to_sym[i]
         addresses[i] = variable_to_address[sym]
 
-        f_name = Symbol("$(name)_dist_$i")
+        f_name = Symbol("$(f_prefix)_dist_$i")
         f = rmlines(:(
             function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_latents
                 $(symbolic_dists[i])
@@ -511,7 +515,7 @@ function compile_symbolic_pgm(
     end
 
     # wrap return expression in function
-    f_name = Symbol("$(name)_return")
+    f_name = Symbol("$(f_prefix)_return")
     new_E = subtitute_for_syms(var_to_expr, deepcopy(E), X)
     f = rmlines(:(
         function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_latents
@@ -535,11 +539,11 @@ function compile_symbolic_pgm(
         for edge in plated_edges
             println(edge)
         end
-        plate_lp_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp)
-        plate_lp_unconstrained_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp_unconstrained)
-        plate_sample_fs = get_plate_functions(name, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :sample)
-        plate_to_constrained = get_plate_functions(name, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_constrained)
-        plate_to_unconstrained = get_plate_functions(name, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_unconstrained)
+        plate_lp_fs = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp)
+        plate_lp_unconstrained_fs = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp_unconstrained)
+        plate_sample_fs = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :sample)
+        plate_to_constrained = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_constrained)
+        plate_to_unconstrained = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_unconstrained)
         plate_info = PlateInfo(plate_symbols, plates, plated_edges,
             plate_lp_fs,
             plate_lp_unconstrained_fs,
@@ -551,11 +555,11 @@ function compile_symbolic_pgm(
         plate_info = nothing
     end
 
-    sample! = get_sample(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X)
-    logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=false)
-    unconstrained_logpdf = get_logpdf(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=true)
-    transform_to_constrained! = get_transform(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:constrained)
-    transform_to_unconstrained! = get_transform(name, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:unconstrained)
+    sample! = get_sample(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X)
+    logpdf = get_logpdf(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=false)
+    unconstrained_logpdf = get_logpdf(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=true)
+    transform_to_constrained! = get_transform(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:constrained)
+    transform_to_unconstrained! = get_transform(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:unconstrained)
 
     if !(:uninvoked in annotations)
         # force compilation

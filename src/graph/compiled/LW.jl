@@ -47,7 +47,7 @@ function compile_likelihood_weighting(pgm::PGM)
 
     push!(block_args, :($return_value, $lp))
 
-    f_name = Symbol("$(pgm.name)_lw")
+    f_name = gensym("$(pgm.name)_lw") # unique name, see compile_symbolic_pgm
     f = rmlines(:(
         function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
             $(Expr(:block, block_args...))

@@ -162,6 +162,8 @@ function compile_single_site(pgm::PGM, kernel::Function)
     end
 
     # compile one update function for each variable
+    # unique prefix, such that compiling kernels again (e.g. compile_rwmh after compile_lmh) does not overwrite these functions
+    f_prefix = gensym("$(pgm.name)_single_site")
     lmh_functions = Function[]
     value_current = gensym("value_current")
     for node in 1:pgm.n_latents
@@ -200,7 +202,7 @@ function compile_single_site(pgm::PGM, kernel::Function)
             end)
         )  
 
-        f_name = Symbol("$(pgm.name)_lmh_$node")
+        f_name = Symbol("$(f_prefix)_$node")
         f = rmlines(:(
             function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
                 $(Expr(:block, block_args...))

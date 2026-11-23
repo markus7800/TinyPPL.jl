@@ -311,6 +311,32 @@ end
         end
     end
     @test m1.logpdf([0.5], Float64[]) ≈ lp
+    @test m1.distributions[1]([0.5]) == Normal(0., 1.)
+    X = [0.]; m1.sample!(X)
+    @test abs(X[1]) < 10 # from Normal(0., 1.), not Normal(100., 1.)
+
+    # plated: the generated logpdf calls the plate functions by name
+    p1 = @pgm plated graph_test_redefine_plated begin
+        let xs = [{:x => i} ~ Normal(0., 1.) for i in 1:3]
+            xs
+        end
+    end
+    plp = p1.logpdf([0.5, 0.5, 0.5], Float64[])
+    p2 = @pgm plated graph_test_redefine_plated begin
+        let xs = [{:x => i} ~ Normal(100., 1.) for i in 1:3]
+            xs
+        end
+    end
+    @test p1.logpdf([0.5, 0.5, 0.5], Float64[]) ≈ plp ≈ 3 * logpdf(Normal(0., 1.), 0.5)
+    @test p2.logpdf([0.5, 0.5, 0.5], Float64[]) ≈ 3 * logpdf(Normal(100., 1.), 0.5)
+
+    # compiled kernels of the same model
+    lmh_kernels = compile_lmh(normal_normal)
+    rwmh_kernels = compile_rwmh(normal_normal)
+    @test all(lmh_kernels .!== rwmh_kernels)
+    lw1 = compile_likelihood_weighting(m1)
+    lw2 = compile_likelihood_weighting(m2)
+    @test lw1 !== lw2
 end
 
 # ---------------------------------------------------------- likelihood weighting
