@@ -117,6 +117,46 @@ const lr_obs = Observations((:y => i) => R.LR_YS[i] for i in eachindex(R.LR_YS))
     @test retval ≈ s
 end
 
+# @ppl hygiene (J4): only the macro is imported, the module defines its own `sample`, `get` and `param`,
+# and the model uses the names of variables that the macro introduces in addresses.
+module PPLHygiene
+    import TinyPPL.Evaluation: @ppl, @subppl
+    import TinyPPL.Distributions: Normal
+    sample(xs) = error("user sample")
+    get(xs) = error("user get")
+    param(xs) = error("user param")
+
+    @ppl function sub(a, b)
+        {:sub} ~ Normal(a + b, 1.)
+    end
+    @ppl function model()
+        distribution, obs, value, addr = 1, 2, 3, 4
+        x1 = {:x => distribution} ~ Normal(0., 1.)
+        x2 = {:x => obs} ~ Normal(0., 1.)
+        x3 = {:x => value} ~ Normal(0., 1.)
+        x4 = {:x => addr} ~ Normal(0., 1.)
+        s = @subppl sub(x1, x2)
+        return (x1, x2, x3, x4, s)
+    end
+    @ppl static function guide()
+        m = param("m")
+        x ~ Normal(m[1], 1.)
+    end
+end
+
+@testset "@ppl hygiene" begin # J4
+    Random.seed!(0)
+    X = sample_trace(PPLHygiene.model, ())
+    @test Set(keys(X)) == Set(Any[:sub, :x => 1, :x => 2, :x => 3, :x => 4])
+    # observations are looked up with the user's address
+    obs = Observations((:x => 2) => 0.5, (:x => 3) => -0.5)
+    X, retval = E.sample_trace(PPLHygiene.model, (), obs), PPLHygiene.model((), Forward(), obs)
+    @test !haskey(X, :x => 2) && !haskey(X, :x => 3)
+    @test retval[2:3] == (0.5, -0.5)
+    q = E.make_guide(PPLHygiene.guide, (), Dict{Any,Int}(:x => 1))
+    @test length(E.rand(q)) == 1
+end
+
 @testset "observations as plain Dict" begin # A2
     Random.seed!(0)
     @test likelihood_weighting(normal_normal, (), Dict((:y => i) => R.NN_YS[i] for i in 1:3), 10) isa Tuple

@@ -5,24 +5,31 @@ import TinyPPL: rmlines, isbraced
 
 macro subppl(expr) return expr end # just a place holder
 
+# The model body is escaped (it is user code), and so is the code generated here.
+# Hygiene: local variables get fresh names (gensym), such that they do not capture user variables
+# (e.g. in `{:x => obs} ~ d`) and functions are referenced with GlobalRef, such that they do not have
+# to be imported in (or are not shadowed by) the module where @ppl is used.
+const SAMPLE = GlobalRef(@__MODULE__, :sample)
+const PARAM = GlobalRef(@__MODULE__, :param)
+const GET = GlobalRef(Base, :get)
+
 function walk_ppl_sytnax(expr, sampler, observations)
     if MacroTools.@capture(expr, {symbol_} ~ dist_)
+        distribution, obs = gensym(:distribution), gensym(:obs)
+        # the address expression is not bound to a variable, since Libtask (static SMC) cannot handle
+        # IR statements that are just a constant (e.g. `%1 = :x` for `let addr = :x`)
         return quote
-            let distribution = $dist,
-                obs = get($observations, $symbol, nothing),
-                value = sample($sampler, $symbol, distribution, obs)
-                value
+            let $distribution = $dist, $obs = $GET($observations, $symbol, nothing)
+                $SAMPLE($sampler, $symbol, $distribution, $obs)
             end
         end
     elseif MacroTools.@capture(expr, param(symbol_, args__))
         return quote
-            param($sampler, $symbol, $(args...))
+            $PARAM($sampler, $symbol, $(args...))
         end
     elseif MacroTools.@capture(expr, @subppl func_(args__))
         return quote
-            let value = $(func).f(($(args...)), $sampler, $observations)
-                value
-            end
+            $(func).f($(args...), $sampler, $observations)
         end
     else
         return expr
