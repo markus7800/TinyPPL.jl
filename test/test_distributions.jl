@@ -38,8 +38,17 @@ end
                 @test TD.log_abs_det_jacobian(T, x) ≈ log(abs(ForwardDiff.derivative(T, x)))
                 @test TD.log_abs_det_jacobian(T_inv, y) ≈ log(abs(ForwardDiff.derivative(T_inv, y)))
             end
+            # A5: domain and image (also of compositions with decreasing transforms)
+            @test TD.domain(T) == interval
+            @test TD.domain(T_inv) == RealInterval(-Inf, Inf)
+            @test TD.image(T_inv, RealInterval(-Inf, Inf)) == interval
+            if interval != RealInterval(2.0, 5.0) # the affine map rounds 5 to 1 - eps
+                @test TD.image(T, interval) == RealInterval(-Inf, Inf)
+            end
         end
     end
+    # support of a transformed distribution with decreasing transform x ↦ log(1 - x)
+    @test Distributions.support(TD.to_unconstrained(Distributions.truncated(Normal(0.0, 1.0), -Inf, 1.0))) == RealInterval(-Inf, Inf)
 
     @testset "sigmoid jacobian does not overflow" begin # J5
         T = TD.SigmoidTransform()

@@ -18,12 +18,15 @@ end
 function Base.inv(t::Transform)::Transform
     error("Not implemented.")
 end
-function in_support(t::Transform, x::Real)::Bool
+# x is in the domain of t
+function in_domain(t::Transform, x::Real)::Bool
     error("Not implemented.")
 end
-function support(t::Transform)::RealInterval
+# domain of t as interval
+function domain(t::Transform)::RealInterval
     error("Not implemented.")
 end
+# image of interval `domain` (⊆ domain(t)) under t, all transforms are monotonic
 function image(t::Transform, domain::RealInterval)::RealInterval
     error("Not implemented.")
 end
@@ -151,8 +154,15 @@ function Base.inv(t::ComposeTransform,)::Transform
     return inv(t.t1) ∘ inv(t.t2)
 end
 in_domain(t::ComposeTransform, x::Real) = in_domain(t.t1, x) && in_domain(t.t2, t.t1(x))
-domain(t::ComposeTransform) = domain(t.t1)
-image(t::ComposeTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(domain.ub))
+intersect_intervals(a::RealInterval, b::RealInterval) = RealInterval(max(a.lb, b.lb), min(a.ub, b.ub))
+# x ∈ domain(t1) with t1(x) ∈ domain(t2)
+function domain(t::ComposeTransform)
+    range_t1 = image(t.t1, domain(t.t1))
+    # preimage of domain(t2) under t1 (t1 is a bijection from domain(t1) to range_t1)
+    return image(inv(t.t1), intersect_intervals(domain(t.t2), range_t1))
+end
+# t1 or t2 may be decreasing (e.g. AffineTransform with k < 0)
+image(t::ComposeTransform, domain::RealInterval) = image(t.t2, image(t.t1, domain))
 
 """
 if X ~ base then for Y=TransformedDistribution(base,T) Y ~ T(X)

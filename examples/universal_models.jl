@@ -27,7 +27,7 @@ args = (100,)
 observations = Observations(:distance => 1.1);
 
 Random.seed!(0)
-lw_result, lps = likelihood_weighting(pedestrian, args, observations, 5_000_000, Evaluation.retval_completion);
+lw_result, lps = likelihood_weighting(pedestrian, args, observations, 5_000_000; completion=Evaluation.retval_completion);
 W = exp.(lps);
 posterior_mean = lw_result'W
 
@@ -69,7 +69,7 @@ args = ()
 observations = Observations(:y => 1.)
 
 Random.seed!(0)
-lw_result, lps = likelihood_weighting(unif, args, observations, 1_000_000, Evaluation.retval_completion);
+lw_result, lps = likelihood_weighting(unif, args, observations, 1_000_000; completion=Evaluation.retval_completion);
 W = exp.(lps);
 
 histogram(lw_result, weights=W, normalize=true, legend=false)

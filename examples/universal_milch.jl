@@ -29,7 +29,7 @@ args = (10,)
 observations = Observations(:n_black => 5);
 
 # Random.seed!(0); @time traces, lps = likelihood_weighting(urn, args, observations, 5_000_000);
-Random.seed!(0); @time retvals, lps = likelihood_weighting(urn, args, observations, 5_000_000, Evaluation.retval_completion);
+Random.seed!(0); @time retvals, lps = likelihood_weighting(urn, args, observations, 5_000_000; completion=Evaluation.retval_completion);
 Ns = retvals;
 W = exp.(lps);
 [sum(W[Ns .== n]) for n in 1:15]

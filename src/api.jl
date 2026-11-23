@@ -15,6 +15,11 @@ end
 function retvals(::AbstractTraces)
     error("Not implemented!")
 end
+# traces with indices ixs
+function subset(::AbstractTraces, ixs)
+    error("Not implemented!")
+end
+# retvals and subset are extended and exported by the backends (Evaluation, Graph), so they are the same function
 
 """
 Wrapper for the result of variational inference methods like ADVI or BBVI.

@@ -8,6 +8,7 @@ import TinyPPL.Graph as G
 import Distributions: pdf
 import Tracker, ForwardDiff, ReverseDiff
 import ..References as R
+import TinyPPL
 using ..TestUtils
 
 # ---------------------------------------------------------------------- models
@@ -514,7 +515,7 @@ end
     end
     @testset "compile_lmh with proposal" begin # B5
         Random.seed!(0)
-        kernels = compile_lmh(normal_normal; addr2Proposal=Addr2Proposal(:μ => ContinuousRandomWalkProposal(0.5)))
+        kernels = compile_lmh(normal_normal; addr2proposal=Addr2Proposal(:μ => ContinuousRandomWalkProposal(0.5)))
         traces = compiled_single_site(normal_normal, kernels, 30_000)
         @test mean(burn(traces[:μ])) ≈ R.NN_POST_MEAN atol = 0.05
     end
@@ -695,6 +696,19 @@ end
         traces = particle_IMH(normal_normal, 10, 2_000)
         @test mean(burn(traces[:μ])) ≈ R.NN_POST_MEAN atol = 0.05
     end
+end
+
+
+@testset "traces API" begin
+    # A7: integer index is an address, not a node index
+    traces = G.GraphTraces(Dict{Any,Int}(2 => 1, :x => 2), [10. 11.; 20. 21.], Any[nothing, nothing])
+    @test traces[2] == [10., 11.]
+    @test traces[:x, 2] == 21.
+    @test_throws AssertionError traces[1]
+    # A8: one retvals / subset function for all backends
+    @test G.retvals === TinyPPL.Evaluation.retvals === TinyPPL.retvals
+    @test G.subset === TinyPPL.Evaluation.subset
+    @test length(subset(traces, [2])) == 1
 end
 
 end # module GraphTests

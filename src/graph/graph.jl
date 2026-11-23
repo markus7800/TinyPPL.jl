@@ -1,6 +1,6 @@
 module Graph
     import ProgressLogging: @progress
-    import TinyPPL: Address, AbstractTraces, VIResult, normalise, normalise_with_log_evidence, logsumexp
+    import TinyPPL: Address, AbstractTraces, VIResult, normalise, normalise_with_log_evidence, logsumexp, retvals, subset
     export Address
 
     # model functions are generated at runtime as RuntimeGeneratedFunctions, see notes/graph_codegen.md
@@ -28,16 +28,12 @@ module Graph
     end
     
     retvals(traces::GraphTraces) = traces.retvals
+    export retvals
     
     Base.length(traces::GraphTraces) = size(traces.data,2)
 
-    function Base.getindex(traces::GraphTraces, node::Int)
-        return traces.data[node, :]
-    end
-    
-    function Base.getindex(traces::GraphTraces, node::Int, i::Int)
-        return traces.data[node, i]
-    end
+    # traces[addr] and traces[addr, i] index by address (as for the other backends), also for integer addresses.
+    # Values of node n are traces.data[n, :].
     
     function subset(traces::GraphTraces, ixs)
         return GraphTraces(traces.addresses_to_ix, traces.data[:,ixs], traces.retvals[ixs])

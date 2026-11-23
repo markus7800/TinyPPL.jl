@@ -13,4 +13,4 @@ end
 observations = Observations(:Z => 1.);
 
 Random.seed!(0); @time traces, lps = likelihood_weighting(normal, (100,), observations, 1_000_000);
-Random.seed!(0); @time traces, lps = likelihood_weighting(normal, (100,), observations, 1_000_000, Address[:X]);
+Random.seed!(0); @time traces, lps = likelihood_weighting(normal, (100,), observations, 1_000_000; addresses=Address[:X]);

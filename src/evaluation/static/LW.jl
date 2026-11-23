@@ -29,8 +29,14 @@ Likelihood weighting is a special case of importance sampling where the referenc
 the program prior p(X).
 See evaluation/universal/LW.jl
 Returns traces, normalised log weights and the log evidence estimate.
+
+With `addresses`, the traces only store the values of these addresses (see `likelihood_weighting_subset`).
 """
-function likelihood_weighting(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int)
+function likelihood_weighting(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int;
+    addresses::Union{Nothing,Addresses}=nothing)
+    if !isnothing(addresses)
+        return likelihood_weighting_subset(model, args, observations, n_samples, addresses)
+    end
     addresses_to_ix = get_address_to_ix(model, args, observations)
     traces = StaticTraces(addresses_to_ix, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
@@ -74,7 +80,7 @@ end
 """
 Same as likelihood_weighting but only stores values of RVs with address in `trace`.
 """
-function likelihood_weighting(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, trace::Addresses)
+function likelihood_weighting_subset(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, trace::Addresses)
     addresses = get_addresses(model, args, observations)
     addresses_to_ix = get_address_to_ix(trace, addresses)
     K = length(trace)

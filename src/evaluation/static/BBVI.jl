@@ -33,7 +33,8 @@ VariationalDistributions are automatically determined with MeanFieldCollector, w
 This method *uses* AD to compute gradient of REINFORCE approximation.
 """
 function bbvi(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64; ad_backend::Symbol=:tracker)
-    logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    logjoint = make_unconstrained_logjoint(model, args, observations, addresses_to_ix)
     q = get_mixed_meanfield(model, args, observations, addresses_to_ix)
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO(), ad_backend=ad_backend)
     _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)

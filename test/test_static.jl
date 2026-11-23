@@ -82,13 +82,14 @@ lr_means(traces) = [mean(traces[:slope]), mean(traces[:intercept])]
 # -------------------------------------------------------------- deterministic
 
 @testset "logjoint" begin
-    lj, addresses_to_ix = E.make_logjoint(gamma_scale, (), gs_obs)
+    lj = E.make_logjoint(gamma_scale, (), gs_obs)
+    addresses_to_ix = E.get_address_to_ix(gamma_scale, (), gs_obs)
     @test addresses_to_ix == Dict(:s => 1)
     s = 1.7
     ref = logpdf(Gamma(2., 1.), s) + sum(logpdf(Normal(0., s), y) for y in R.GS_YS)
     @test lj([s]) ≈ ref
 
-    ulj, _ = E.make_unconstrained_logjoint(gamma_scale, (), gs_obs)
+    ulj = E.make_unconstrained_logjoint(gamma_scale, (), gs_obs)
     @test ulj([log(s)]) ≈ ref + log(s)
 
     X = [s]
@@ -108,8 +109,8 @@ end
     @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
     _, _, log_Z = smc(normal_normal, (), obs, 1_000)
     @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.05
-    lj, _ = E.make_logjoint(normal_normal, (), obs)
-    lj_ref, _ = E.make_logjoint(normal_normal, (), nn_obs)
+    lj = E.make_logjoint(normal_normal, (), obs)
+    lj_ref = E.make_logjoint(normal_normal, (), nn_obs)
     @test lj([0.5]) ≈ lj_ref([0.5])
     @test hmc(normal_normal, (), obs, 10, 5, 0.1) isa StaticTraces
 end
@@ -151,7 +152,7 @@ end
     end
     @testset "linear_regression with address subset" begin
         Random.seed!(0)
-        traces, lw, log_Z = likelihood_weighting(linear_regression, lr_args, lr_obs, 200_000, Address[:slope])
+        traces, lw, log_Z = likelihood_weighting(linear_regression, lr_args, lr_obs, 200_000; addresses=Address[:slope])
         @test size(traces.data, 1) == 1
         @test wmean(traces[:slope], lw) ≈ R.LR_POST_MEAN[1] atol = 0.1
         @test log_Z ≈ R.LR_LOG_EVIDENCE atol = 0.2

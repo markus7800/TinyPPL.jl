@@ -34,17 +34,18 @@ end
 
 """
 Transforms a static model to a function which takes as input an static trace `X`
-and returns the log density log p(X,Y).
+and returns the log density log p(X,Y) (as for the universal and graph backends).
 Closes over args and observations Y.
+The values of `X` are ordered according to `addresses_to_ix` (default `get_address_to_ix(model, args, observations)`).
 """
-function make_logjoint(model::StaticModel, args::Tuple, observations::AbstractObservations)
-    addresses_to_ix = get_address_to_ix(model, args, observations)
+function make_logjoint(model::StaticModel, args::Tuple, observations::AbstractObservations,
+    addresses_to_ix::Addr2Ix=get_address_to_ix(model, args, observations))
     function logjoint(X::AbstractStaticTrace)
         sampler = StaticLogJointSampler(addresses_to_ix, X)
         model(args, sampler, observations)
         return sampler.W
     end
-    return logjoint, addresses_to_ix
+    return logjoint
 end
 
 
@@ -96,12 +97,13 @@ function sample(sampler::StaticUnconstrainedLogJointSampler, addr::Address, dist
 end
 
 """
-Transforms a universal model to a function which takes as input an universal trace `X`
+Transforms a static model to a function which takes as input an unconstrained static trace `X`
 and returns the log density log p(T(X),Y) + log abs det ∇T(X).
 Closes over args and observations Y.
+The values of `X` are ordered according to `addresses_to_ix` (default `get_address_to_ix(model, args, observations)`).
 """
-function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observations::AbstractObservations)
-    addresses_to_ix = get_address_to_ix(model, args, observations)
+function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observations::AbstractObservations,
+    addresses_to_ix::Addr2Ix=get_address_to_ix(model, args, observations))
 
     function logjoint(X::AbstractStaticTrace)
         sampler = StaticUnconstrainedLogJointSampler(addresses_to_ix, X)
@@ -109,7 +111,7 @@ function make_unconstrained_logjoint(model::StaticModel, args::Tuple, observatio
         return sampler.W
     end
 
-    return logjoint, addresses_to_ix
+    return logjoint
 end
 
 

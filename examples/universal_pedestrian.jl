@@ -24,7 +24,7 @@ args = (Inf,)
 observations = Observations(:distance => 1.1);
 
 
-Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 50_000_000, Evaluation.retval_completion);
+Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 50_000_000; completion=Evaluation.retval_completion);
 W = exp.(lps .- logsumexp(lps));
 
 density(lw_retvals, weights=W, legend=false)

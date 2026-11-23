@@ -58,7 +58,11 @@ ELBO gradient is approximated with the REINFORCE method.
 No automatic differentiation is used, instead we use logpdf_param_grads method of VariationalDistribution.
 Thus, also discrete latent variables are allowed.
 """
-function bbvi(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64, variational_dists = Dict{Address,VariationalDistribution}())
+function bbvi(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64;
+    variational_dists::AbstractDict=Dict{Address,VariationalDistribution}())
+
+    # the given variational distributions are only used for initialisation (not mutated)
+    variational_dists = Dict{Address,VariationalDistribution}(variational_dists)
 
     eps = 1e-8
     acc = Dict{Any, AbstractVector{Float64}}()

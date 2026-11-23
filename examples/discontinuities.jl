@@ -36,7 +36,7 @@ histogram(traces[:x], legend=false, normalize=true)
     end
 end
 
-logjoint, addresse_to_ixs = Evaluation.make_logjoint(static_gap_model, args, observations)
+logjoint = Evaluation.make_logjoint(static_gap_model, args, observations)
 
 Random.seed!(0); traces = Evaluation.hmc(static_gap_model, args, observations, 1_000_000, 1, 0.01, ad_backend=:forwarddiff, unconstrained=true)
 histogram(traces[:x], legend=false, normalize=true)
@@ -59,7 +59,7 @@ end
 args = ()
 observations = Observations(:y => 0.)
 
-logjoint, addresse_to_ixs = Evaluation.make_logjoint(branching, args, observations)
+logjoint = Evaluation.make_logjoint(branching, args, observations)
 
 xs = -15:0.1:15
 ps = [exp(logjoint([x])) for x in xs]

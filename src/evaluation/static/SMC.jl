@@ -171,7 +171,8 @@ end
 
 
 function smc(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
-    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    logjoint = make_logjoint(model, args, observations, addresses_to_ix)
 
     return _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, nothing;
                        addr2proposal=addr2proposal, check_addresses=check_addresses)
@@ -181,7 +182,8 @@ export smc
 
 function conditional_smc(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int,
     X::AbstractStaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
-    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    logjoint = make_logjoint(model, args, observations, addresses_to_ix)
 
     return _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, X;
                        ancestral_sampling=ancestral_sampling, addr2proposal=addr2proposal, check_addresses=check_addresses)
@@ -194,7 +196,9 @@ export conditional_smc
 function particle_gibbs(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int, n_samples::Int;
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
     
-    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    
+    logjoint = make_logjoint(model, args, observations, addresses_to_ix)
 
     traces = StaticTraces(addresses_to_ix, n_samples)
 
@@ -229,7 +233,9 @@ export particle_gibbs
 function particle_IMH(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int, n_samples::Int;
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
 
-    logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+
+    logjoint = make_logjoint(model, args, observations, addresses_to_ix)
 
     traces = StaticTraces(addresses_to_ix, n_samples)
 

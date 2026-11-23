@@ -23,7 +23,7 @@ args = (100,)
 observations = Observations(:distance => 1.1);
 
 # reference posterior of start_position
-Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 1_000_000, Evaluation.retval_completion);
+Random.seed!(0); lw_retvals, lps = likelihood_weighting(pedestrian, args, observations, 1_000_000; completion=Evaluation.retval_completion);
 W = exp.(lps .- maximum(lps)); W ./= sum(W);
 
 # The initial state matters a lot for this model:

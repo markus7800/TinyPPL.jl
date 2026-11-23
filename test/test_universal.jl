@@ -5,6 +5,7 @@ using Test, Random, Statistics
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import TinyPPL.Evaluation as E
+import TinyPPL
 import ..References as R
 using ..TestUtils
 
@@ -235,17 +236,17 @@ end
     end
     @testset "retval completion" begin
         Random.seed!(0)
-        rets, lw, log_Z = likelihood_weighting(normal_normal, (), nn_obs, N, E.retval_completion)
+        rets, lw, log_Z = likelihood_weighting(normal_normal, (), nn_obs, N; completion=E.retval_completion)
         @test wmean(rets, lw) ≈ R.NN_POST_MEAN atol = 0.03
         @test sum(exp, lw) ≈ 1
         @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
     end
     @testset "trace completion returns distinct traces" begin # B15
         Random.seed!(0)
-        ts, _ = likelihood_weighting(normal_normal, (), nn_obs, 3, (trace, retval) -> trace)
+        ts, _ = likelihood_weighting(normal_normal, (), nn_obs, 3; completion=(trace, retval) -> trace)
         @test ts[1][:μ] != ts[2][:μ]
         # each kept trace belongs to its own sample (normal_normal returns μ)
-        res, _ = likelihood_weighting(normal_normal, (), nn_obs, 5, (trace, retval) -> (trace, retval))
+        res, _ = likelihood_weighting(normal_normal, (), nn_obs, 5; completion=(trace, retval) -> (trace, retval))
         @test all(trace[:μ] == retval for (trace, retval) in res)
         @test length(unique(objectid(trace) for (trace, _) in res)) == 5
     end
@@ -434,6 +435,13 @@ end
 end
 
 @testset "bbvi" begin
+    @testset "given variational distributions are not mutated" begin # A6
+        Random.seed!(0)
+        q = TinyPPL.Distributions.init_variational_distribution(Normal(0., 1.))
+        variational_dists = Dict{Any,TinyPPL.Distributions.VariationalDistribution}(:μ => q)
+        res = bbvi(normal_normal, (), nn_obs, 10, 10, 0.05; variational_dists=variational_dists)
+        @test variational_dists[:μ] === q
+    end
     @testset "normal_normal" begin
         Random.seed!(0)
         res = bbvi(normal_normal, (), nn_obs, 3_000, 10, 0.05)

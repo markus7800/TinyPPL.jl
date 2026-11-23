@@ -27,7 +27,8 @@ See logjoint/ADVI.jl
 import TinyPPL.Logjoint: advi_meanfield_logjoint
 
 function advi_meanfield(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64)
-    logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    logjoint = make_unconstrained_logjoint(model, args, observations, addresses_to_ix)
     K = length(addresses_to_ix)
     result = advi_meanfield_logjoint(logjoint, K, n_samples, L, learning_rate)
     _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
@@ -37,7 +38,8 @@ end
 import TinyPPL.Logjoint: advi_fullrank_logjoint
 
 function advi_fullrank(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64)
-    logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+    addresses_to_ix = get_address_to_ix(model, args, observations)
+    logjoint = make_unconstrained_logjoint(model, args, observations, addresses_to_ix)
     K = length(addresses_to_ix)
     result = advi_fullrank_logjoint(logjoint, K, n_samples, L, learning_rate)
     _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
@@ -57,11 +59,13 @@ function advi(model::StaticModel, args::Tuple, observations::AbstractObservation
     unconstrained::Bool=false, ad_backend::Symbol=:tracker)
 
     if unconstrained
-        logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+        addresses_to_ix = get_address_to_ix(model, args, observations)
+        logjoint = make_unconstrained_logjoint(model, args, observations, addresses_to_ix)
         _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
         _viresult_map! = _transform_to_constrained!
     else
-        logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+        addresses_to_ix = get_address_to_ix(model, args, observations)
+        logjoint = make_logjoint(model, args, observations, addresses_to_ix)
         _no_transform(X::AbstractStaticTrace) = X, model(args, StaticForward(addresses_to_ix, X) , observations)
         _viresult_map! = _no_transform
     end
@@ -83,11 +87,13 @@ function advi(model::StaticModel, args::Tuple, observations::AbstractObservation
     unconstrained::Bool=false, ad_backend::Symbol=:tracker)
 
     if unconstrained
-        logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+        addresses_to_ix = get_address_to_ix(model, args, observations)
+        logjoint = make_unconstrained_logjoint(model, args, observations, addresses_to_ix)
         _transform_to_constrained!(X::AbstractStaticTrace) = transform_to_constrained!(X, model, args, observations, addresses_to_ix)
         _viresult_map! = _transform_to_constrained!
     else
-        logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+        addresses_to_ix = get_address_to_ix(model, args, observations)
+        logjoint = make_logjoint(model, args, observations, addresses_to_ix)
         _no_transform(X::AbstractStaticTrace) = X, model(args, StaticForward(addresses_to_ix, X), observations)
         _viresult_map! = _no_transform
     end

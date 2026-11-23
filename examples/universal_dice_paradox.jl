@@ -56,14 +56,14 @@ args = (N,)
 
 
 Random.seed!(0)
-retvals, lp = likelihood_weighting(six_in_a_row, args, no_odds, 10_000_000, Evaluation.retval_completion);
+retvals, lp = likelihood_weighting(six_in_a_row, args, no_odds, 10_000_000; completion=Evaluation.retval_completion);
 W = exp.(lp);
 # expected number of dice rolls until we see `N` 6s in a row  GIVEN that no odds show up
 retvals'W
 
 
 Random.seed!(0)
-retvals, lp = likelihood_weighting(nth_six, args, no_odds, 10_000_000, Evaluation.retval_completion);
+retvals, lp = likelihood_weighting(nth_six, args, no_odds, 10_000_000; completion=Evaluation.retval_completion);
 W = exp.(lp);
 # expected number of dice rolls until we see `N` 6s GIVEN that no odds show up
 retvals'W

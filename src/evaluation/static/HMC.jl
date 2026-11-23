@@ -11,9 +11,11 @@ function hmc(model::StaticModel, args::Tuple, observations::AbstractObservations
     ad_backend::Symbol=:tracker, x_initial::Union{Nothing,Vector{Float64}}=nothing, unconstrained::Bool=false)
 
     if unconstrained
-        logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
+        addresses_to_ix = get_address_to_ix(model, args, observations)
+        logjoint = make_unconstrained_logjoint(model, args, observations, addresses_to_ix)
     else
-        logjoint, addresses_to_ix = make_logjoint(model, args, observations)
+        addresses_to_ix = get_address_to_ix(model, args, observations)
+        logjoint = make_logjoint(model, args, observations, addresses_to_ix)
     end
     K = length(addresses_to_ix)
 

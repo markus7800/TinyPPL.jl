@@ -51,13 +51,13 @@ end
 # sentinel for addresses without user-specified proposal (Addr2Proposal lookup needs default of type ProposalDistribution)
 struct NoProposal <: ProposalDistribution end
 
-function compile_lmh(pgm::PGM; addr2Proposal::Addr2Proposal=Addr2Proposal())
+function compile_lmh(pgm::PGM; addr2proposal::Addr2Proposal=Addr2Proposal())
     function lmh_kernel(block_args, symbolic_dists, node, X, log_α)
         d_sym = gensym("dist_$node")
         push!(block_args, :($d_sym = $(symbolic_dists[node])))
 
         # most specific match as in interpreted lmh
-        q = get(addr2Proposal, pgm.addresses[node], NoProposal())
+        q = get(addr2proposal, pgm.addresses[node], NoProposal())
         if !(q isa NoProposal)
             # q is a ProposalDistribution object, which is interpolated into the compiled function.
             # proposal_dist(q, x) may depend on the current value (e.g. random walk).
