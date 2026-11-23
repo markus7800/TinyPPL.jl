@@ -44,6 +44,19 @@ end
     @testset "sigmoid jacobian does not overflow" begin # J5
         T = TD.SigmoidTransform()
         @test isfinite(TD.log_abs_det_jacobian(T, 800.0))
+        @test TD.log_abs_det_jacobian(T, 800.0) ≈ -800.0
+        @test TD.log_abs_det_jacobian(T, -800.0) ≈ -800.0
+        for x in (-3.0, -0.5, 0.0, 0.7, 4.0)
+            @test TD.log_abs_det_jacobian(T, x) ≈ log(ForwardDiff.derivative(T, x))
+            # derivative at 0 is 0 (symmetric), although written with abs
+            @test ForwardDiff.derivative(y -> TD.log_abs_det_jacobian(T, y), x) ≈ (1 - 2T(x))
+        end
+        # inverse: log |d/dy σ⁻¹(y)| = -log σ'(σ⁻¹(y)), also close to 1
+        T_inv = TD.InverseSigmoidTransform()
+        for y in (1e-8, 0.2, 0.5, 0.9, 1 - 1e-12)
+            @test TD.log_abs_det_jacobian(T_inv, y) ≈ -TD.log_abs_det_jacobian(T, T_inv(y))
+        end
+        @test TD.log_abs_det_jacobian(T_inv, 1 - 1e-12) ≈ -log(1e-12) rtol = 1e-6
     end
 end
 
@@ -117,6 +130,11 @@ end
     q = TD.FullRankGaussian([0.5, -1.0, 2.0], vec(L_neg))
     @test logpdf(q, x) ≈ logpdf(MvNormal([0.5, -1.0, 2.0], L_neg * L_neg'), x)
     @test Distributions.entropy(q) ≈ Distributions.entropy(MvNormal([0.5, -1.0, 2.0], L_neg * L_neg'))
+
+    # J5: product of the diagonal of L underflows in high dimensions
+    K_high = 400
+    q = TD.FullRankGaussian(zeros(K_high), vec(Matrix(0.1 * TD.LinearAlgebra.I(K_high))))
+    @test Distributions.entropy(q) ≈ K_high/2 * (log(2π) + 1) + K_high * log(0.1)
 
     @testset "FullRankGaussian gradients with negative diagonal" begin # B16
         q0 = TD.FullRankGaussian(3)

@@ -157,6 +157,18 @@ end
     @test length(E.rand(q)) == 1
 end
 
+@testset "single-site samplers reuse current value without sampling" begin # J5
+    for sampler in (E.LMH(Addr2Proposal()), E.RWMH(1., Addr2Var()))
+        sampler.trace_current[:a] = 0.3
+        sampler.resample_addr = :b
+        Random.seed!(1)
+        @test E.sample(sampler, :a, Normal(0., 1.), nothing) == 0.3
+        r = rand()
+        Random.seed!(1)
+        @test r == rand() # no random number was drawn
+    end
+end
+
 @testset "observations as plain Dict" begin # A2
     Random.seed!(0)
     @test likelihood_weighting(normal_normal, (), Dict((:y => i) => R.NN_YS[i] for i in 1:3), 10) isa Tuple

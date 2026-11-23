@@ -40,7 +40,7 @@ function sample(sampler::RWMH, addr::Address, dist::Distribution, obs::Union{Not
         sampler.Q_resample_address += logpdf(backward_dist, value_current) - logpdf(forward_dist, value)
     else
         # if we don't have previous value to move from, sample from prior
-        value = get(sampler.trace_current, addr, rand(dist))
+        value = get(() -> rand(dist), sampler.trace_current, addr) # only sample if missing
     end
 
     # accumulated log density p(X,Y)

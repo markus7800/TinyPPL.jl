@@ -86,7 +86,9 @@ function (::SigmoidTransform)(x::Real)::Real
     return 1 / (1 + exp(-x))
 end
 function log_abs_det_jacobian(t::SigmoidTransform, x::Real)::Real
-    return x - 2 * log1p(exp(x))
+    # log σ'(x) = log σ(x) + log σ(-x) = -log1p(exp(-x)) - log1p(exp(x)), symmetric in x.
+    # x - 2 * log1p(exp(x)) overflows for large x, written with -|x| it does not.
+    return -abs(x) - 2 * log1p(exp(-abs(x)))
 end
 function Base.inv(t::SigmoidTransform,)::Transform
     return InverseSigmoidTransform()
@@ -99,7 +101,8 @@ function (::InverseSigmoidTransform)(x::Real)::Real
     return log(x / (1-x))
 end
 function log_abs_det_jacobian(t::InverseSigmoidTransform, x::Real)::Real
-    return -log(abs(x-x^2))
+    # -log(x(1-x)), with log1p for precision near x=1 (x-x^2 cancels)
+    return -log(x) - log1p(-x)
 end
 function Base.inv(t::InverseSigmoidTransform,)::Transform
     return SigmoidTransform()

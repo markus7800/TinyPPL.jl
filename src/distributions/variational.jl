@@ -168,7 +168,8 @@ end
 function Distributions.entropy(q::FullRankGaussian)
     K = length(q.base)
     L = q.base.Σ.chol.L
-    return K/2*(log(2π) + 1) + log(abs(prod(LinearAlgebra.diag(L))))
+    # log |det L| as sum of logs, the product of the diagonal over-/underflows in high dimensions
+    return K/2*(log(2π) + 1) + sum(log.(abs.(LinearAlgebra.diag(L))))
 end
 
 
