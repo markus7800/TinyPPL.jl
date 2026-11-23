@@ -451,13 +451,17 @@ The results are consistent for each category of inference algorithm and backend
 
 
 ## Installation
+Requires Julia ≥ 1.10 (tested on 1.13).
+Static SMC uses internals of a Libtask fork, so add the fork first:
 ```console
-(@v1.9) pkg> add https://github.com/markus7800/TinyPPL.jl
+(@v1.13) pkg> add https://github.com/markus7800/Libtask.jl#subtape
+(@v1.13) pkg> add https://github.com/markus7800/TinyPPL.jl
 ```
 
 ```julia
 import Pkg
-Pkg.add("https://github.com/markus7800/TinyPPL.jl")
+Pkg.add(url="https://github.com/markus7800/Libtask.jl", rev="subtape")
+Pkg.add(url="https://github.com/markus7800/TinyPPL.jl")
 ```
 
 ## Usage

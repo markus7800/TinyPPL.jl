@@ -348,6 +348,9 @@ end
 
 @testset "smc" begin
     N = 5_000
+    # Tolerances are ≈ 3 sd of the estimates across seeds, so the tests do not depend on the random stream
+    # (which changes with Julia / Distributions versions). N_large where N = 5_000 gives only ≈ 1.5 sd.
+    N_large = 20_000
     @testset "normal_normal" begin # C3
         Random.seed!(0)
         traces, lw, log_marginal_lik = smc(normal_normal, (), nn_obs, N)
@@ -357,21 +360,21 @@ end
     end
     @testset "discrete_network" begin # C3
         Random.seed!(0)
-        traces, lw, log_marginal_lik = smc(discrete_network, (), dn_obs, N)
-        @test [wprob(traces[:z], lw, k) for k in 1:3] ≈ R.DN_POST_Z atol = 0.02
+        traces, lw, log_marginal_lik = smc(discrete_network, (), dn_obs, N_large)
+        @test [wprob(traces[:z], lw, k) for k in 1:3] ≈ R.DN_POST_Z atol = 0.02 # sd ≈ 0.005
         @test log_marginal_lik ≈ R.DN_LOG_EVIDENCE atol = 0.05
     end
     @testset "mixed" begin # C3
         Random.seed!(0)
-        traces, lw, log_marginal_lik = smc(mixed, (), mx_obs, N)
-        @test wprob(traces[:z], lw, 1) ≈ R.MX_POST_Z1 atol = 0.02
+        traces, lw, log_marginal_lik = smc(mixed, (), mx_obs, N_large)
+        @test wprob(traces[:z], lw, 1) ≈ R.MX_POST_Z1 atol = 0.03 # sd ≈ 0.009
         @test log_marginal_lik ≈ R.MX_LOG_EVIDENCE atol = 0.05
     end
     @testset "latent after last observation with proposal" begin # C3
         Random.seed!(0)
-        traces, lw, log_marginal_lik = smc(normal_normal_trailing, (), nn_obs, N;
+        traces, lw, log_marginal_lik = smc(normal_normal_trailing, (), nn_obs, N_large;
             addr2proposal=Addr2Proposal(:z => StaticProposal(Normal(2., 2.))))
-        @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05
+        @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05 # sd ≈ 0.012
         @test wmean(traces[:z], lw) ≈ R.NN_POST_MEAN atol = 0.05
         @test wstd(traces[:z], lw) ≈ sqrt(R.NN_POST_SD^2 + 1) atol = 0.05
     end
@@ -427,10 +430,12 @@ end
     @testset "pgas linear_regression" begin
         Random.seed!(0)
         traces = particle_gibbs(linear_regression, lr_args, lr_obs, 10, 1_000; ancestral_sampling=true)
-        # chain mixes slowly (posterior sd of intercept ≈ 1), with 20k samples PG/PGAS/PIMH are within 0.1
+        # chain mixes slowly (posterior sd of intercept ≈ 1), with 20k samples PG/PGAS/PIMH are within 0.1.
+        # Across seeds the estimates have sd ≈ 0.1 (slope) and ≈ 0.35 (intercept), tolerances are ≈ 3 sd.
+        # (More particles barely help: 30 particles give sd ≈ 0.26 for the intercept at 3x the cost.)
         slope, intercept = lr_means(subset(traces, 101:1000))
-        @test slope ≈ R.LR_POST_MEAN[1] atol = 0.15
-        @test intercept ≈ R.LR_POST_MEAN[2] atol = 0.4
+        @test slope ≈ R.LR_POST_MEAN[1] atol = 0.3
+        @test intercept ≈ R.LR_POST_MEAN[2] atol = 1.0
     end
     @testset "particle_IMH normal_normal" begin # C3
         Random.seed!(0)

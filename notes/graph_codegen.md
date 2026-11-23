@@ -55,7 +55,7 @@ Caveats:
 - RGF ignores argument type annotations (`X::INPUT_VECTOR_TYPE` is documentation only).
 - A one-argument anonymous function needs a trailing comma: `function ($X::INPUT_VECTOR_TYPE,) ... end`.
 - Stack traces show `RuntimeGeneratedFunction{...hash...}` instead of a model-specific name; printing an RGF shows its body.
-- RGF 0.5.12 is used (works with Julia 1.9; newer versions need newer Julia).
+- RGF ≥ 0.5.14 is required: older versions cannot compile bodies containing closures or comprehensions on Julia 1.12+ ("syntax: malformed expression"), e.g. the copy `X = [X[i] for i in eachindex(X)]` in the plated unconstrained logpdf. 0.5.13+ needs Julia ≥ 1.10.
 
 ### Options considered for the context module
 

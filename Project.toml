@@ -1,7 +1,7 @@
 name = "TinyPPL"
 uuid = "7d3b7143-6434-42f5-a03e-fdc02c8b5cd0"
-authors = ["Markus Boeck"]
 version = "0.1.0"
+authors = ["Markus Boeck"]
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -17,19 +17,22 @@ RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 
+[sources]
+# Libtask is the fork https://github.com/markus7800/Libtask.jl (branch `subtape`), static SMC uses its internals
+Libtask = {rev = "subtape", url = "https://github.com/markus7800/Libtask.jl.git"}
+
 [compat]
 Distributions = "0.25"
-ForwardDiff = "0.10"
-# Libtask is the fork https://github.com/markus7800/Libtask.jl (branch `subtape`), static SMC uses its internals
+ForwardDiff = "0.10, 1"
 Libtask = "0.8.7"
 MacroTools = "0.5"
 PDMats = "0.11"
 ProgressLogging = "0.1"
 ReverseDiff = "1.15"
-RuntimeGeneratedFunctions = "0.5"
+RuntimeGeneratedFunctions = "0.5.14" # older versions fail on closures in generated bodies on Julia 1.12+
 SpecialFunctions = "2"
 Tracker = "0.2.39"
-julia = "1.9"
+julia = "1.10"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
