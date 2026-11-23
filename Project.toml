@@ -33,9 +33,3 @@ RuntimeGeneratedFunctions = "0.5.14" # older versions fail on closures in genera
 SpecialFunctions = "2"
 Tracker = "0.2.39"
 julia = "1.10"
-
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
