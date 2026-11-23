@@ -5,6 +5,7 @@ using Test, Random, Statistics
 using TinyPPL.Distributions
 using TinyPPL.Graph
 import TinyPPL.Graph as G
+import Distributions: pdf
 import Tracker, ForwardDiff, ReverseDiff
 import ..References as R
 using ..TestUtils
@@ -157,6 +158,35 @@ const lazy_branching = @pgm lazy_ifs graph_test_lazy_branching begin
 end
 const LAZY_POST_C1 = let l1 = 0.3 * exp(logpdf(Normal(2., sqrt(2.)), 0.8)), l0 = 0.7 * exp(logpdf(Normal(-1., 1.), 0.8))
     l1 / (l1 + l0)
+end
+
+# nested lazy branches: activating x (c = 1) may activate z (x > 0) (B17)
+#   p(y | c = 1, x) = N(y; x, √2) if x > 0 (z integrated out), N(y; x, 1) otherwise
+const lazy_nested = @pgm lazy_ifs graph_test_lazy_nested begin
+    let c ~ Bernoulli(0.5),
+        m = if c == 1.
+                let x ~ Normal(0., 1.),
+                    k = if x > 0.
+                            let z ~ Normal(x, 1.)
+                                z
+                            end
+                        else
+                            x
+                        end
+                    k
+                end
+            else
+                -1.
+            end
+        {:y} ~ Normal(m, 1.) ↦ 1.
+        c
+    end
+end
+const LAZY_NESTED_POST_C1, LAZY_NESTED_POST_Z_ACTIVE = let dx = 1e-4, xs = -10:dx:10
+    w = pdf.(Normal(), xs) .* [x > 0 ? pdf(Normal(x, sqrt(2.)), 1.) : pdf(Normal(x, 1.), 1.) for x in xs]
+    l1 = 0.5 * sum(w) * dx
+    l0 = 0.5 * pdf(Normal(-1., 1.), 1.)
+    l1 / (l1 + l0), 0.5 * sum(w[xs .> 0]) * dx / (l1 + l0)
 end
 
 # procedure call whose argument contains a sample statement
@@ -369,7 +399,18 @@ const MH_MODELS = [
     end),
     ("chain", chain, t -> @test mean(burn(t[:z])) ≈ R.CH_POST_MEAN_Z atol = 0.05),
     ("plated_gamma_poisson", plated_gamma_poisson, t -> @test [mean(burn(t[:λ => i])) for i in 1:3] ≈ R.PGP_POST_MEAN atol = 0.15),
-    ("lazy_branching", lazy_branching, t -> @test mean(burn(t[:c])) ≈ LAZY_POST_C1 atol = 0.03), # B16, C8
+    ("lazy_branching", lazy_branching, t -> begin # B17, C8
+        c, x = burn(t[:c]), burn(t[:x])
+        @test mean(c) ≈ LAZY_POST_C1 atol = 0.03
+        @test all(isnan.(x) .== (c .== 0)) # x is inactive iff c == 0
+        @test mean(x[c .== 1]) ≈ (2. + 0.8) / 2 atol = 0.05 # x | c = 1, y ~ N(1.4, 1/2)
+    end),
+    ("lazy_nested", lazy_nested, t -> begin # B17
+        c, x, z = burn(t[:c]), burn(t[:x]), burn(t[:z])
+        @test mean(c) ≈ LAZY_NESTED_POST_C1 atol = 0.03
+        @test mean(.!isnan.(z)) ≈ LAZY_NESTED_POST_Z_ACTIVE atol = 0.03
+        @test all(isnan.(z) .== .!((c .== 1) .& (x .> 0))) # z is active iff c == 1 and x > 0
+    end),
 ]
 
 @testset "lmh" begin
@@ -405,6 +446,13 @@ end
         Random.seed!(0)
         traces = compiled_single_site(mixed, compile_rwmh(mixed; default_var=0.5), 60_000)
         @test mean(burn(traces[:z])) ≈ R.MX_POST_Z1 atol = 0.03
+    end
+    @testset "lazy_ifs models are rejected" begin # B17
+        @test_throws ErrorException compile_lmh(lazy_branching)
+        @test_throws ErrorException compile_rwmh(lazy_branching)
+        @test_throws ErrorException G.single_site(lazy_branching, 10, (X, node) -> 0.)
+        @test !G.has_lazy_latents(normal_normal)
+        @test G.has_lazy_latents(lazy_branching)
     end
     @testset "compile_lmh with proposal" begin # B5
         Random.seed!(0)

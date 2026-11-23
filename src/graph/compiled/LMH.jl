@@ -143,6 +143,11 @@ For each latent variable, builds a function that implements a MH update for thi 
 Alternative implementation: All in one function and goto statements to go to correct variable based on resample variable.
 """
 function compile_single_site(pgm::PGM, kernel::Function)
+    # Models with lazy_ifs need to (de)activate latent variables when the branch changes (see lazy_single_site).
+    # This is not implemented for compiled kernels, which would silently never activate a branch.
+    if has_lazy_latents(pgm)
+        error("Compiled single site kernels do not support models with lazy_ifs, use lmh or rwmh instead.")
+    end
     X = gensym(:X)
     Y = gensym(:Y)
 
