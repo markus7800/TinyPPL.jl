@@ -177,7 +177,15 @@ end
 
 @testset "observations as plain Dict" begin # A2
     Random.seed!(0)
-    @test likelihood_weighting(normal_normal, (), Dict((:y => i) => R.NN_YS[i] for i in 1:3), 10) isa Tuple
+    obs = Dict((:y => i) => R.NN_YS[i] for i in 1:3) # Dict{Pair{Symbol,Int},Float64}
+    @test likelihood_weighting(normal_normal, (), obs, 10) isa Tuple
+    _, _, log_Z = likelihood_weighting(normal_normal, (), obs, 50_000)
+    @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02 # observations are used
+    @test lmh(normal_normal, (), obs, 10) isa UniversalTraces
+    @test E.make_logjoint(normal_normal, (), obs)(UniversalTrace(:μ => 0.5)) ≈ E.make_logjoint(normal_normal, (), nn_obs)(UniversalTrace(:μ => 0.5))
+    # integer observations
+    @test score_trace(discrete_network, (), Dict(:o1 => 1, :o2 => 0), UniversalTrace(:z => 1, :b => 1)) ≈
+          score_trace(discrete_network, (), dn_obs, UniversalTrace(:z => 1, :b => 1))
 end
 
 # ---------------------------------------------------------- likelihood weighting

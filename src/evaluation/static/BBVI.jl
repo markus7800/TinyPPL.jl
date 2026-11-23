@@ -20,7 +20,7 @@ function sample(sampler::MeanFieldCollector, addr::Address, dist::Distribution, 
     sampler.dists[ix] = init_variational_distribution(dist)
     return value
 end
-function get_mixed_meanfield(model::StaticModel, args::Tuple, observations::Observations, addresses_to_ix::Addr2Ix)::MeanField
+function get_mixed_meanfield(model::StaticModel, args::Tuple, observations::AbstractObservations, addresses_to_ix::Addr2Ix)::MeanField
     sampler = MeanFieldCollector(Vector{VariationalDistribution}(undef, length(addresses_to_ix)), addresses_to_ix)
     model(args, sampler, observations)
     return MeanField(sampler.dists)
@@ -32,7 +32,7 @@ BBVI, where we fit unconstrained model.
 VariationalDistributions are automatically determined with MeanFieldCollector, which uses init_variational_distribution.
 This method *uses* AD to compute gradient of REINFORCE approximation.
 """
-function bbvi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64; ad_backend::Symbol=:tracker)
+function bbvi(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64; ad_backend::Symbol=:tracker)
     logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
     q = get_mixed_meanfield(model, args, observations, addresses_to_ix)
     result = advi_logjoint(logjoint, n_samples, L, learning_rate, q, ReinforceELBO(), ad_backend=ad_backend)

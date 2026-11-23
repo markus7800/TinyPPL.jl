@@ -50,7 +50,7 @@ end
 """
 Convenience method for sampling from model.
 """
-function sample_trace(model::UniversalModel, args::Tuple, observations::Observations=Observations())
+function sample_trace(model::UniversalModel, args::Tuple, observations::AbstractObservations=Observations())
     sampler = TraceSampler()
     model(args, sampler, observations)
     return sampler.X
@@ -60,7 +60,7 @@ export sample_trace
 """
 Convenience method for computing log p(X,Y) for given trace `X` according to model.
 """
-function score_trace(model::UniversalModel, args::Tuple, observations::Observations, X::AbstractUniversalTrace)
+function score_trace(model::UniversalModel, args::Tuple, observations::AbstractObservations, X::AbstractUniversalTrace)
     sampler = TraceSampler(X)
     model(args, sampler, observations)
     return sampler.W

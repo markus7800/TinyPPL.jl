@@ -57,7 +57,7 @@ abstract type Model end
 struct UniversalModel{F<:Function} <: Model
     f::F
 end
-function (model::UniversalModel)(args::Tuple, sampler::UniversalSampler, observations::Observations)
+function (model::UniversalModel)(args::Tuple, sampler::UniversalSampler, observations::AbstractObservations)
     return model.f(args..., sampler, observations)
 end
 
@@ -65,7 +65,7 @@ end
 struct StaticModel{F<:Function} <: Model
     f::F
 end
-function (model::StaticModel)(args::Tuple, sampler::StaticSampler, observations::Observations)
+function (model::StaticModel)(args::Tuple, sampler::StaticSampler, observations::AbstractObservations)
     return model.f(args..., sampler, observations)
 end
 
@@ -84,10 +84,10 @@ parameter syntax: p = param(name; size=1, constraint=NoConstraint())
 submodel syntax: @subppl submodel(args...)
 
 returns an UniversalModel model_name which is callable with
-    model_name(args::Tuple, sampler::UniversalSampler, observations::Observations)
+    model_name(args::Tuple, sampler::UniversalSampler, observations::AbstractObservations)
 if the funtion is annotated with @ppl static function model_name(...
 then the macro generates a StaticModel which is callable with
-    model_name(args::Tuple, sampler::StaticSampler, observations::Observations)
+    model_name(args::Tuple, sampler::StaticSampler, observations::AbstractObservations)
 where we assume that for all executions, the same (finite number of) random variables will be instantiated
 """
 function ppl_macro(annotations::Set{Symbol}, func)

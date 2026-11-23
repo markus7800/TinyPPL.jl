@@ -26,13 +26,13 @@ function sample(sampler::AddressCollector, addr::Address, dist::Distribution, ob
     return value
 end
 
-function get_addresses(model::StaticModel, args::Tuple, observations::Observations)::Addresses
+function get_addresses(model::StaticModel, args::Tuple, observations::AbstractObservations)::Addresses
     sampler = AddressCollector()
     model(args, sampler, observations)
     return sampler.addresses
 end
 
-function get_number_of_latent_variables(model::StaticModel, args::Tuple, observations::Observations)
+function get_number_of_latent_variables(model::StaticModel, args::Tuple, observations::AbstractObservations)
     return length(get_addresses(model, args, observations))
 end
 export get_number_of_latent_variables
@@ -41,7 +41,7 @@ export get_number_of_latent_variables
 """
 Maps each address to an unique index.
 """
-function get_address_to_ix(model::StaticModel, args::Tuple, observations::Dict)::Addr2Ix
+function get_address_to_ix(model::StaticModel, args::Tuple, observations::AbstractObservations)::Addr2Ix
     addresses = get_addresses(model, args, observations)
     addresses_to_ix = Addr2Ix()
     for addr in addresses

@@ -156,7 +156,7 @@ If you want this alternative behavior use ADVI with a guide program.
 
 ELBO is optimised with automatic differentiation (AD).
 """
-function advi_meanfield(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64)
+function advi_meanfield(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64)
 
     eps = 1e-8
     acc = Dict{Address, AbstractVector{Float64}}()
@@ -218,7 +218,7 @@ ELBO is optimised with automatic differentiation (AD).
 
 This is almost the same as advi_logjoint, but the size of phi is not constant.
 """
-function advi(model::UniversalModel, args::Tuple, observations::Observations, 
+function advi(model::UniversalModel, args::Tuple, observations::AbstractObservations, 
     n_samples::Int, L::Int, learning_rate::Float64,
     guide::UniversalModel, guide_args::Tuple, estimator::ELBOEstimator;
     unconstrained::Bool=false)

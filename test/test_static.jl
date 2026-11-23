@@ -101,6 +101,19 @@ end
 
 # ---------------------------------------------------------- likelihood weighting
 
+@testset "observations as plain Dict" begin # A2
+    obs = Dict((:y => i) => R.NN_YS[i] for i in 1:3) # Dict{Pair{Symbol,Int},Float64}
+    Random.seed!(0)
+    _, _, log_Z = likelihood_weighting(normal_normal, (), obs, 50_000)
+    @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
+    _, _, log_Z = smc(normal_normal, (), obs, 1_000)
+    @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.05
+    lj, _ = E.make_logjoint(normal_normal, (), obs)
+    lj_ref, _ = E.make_logjoint(normal_normal, (), nn_obs)
+    @test lj([0.5]) ≈ lj_ref([0.5])
+    @test hmc(normal_normal, (), obs, 10, 5, 0.1) isa StaticTraces
+end
+
 @testset "likelihood_weighting" begin
     N = 50_000
     @testset "normal_normal" begin

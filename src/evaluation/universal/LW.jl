@@ -31,7 +31,7 @@ The posterior can be approximated with ∑ w̃_i δ_{X_i},
 where w̃_i are the normalised weights w̃_i = w_i / ∑ w_i
 Returns traces, normalised log weights log w̃_i and the log evidence estimate log(1/N ∑ w_i).
 """
-function likelihood_weighting(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int)
+function likelihood_weighting(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int)
     traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
@@ -50,7 +50,7 @@ end
 """
 Same as likelihood_weighting, but we do not need weights.
 """
-function sample_from_prior(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int)
+function sample_from_prior(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int)
     return likelihood_weighting(model, args, observations, n_samples)[1]
 end
 export sample_from_prior
@@ -70,7 +70,7 @@ This may be used if you do not care about the entire trace of a program and want
 to save memory.
 Returns the completion results, normalised log weights and the log evidence estimate.
 """
-function likelihood_weighting(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, completion::Function)
+function likelihood_weighting(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int, completion::Function)
     result =  Vector{Any}(undef, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
     sampler = LW()

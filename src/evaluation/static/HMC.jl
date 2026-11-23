@@ -6,7 +6,7 @@ If `unconstrained=true`, we sample the unconstrained logjoint, but transform bac
 `x_initial` is a trace with constrained values (it is not mutated).
 If no `x_initial` is given, the chain starts at a sample from the prior (which lies in the support).
 """
-function hmc(model::StaticModel, args::Tuple, observations::Observations,
+function hmc(model::StaticModel, args::Tuple, observations::AbstractObservations,
     n_samples::Int, L::Int, eps::Float64;
     ad_backend::Symbol=:tracker, x_initial::Union{Nothing,Vector{Float64}}=nothing, unconstrained::Bool=false)
 

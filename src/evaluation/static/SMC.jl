@@ -69,7 +69,7 @@ update_particle!(task::Libtask.TapedTask, particle::SMCParticle) = update_partic
 # We use Libtask to interrupt / continue asynchronous Julia tasks.
 # If a reference particle X_ref is passed this worker acts a conditional smc.
 # smc can be used to create independent samples, while conditional smc is a kernel with the posterior as stationary distribution.
-function _smc_worker(model::StaticModel, args::Tuple, observations::Observations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
+function _smc_worker(model::StaticModel, args::Tuple, observations::AbstractObservations, logjoint::Function, addresses_to_ix::Addr2Ix, n_particles::Int,
     X_ref::Union{Nothing,AbstractStaticTrace}; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
 
     conditional = !isnothing(X_ref)
@@ -170,7 +170,7 @@ function _smc_worker(model::StaticModel, args::Tuple, observations::Observations
 end
 
 
-function smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
+function smc(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
     return _smc_worker(model, args, observations, logjoint, addresses_to_ix, n_particles, nothing;
@@ -179,7 +179,7 @@ end
 
 export smc
 
-function conditional_smc(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int,
+function conditional_smc(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int,
     X::AbstractStaticTrace; ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), check_addresses::Bool=false)
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
 
@@ -191,7 +191,7 @@ export conditional_smc
 # Particle gibbs is the particle version of a Gibbs sampler.
 # Instead of using p(x'|x) we approximate this full conditional with a conditional smc run.
 # Since the conditional smc leaves the posterior invariant, we can accept each sample.
-function particle_gibbs(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int;
+function particle_gibbs(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int, n_samples::Int;
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal(), init=:SMC)
     
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)
@@ -226,7 +226,7 @@ export particle_gibbs
 # Instead of producing a single sample from the proposal, we use smc.
 # The more particles we use, the higher the acceptance propoability shouldbe.
 # This algorithm usually does not outperform MH, but serves as a sanity check if everything works.
-function particle_IMH(model::StaticModel, args::Tuple, observations::Observations, n_particles::Int, n_samples::Int;
+function particle_IMH(model::StaticModel, args::Tuple, observations::AbstractObservations, n_particles::Int, n_samples::Int;
     ancestral_sampling::Bool=false, addr2proposal::Addr2Proposal=Addr2Proposal())
 
     logjoint, addresses_to_ix = make_logjoint(model, args, observations)

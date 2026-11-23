@@ -33,7 +33,7 @@ function param(sampler::ParametersCollector, addr::Address; size::Int=1, constra
     end
 end
 
-function get_params_to_ix(model::StaticModel, args::Tuple, observations::Dict)::Param2Ix
+function get_params_to_ix(model::StaticModel, args::Tuple, observations::AbstractObservations)::Param2Ix
     sampler = ParametersCollector()
     model(args, sampler, observations)
     return sampler.params_to_ix

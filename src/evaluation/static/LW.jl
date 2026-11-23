@@ -30,7 +30,7 @@ the program prior p(X).
 See evaluation/universal/LW.jl
 Returns traces, normalised log weights and the log evidence estimate.
 """
-function likelihood_weighting(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int)
+function likelihood_weighting(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int)
     addresses_to_ix = get_address_to_ix(model, args, observations)
     traces = StaticTraces(addresses_to_ix, n_samples)
     logprobs = Vector{Float64}(undef, n_samples)
@@ -47,7 +47,7 @@ end
 """
 Same as likelihood_weighting, but we do not need weights.
 """
-function sample_from_prior(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int)
+function sample_from_prior(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int)
     return likelihood_weighting(model, args, observations, n_samples)[1]
 end
 export sample_from_prior
@@ -74,7 +74,7 @@ end
 """
 Same as likelihood_weighting but only stores values of RVs with address in `trace`.
 """
-function likelihood_weighting(model::StaticModel, args::Tuple, observations::Dict, n_samples::Int, trace::Addresses)
+function likelihood_weighting(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, trace::Addresses)
     addresses = get_addresses(model, args, observations)
     addresses_to_ix = get_address_to_ix(trace, addresses)
     K = length(trace)

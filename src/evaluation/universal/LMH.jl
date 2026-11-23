@@ -79,7 +79,7 @@ end
 # returns samples X_i ~ p(X|Y) 
 # (does not return also `logprobs` log p(X,Y) = log p(X|Y) + log p(Y), which my be used to estimate MAP
 # but can be computed with make_logjoint afterwards.)
-function single_site_sampler(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, sampler::UniversalSingleSiteSampler, n_updates::Int)
+function single_site_sampler(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int, sampler::UniversalSingleSiteSampler, n_updates::Int)
     @assert n_updates >= 1
     traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
@@ -141,7 +141,7 @@ function single_site_sampler(model::UniversalModel, args::Tuple, observations::O
     return UniversalTraces(traces, retvals)
 end
 
-function lmh(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int; 
+function lmh(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int; 
     addr2proposal::Addr2Proposal=Addr2Proposal(), n_updates::Int=1)
 
     sampler = LMH(addr2proposal)

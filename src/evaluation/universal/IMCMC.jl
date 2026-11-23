@@ -27,7 +27,7 @@ function sample(sampler::StrictTraceScorer, addr::Address, dist::Distribution, o
     return value
 end
 
-function strict_score_trace(model::UniversalModel, args::Tuple, observations::Observations, X::AbstractUniversalTrace)
+function strict_score_trace(model::UniversalModel, args::Tuple, observations::AbstractObservations, X::AbstractUniversalTrace)
     sampler = StrictTraceScorer(X)
     retval = model(args, sampler, observations)
     if length(sampler.visited) != length(X)
@@ -52,7 +52,7 @@ is indeed involution for current proposed value.
 
 Returns traces (like all MCMC algorithms).
 """
-function imcmc(model::UniversalModel, args::Tuple, observations::Observations,
+function imcmc(model::UniversalModel, args::Tuple, observations::AbstractObservations,
     aux_model::UniversalModel, aux_args::Tuple, involution::Function,
     n_samples::Int; check_involution::Bool=false)
 

@@ -25,7 +25,7 @@ Transforms a universal model to a function which takes as input an universal tra
 and returns the log density log p(X,Y).
 Closes over args and observations Y.
 """
-function make_logjoint(model::UniversalModel, args::Tuple, observations::Observations)
+function make_logjoint(model::UniversalModel, args::Tuple, observations::AbstractObservations)
     return function logjoint(X::AbstractUniversalTrace)
         sampler = LogJointSampler(X)
         model(args, sampler, observations)
@@ -74,7 +74,7 @@ Transforms a universal model to a function which takes as input an universal tra
 and returns the log density log p(T(X),Y) + log abs det ∇T(X).
 Closes over args and observations Y.
 """
-function make_unconstrained_logjoint(model::UniversalModel, args::Tuple, observations::Dict)
+function make_unconstrained_logjoint(model::UniversalModel, args::Tuple, observations::AbstractObservations)
     return function unconstrained_logjoint(X::AbstractUniversalTrace)
         sampler = UnconstrainedLogJointSampler(X)
         model(args, sampler, observations)
@@ -131,13 +131,13 @@ function sample(sampler::UniversalConstraintTransformer, addr::Address, dist::Di
     return constrained_value
 end
 
-function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, observations::Observations)::Tuple{<:UniversalTrace,Any}
+function transform_to_constrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, observations::AbstractObservations)::Tuple{<:UniversalTrace,Any}
     sampler = UniversalConstraintTransformer(X, :constrained)
     retval = model(args, sampler, observations)
     return sampler.Y, retval
 end
 
-function transform_to_unconstrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, observations::Observations)::Tuple{<:UniversalTrace,Any}
+function transform_to_unconstrained(X::AbstractUniversalTrace, model::UniversalModel, args::Tuple, observations::AbstractObservations)::Tuple{<:UniversalTrace,Any}
     sampler = UniversalConstraintTransformer(X, :unconstrained)
     retval = model(args, sampler, observations)
     return sampler.Y, retval
@@ -145,7 +145,7 @@ end
 
 export transform_to_constrained, transform_to_unconstrained
 
-# function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, observations::Observations)::Tuple{Vector{UniversalTrace},Vector{Any}}
+# function transform_to_constrained(Xs::Vector{<:AbstractUniversalTrace}, model::UniversalModel, args::Tuple, observations::AbstractObservations)::Tuple{Vector{UniversalTrace},Vector{Any}}
 #     samples = Vector{UniversalTrace}(undef, length(Xs))
 #     retvals = Vector{Any}(undef, length(Xs))
 #     for i in eachindex(Xs)

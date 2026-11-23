@@ -89,7 +89,8 @@ Reference IDs (e.g. `C3`) are used in test comments.
     - exact (VE, greedy VE, BP, JT): result structs with `log_evidence` and `get_posterior(res)`, the normalised linear-space table over the query variables (VE: marginal variables, BP/JT: root factor, renamed from `get_posterior_for_root_factor`); `get_marginals` for calibrated BP/JT.
     - VI: unchanged (`VIResult`, `sample_posterior`).
   - Tests: normalised weights and log evidence of LW (all backends) and SMC, imcmc / NP-HMC return `UniversalTraces` with retvals and constrained values, `get_posterior` of VE. Examples updated.
-- [ ] A2 ✅ `Observations = Dict{Any,Real}` is concrete+invariant → `Dict(:y => 1.0)` is a MethodError. Accept `AbstractDict`.
+- [x] A2 ✅ `Observations = Dict{Any,Real}` is concrete+invariant → `Dict(:y => 1.0)` is a MethodError. Accept `AbstractDict`.
+  - fixed: new alias `AbstractObservations = AbstractDict` (exported) is used in all method signatures of the evaluation backends (51, incl. the model call and the former `observations::Dict` methods); `Observations` stays the default container (`Observations(:y => 1.)`), struct fields of type `Observations` convert a given dictionary. No new method ambiguities. Tests: universal and static LW / SMC / logjoint / lmh / hmc with `Dict{Pair{Symbol,Int},Float64}` observations give the same results as with `Observations`, integer observations in a `Dict{Symbol,Int}`.
 - [ ] A3 Overloads that differ only in 5th positional arg type (`likelihood_weighting(..., completion::Function)` / `(..., trace::Addresses)`).
 - [ ] A4 Naming/order drift: `addr2proposal` vs `addr2Proposal`; `L` = leapfrog steps / MC samples / Cholesky; `N` vs `L`; positional `K` in some ADVI functions; universal `bbvi` positional `variational_dists`.
 - [ ] A5 `Transform` interface declares `in_support`/`support`, implementations use `in_domain`/`domain`; `image(ComposeTransform)` ignores decreasing transforms.

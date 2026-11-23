@@ -75,7 +75,7 @@ Returns the potential energy of the extended target U_ext(X) = U_used + U_aux,
 where U_used = -log p(X_used, Y) and U_aux = -∑_{addr unused} log q(X[addr]),
 the return value of the program, and the set of used addresses.
 """
-function get_U(model::UniversalModel, args::Tuple, observations::Observations, X::NPHMCTrace)
+function get_U(model::UniversalModel, args::Tuple, observations::AbstractObservations, X::NPHMCTrace)
     sampler = NonParametricHMCLogjoint(X)
     retval = model(args, sampler, observations)
     U_used = -sampler.W
@@ -138,7 +138,7 @@ end
 Computes ∇U_used(X) and inserts addresses that are requested by the program into X.
 Returns the gradient, the initial momenta of the inserted addresses and their initial auxiliary potential.
 """
-function get_U_grad_and_extend!(model::UniversalModel, args::Tuple, observations::Observations, X::NPHMCTrace, drift_time::Float64)
+function get_U_grad_and_extend!(model::UniversalModel, args::Tuple, observations::AbstractObservations, X::NPHMCTrace, drift_time::Float64)
     sampler = NonParametricHMCGradExtend(X, drift_time)
     model(args, sampler, observations)
     Tracker.back!(-sampler.W)
@@ -158,7 +158,7 @@ the auxiliary potential of addresses which were instantiated during integration.
 All quantities refer to the same (extended) set of addresses.
 """
 function universal_leapfrog(
-    model::UniversalModel, args::Tuple, observations::Observations,
+    model::UniversalModel, args::Tuple, observations::AbstractObservations,
     X_current::NPHMCTrace,
     L::Int, eps::Float64
     )
@@ -205,7 +205,7 @@ e.g. see examples/universal_non_parametric_hmc.jl. Then, it helps to initialise 
 
 Returns traces with constrained values (like all MCMC algorithms), although the chain runs on unconstrained values.
 """
-function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, eps::Float64;
+function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, eps::Float64;
     x_initial::Union{Nothing,AbstractUniversalTrace}=nothing)
 
     # initialise x0

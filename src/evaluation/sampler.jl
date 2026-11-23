@@ -1,7 +1,9 @@
 
 const RVValue = Real # currently only univariate distributions are supported
-const Observations = Dict{Address, RVValue}
-export Observations
+const Observations = Dict{Address, RVValue} # default container, e.g. Observations(:y => 1.)
+# methods accept any dictionary of observations, e.g. Dict(:y => 1.) or Dict((:y => i) => ys[i] for i in 1:n)
+const AbstractObservations = AbstractDict
+export Observations, AbstractObservations
 
 """
 Samplers facilitate a *contextualised execution* of the probabilistic program.

@@ -26,7 +26,7 @@ See logjoint/ADVI.jl
 
 import TinyPPL.Logjoint: advi_meanfield_logjoint
 
-function advi_meanfield(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64)
+function advi_meanfield(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64)
     logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
     K = length(addresses_to_ix)
     result = advi_meanfield_logjoint(logjoint, K, n_samples, L, learning_rate)
@@ -36,7 +36,7 @@ end
 
 import TinyPPL.Logjoint: advi_fullrank_logjoint
 
-function advi_fullrank(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64)
+function advi_fullrank(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64)
     logjoint, addresses_to_ix = make_unconstrained_logjoint(model, args, observations)
     K = length(addresses_to_ix)
     result = advi_fullrank_logjoint(logjoint, K, n_samples, L, learning_rate)
@@ -52,7 +52,7 @@ Variational distribution is fitted by default to original model, but can also be
 by setting `unconstrained = true`.
 ELBO is optimised with automatic differentiation (AD).
 """
-function advi(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, learning_rate::Float64,
+function advi(model::StaticModel, args::Tuple, observations::AbstractObservations, n_samples::Int, L::Int, learning_rate::Float64,
     q::VariationalDistribution, estimator::ELBOEstimator;
     unconstrained::Bool=false, ad_backend::Symbol=:tracker)
 
@@ -77,7 +77,7 @@ Guide is fitted by default to original model, but can also be fitted to unconstr
 by setting `unconstrained = true`.
 ELBO is optimised with automatic differentiation (AD).
 """
-function advi(model::StaticModel, args::Tuple, observations::Observations,
+function advi(model::StaticModel, args::Tuple, observations::AbstractObservations,
     n_samples::Int, L::Int, learning_rate::Float64,
     guide::StaticModel, guide_args::Tuple, estimator::ELBOEstimator;
     unconstrained::Bool=false, ad_backend::Symbol=:tracker)
