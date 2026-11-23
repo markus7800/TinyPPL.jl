@@ -37,16 +37,16 @@ function continuous_greater_than(lower::Real, x::Real, var::Real)
     return ContinuousRWProposer(lower, Inf, x, var)
 end
 
-# supports upper = Inf
-struct DiscreteRWProposer <: DiscreteUnivariateDistribution
+# supports upper = Inf (then b = Inf::Float64, otherwise b::Int)
+struct DiscreteRWProposer{B<:Real} <: DiscreteUnivariateDistribution
     a::Int
     la::Float64
-    b::Real
+    b::B
     lb::Float64
     μ::Int
-    G::Distribution
+    G::Geometric{Float64}
     bp::Float64
-    function DiscreteRWProposer(lower::Int, upper::Real, x::Int, var::Real)
+    function DiscreteRWProposer(lower::Int, upper::B, x::Int, var::Real) where {B<:Real}
         a = x - lower
         b = upper - x
         var = var / 2
@@ -68,7 +68,7 @@ struct DiscreteRWProposer <: DiscreteUnivariateDistribution
             la = -log(1-(1-p)^a)
             lb = -log(1-(1-p)^b)
         end
-        return new(a, la, b, lb, x, G, bp)
+        return new{typeof(b)}(a, la, b, lb, x, G, bp)
     end
 end
 

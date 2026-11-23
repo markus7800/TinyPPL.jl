@@ -111,10 +111,11 @@ in_domain(t::InverseSigmoidTransform, x::Real) = 0 < x && x < 1
 domain(t::InverseSigmoidTransform) = RealInterval(0, 1)
 image(t::InverseSigmoidTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(domain.ub))
 
-struct AffineTransform <: Transform
-    k::Real
-    d::Real
+struct AffineTransform{T<:Real} <: Transform
+    k::T
+    d::T
 end
+AffineTransform(k::Real, d::Real) = AffineTransform(promote(k, d)...)
 export AffineTransform
 function (t::AffineTransform)(x::Real)::Real
     return t.k * x + t.d
@@ -130,9 +131,9 @@ domain(t::AffineTransform) = RealInterval(-Inf, Inf)
 image(t::AffineTransform, domain::RealInterval) = t.k > 0 ? RealInterval(t(domain.lb), t(domain.ub)) :  RealInterval(t(domain.ub), t(domain.lb))
 
 # composition of two transforms where t(x) = t2(t1(x))
-struct ComposeTransform <: Transform
-    t1::Transform
-    t2::Transform
+struct ComposeTransform{T1<:Transform,T2<:Transform} <: Transform
+    t1::T1
+    t2::T2
 end
 export ComposeTransform
 function (t::ComposeTransform)(x::Real)::Real
@@ -157,12 +158,13 @@ image(t::ComposeTransform, domain::RealInterval) = RealInterval(t(domain.lb), t(
 if X ~ base then for Y=TransformedDistribution(base,T) Y ~ T(X)
 This wrapper essentially implements the probability density transform.
 """
-struct TransformedDistribution <: ContinuousUnivariateDistribution
-    base::ContinuousUnivariateDistribution
-    T::Transform
-    T_inv::Transform
-    function TransformedDistribution(base::ContinuousUnivariateDistribution, T::Transform)
-        return new(base, T, inv(T))
+struct TransformedDistribution{D<:ContinuousUnivariateDistribution,F<:Transform,G<:Transform} <: ContinuousUnivariateDistribution
+    base::D
+    T::F
+    T_inv::G
+    function TransformedDistribution(base::D, T::F) where {D<:ContinuousUnivariateDistribution,F<:Transform}
+        T_inv = inv(T)
+        return new{D,F,typeof(T_inv)}(base, T, T_inv)
     end
 end
 export TransformedDistribution

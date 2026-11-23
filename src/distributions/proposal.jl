@@ -24,8 +24,8 @@ export proposal_dist, propose_and_logpdf, proposal_logpdf
 
 export ProposalDistribution
 
-struct StaticProposal <: ProposalDistribution
-    base::Distribution
+struct StaticProposal{D<:Distribution} <: ProposalDistribution
+    base::D
 end
 
 function proposal_dist(dist::StaticProposal, x_current)
@@ -35,11 +35,12 @@ end
 export StaticProposal
 
 
+# variance and bounds are settings of the inference algorithm (not differentiated), so Float64
 struct ContinuousRandomWalkProposal <: ProposalDistribution
-    variance::Real
-    lower::Real
-    upper::Real
-    function ContinuousRandomWalkProposal(variance, lower=-Inf, upper=Inf)
+    variance::Float64
+    lower::Float64
+    upper::Float64
+    function ContinuousRandomWalkProposal(variance::Real, lower::Real=-Inf, upper::Real=Inf)
         return new(variance, lower, upper)
     end
 end
@@ -55,20 +56,21 @@ end
 
 export ContinuousRandomWalkProposal
 
+# upper = Inf for unbounded support
 struct DiscreteRandomWalkProposal <: ProposalDistribution
-    variance::Real
-    lower::Real
-    upper::Real
-    function DiscreteRandomWalkProposal(variance, lower=0, upper=Inf)
+    variance::Float64
+    lower::Int
+    upper::Float64
+    function DiscreteRandomWalkProposal(variance::Real, lower::Real=0, upper::Real=Inf)
         return new(variance, lower, upper)
     end
 end
 
 function proposal_dist(dist::DiscreteRandomWalkProposal, x_current)
     if dist.upper == Inf
-        proposer = DiscreteRWProposer(Int(dist.lower), Inf, Int(x_current), dist.variance)
+        proposer = DiscreteRWProposer(dist.lower, Inf, Int(x_current), dist.variance)
     else
-        proposer = DiscreteRWProposer(Int(dist.lower), Int(dist.upper), Int(x_current), dist.variance)
+        proposer = DiscreteRWProposer(dist.lower, Int(dist.upper), Int(x_current), dist.variance)
     end
     return proposer
 end

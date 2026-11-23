@@ -60,6 +60,17 @@ end
     end
 end
 
+@testset "transformed distributions are concretely typed" begin
+    for d in [Gamma(2.0, 1.0), Uniform(2.0, 5.0), Distributions.truncated(Normal(0.0, 1.0), -Inf, 1.0), Beta(2.0, 3.0)]
+        d_unconstrained = TD.to_unconstrained(d)
+        @test all(isconcretetype, fieldtypes(typeof(d_unconstrained)))
+        @test (@inferred logpdf(d_unconstrained, 0.3)) isa Float64
+        @test (@inferred d_unconstrained.T_inv(0.3)) isa Float64
+        @test (@inferred rand(d_unconstrained)) isa Float64
+    end
+    @test TD.AffineTransform(1, 2.0) isa TD.AffineTransform{Float64} # promoted
+end
+
 @testset "to_unconstrained densities integrate to 1" begin
     grid = range(-40, 40, length=200_001)
     for d in [Gamma(2.0, 1.0), Exponential(2.0), Beta(2.0, 3.0), Uniform(2.0, 5.0), LogNormal(0.0, 1.0), InverseGamma(3.0, 2.0),
@@ -105,6 +116,19 @@ end
             p_left_density = integrate_exp(y -> logpdf(q, y), range(lb, x, length=200_001))
             @test p_left_sampled ≈ p_left_density atol = 0.01
         end
+    end
+    @testset "proposals are concretely typed" begin
+        for q in [TD.StaticProposal(Normal(0., 1.)), TD.ContinuousRandomWalkProposal(1), TD.ContinuousRandomWalkProposal(0.5, 0, 3),
+                  TD.DiscreteRandomWalkProposal(2), TD.DiscreteRandomWalkProposal(2., 1, 6),
+                  TD.random_walk_proposal_dist(Binomial(20, 0.3), 5, 2.), TD.random_walk_proposal_dist(Poisson(3.), 5, 2.)]
+            @test all(isconcretetype, fieldtypes(typeof(q)))
+        end
+        d = TD.random_walk_proposal_dist(Poisson(3.), 5, 2.)
+        @test (@inferred logpdf(d, 4)) isa Float64
+        @test (@inferred rand(d)) isa Int
+        # bounded discrete proposal stays in the support
+        q = TD.DiscreteRandomWalkProposal(2., 1, 6)
+        @test all(1 <= TD.propose_and_logpdf(q, 3)[1] <= 6 for _ in 1:1000)
     end
 end
 
