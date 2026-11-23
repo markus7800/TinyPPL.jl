@@ -7,6 +7,9 @@ Implementation is inspired by [van de Meent et al.: An Introduction to Probabili
 
 There are not too many abstractions and the implementations of inference algorithms are mostly one file large.
 
+Claude Opus 5.5 was used to polish the package (bug fixes, consistency of the interfaces, performance) and to write tests (see [test/](test/)).
+Every code change in the package was reviewed, the tests were not.
+
 ## Overview
 
 We restrict the distributions to be univariate for the sake of simplicity, but all algorithms can be easily extended to multivariate distributions.
