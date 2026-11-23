@@ -1,5 +1,5 @@
 import Tracker
-import TinyPPL.Distributions: VariationalParameters
+import TinyPPL.Distributions: VariationalParameters, rand_reparam
 
 """
 Samples values or reuses values of trace `X` and computes log Q(X).
@@ -25,7 +25,7 @@ end
 function sample(sampler::UniversalGuideSampler, addr::Address, dist::Distribution, obs::Nothing)::RVValue
     # if there is a value in trace use it else sample
     if !haskey(sampler.X, addr)
-        sampler.X[addr] = rand(dist)
+        sampler.X[addr] = rand_reparam(dist) # differentiable w.r.t. parameters of dist (for location-scale families)
     end
     value = sampler.X[addr]
     sampler.W += logpdf(dist, value)

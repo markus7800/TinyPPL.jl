@@ -171,6 +171,28 @@ end
         @test ReverseDiff.gradient(f, phi) ≈ ref rtol = 1e-5
     end
 
+    @testset "rand_reparam" begin # J6
+        # same random numbers as Distributions.rand for Float64 parameters
+        for d in [Normal(0.5, 2.0), LogNormal(0.1, 0.5), MvNormal([0.5, -1.0, 2.0], L * L'), Gamma(2.0, 1.0)]
+            Random.seed!(3); a = TD.rand_reparam(d)
+            Random.seed!(3); b = rand(d)
+            @test a ≈ b
+        end
+        # reparametrised samples are differentiable with all AD backends (ReverseDiff has no randn(TrackedReal))
+        q0 = TD.FullRankGaussian(3)
+        phi = vcat([0.5, -1.0, 2.0], vec(L))
+        function g(p)
+            Random.seed!(1)
+            z, lz = TD.rand_and_logpdf(TD.update_params(q0, p))
+            return sum(abs2, z) + lz
+        end
+        ref = ForwardDiff.gradient(g, phi)
+        @test Tracker.data(Tracker.gradient(g, phi)[1]) ≈ ref
+        @test ReverseDiff.gradient(g, phi) ≈ ref
+        n(p) = (Random.seed!(1); TD.rand_reparam(Normal(p[1], p[2])))
+        @test ReverseDiff.gradient(n, [0.5, 2.0]) ≈ ForwardDiff.gradient(n, [0.5, 2.0])
+    end
+
     @testset "MeanField sampling returns Float64 matrix" begin # B8
         q = TD.MeanField([TD.VariationalNormal(), TD.VariationalNormal()])
         @test rand(q, 10) isa Matrix{Float64}
@@ -263,6 +285,14 @@ end
             @test q.mu ≈ μ atol = 0.15
             @test q.sigma ≈ σ atol = 0.2
         end
+    end
+end
+
+
+import TinyPPL
+@testset "no type piracy of randn, reshape, pop!" begin # J6
+    for f in (randn, reshape, pop!)
+        @test !any(m -> Base.moduleroot(m.module) === TinyPPL, methods(f))
     end
 end
 

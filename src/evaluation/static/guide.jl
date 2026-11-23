@@ -1,5 +1,5 @@
 import Distributions
-import TinyPPL.Distributions: mean, mode, VariationalParameters, VariationalDistribution
+import TinyPPL.Distributions: mean, mode, VariationalParameters, VariationalDistribution, rand_reparam
 
 const Param2Ix = Dict{Address, UnitRange{Int}}
 
@@ -75,7 +75,7 @@ function sample(sampler::StaticGuideSampler, addr::Address, dist::Distribution, 
 end
 
 function sample(sampler::StaticGuideSampler, addr::Address, dist::Distribution, obs::Nothing)::RVValue
-    value = rand(dist)
+    value = rand_reparam(dist) # differentiable w.r.t. parameters of dist (for location-scale families)
     sampler.X[sampler.addresses_to_ix[addr]] = value
     sampler.W += logpdf(dist, value)
     return value

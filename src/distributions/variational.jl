@@ -4,6 +4,20 @@ import Distributions: entropy, MultivariateNormal
 import TinyPPL: sigmoid, ∇sigmoid, invsigmoid
 import Tracker, ForwardDiff, ReverseDiff
 
+"""
+Samples from `d` such that the value is differentiable w.r.t. the parameters of `d` (reparametrisation trick)
+for location-scale families, e.g. x = μ + σ ε with ε ~ Normal(0, 1).
+`Distributions.rand` does the same, but draws ε with `randn(rng, T)` for the parameter type `T`,
+which ReverseDiff does not implement for `TrackedReal` (and we do not want to add it to `Base.randn`, type piracy).
+For Float64 parameters, the same random numbers are drawn as by `Distributions.rand`.
+Other distributions fall back to `rand(d)`.
+"""
+rand_reparam(d::Distribution) = rand(d)
+rand_reparam(d::Normal) = d.μ + d.σ * randn()
+rand_reparam(d::LogNormal) = exp(d.μ + d.σ * randn())
+rand_reparam(d::MultivariateNormal) = d.μ + d.Σ.chol.L * randn(length(d)) # Σ = L L'
+export rand_reparam
+
 const VariationalParameters = Union{
     Vector{Float64},
     Tracker.TrackedVector{Float64, Vector{Float64}},
@@ -146,17 +160,11 @@ function update_params(q::FullRankGaussian, params::VariationalParameters)::Full
 end
 
 function rand_and_logpdf(q::FullRankGaussian)
-    # K = length(q.base)
-    # L = q.base.Σ.chol.L
-    # eta = randn(K)
-    # zeta = L*eta .+ q.base.μ
-    # value = zeta
-    # now works with fixed Tracker randn
-    value = rand(q.base)
+    value = rand_reparam(q.base) # μ + L η, η ~ Normal(0, I)
     return value, Distributions.logpdf(q.base, value)
 end
 function Distributions.rand(q::FullRankGaussian)
-    return rand(q.base)
+    return rand_reparam(q.base)
 end
 function Distributions.rand(q::FullRankGaussian, n::Int)
     return rand(q.base, n)
@@ -182,7 +190,7 @@ abstract type VariationalWrappedDistribution <: VariationalDistribution end
 Base.show(io::IO, Q::VariationalWrappedDistribution) = print(io, "VariationalDistribution($(Q.base))")
 
 function rand_and_logpdf(q::VariationalWrappedDistribution)
-    value = rand(q.base)
+    value = rand_reparam(q.base)
     return value, Distributions.logpdf(q.base, value)
 end
 function Distributions.rand(q::VariationalWrappedDistribution)

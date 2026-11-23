@@ -309,7 +309,6 @@ export factor_division!
 # A2.table[:,:,3] ≈ A.table
 # A2.table[:,:,4] ≈ A.table
 
-Base.reshape(f::Float64, ::Tuple{}) = f
 
 # numerically stable log(sum(exp(table), dims=dims))
 function logsumexp(table::AbstractArray{Float64}, dims)

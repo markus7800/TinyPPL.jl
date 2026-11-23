@@ -75,7 +75,8 @@ function isheap(A::Vector{ReductionSize})
 return true
 end
 
-function Base.pop!(A::Vector{ReductionSize})
+# removes and returns the minimum of the binary heap A (not Base.pop!, which removes the last element)
+function heap_pop!(A::Vector{ReductionSize})
     n = length(A)
     x = A[1]
     if n > 1
@@ -178,7 +179,7 @@ function get_greedy_elimination_order(variable_nodes::Vector{VariableNode}, marg
 
     elimination_order = VariableNode[]
     @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
-        r = pop!(reduction_size_heap)
+        r = heap_pop!(reduction_size_heap)
         node = r.v
         push!(elimination_order, node)
         # _, r2 = argmin(t -> get_metric(t[2]), reduction_size)
@@ -263,7 +264,7 @@ function greedy_variable_elimination(variable_nodes::Vector{VariableNode}, margi
     reduction_size, reduction_size_heap = initialise_reduction_size_heap(variable_nodes, marginal_variables)
 
     @progress for _ in 1:(length(variable_nodes)-length(marginal_variables))
-        r = pop!(reduction_size_heap)
+        r = heap_pop!(reduction_size_heap)
         node = r.v
 
         neighbour_factors = factor_nodes[node]

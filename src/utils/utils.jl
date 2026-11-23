@@ -52,10 +52,6 @@ import ReverseDiff
 no_grad(x::ReverseDiff.TrackedReal) = ReverseDiff.value(x)
 no_grad(x::ReverseDiff.TrackedArray) = ReverseDiff.value(x)
 
-import Base, Random
-Base.randn(::Type{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = ReverseDiff.TrackedReal{V,D,O}(randn(V))
-Base.randn(rng::Random.AbstractRNG, ::Type{ReverseDiff.TrackedReal{V,D,O}}) where {V,D,O} = ReverseDiff.TrackedReal{V,D,O}(randn(rng, V))
-
 # maps :x => :y => :z = :x => (:y => :z) to (:x => :y) => :z
 function reverse_pair(pair::Pair)
     new_pair = pair[1]
