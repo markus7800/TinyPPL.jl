@@ -58,6 +58,7 @@ function compile_likelihood_weighting(pgm::PGM)
     return lw
 end
 
+# returns traces, normalised log weights and the log evidence estimate
 function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; static_observes::Bool=false)
     X = Vector{Float64}(undef, pgm.n_latents)
     retvals = Vector{Any}(undef, n_samples)
@@ -73,7 +74,7 @@ function compiled_likelihood_weighting(pgm::PGM, lw::Function, n_samples::Int; s
         Xs[:,i] = X
     end
     
-    return GraphTraces(pgm, Xs, retvals), logprobs
+    return GraphTraces(pgm, Xs, retvals), normalise_with_log_evidence(logprobs)...
 end
 
 export compile_likelihood_weighting, compiled_likelihood_weighting

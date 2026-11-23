@@ -74,8 +74,8 @@ model = unplated_model;
 
 @info "LW"
 _ = Graph.likelihood_weighting(model, 100);
-Random.seed!(0); @time traces1, lps1 = Graph.likelihood_weighting(model, 1_000_000);
-logsumexp(lps1) - log(length(lps1))
+Random.seed!(0); @time traces1, lps1, log_Z1 = Graph.likelihood_weighting(model, 1_000_000);
+log_Z1
 
 # 3: -642.5230803377565
 # 4: -631.6612338187915

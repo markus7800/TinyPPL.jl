@@ -186,47 +186,51 @@ end
     N = 50_000
     @testset "normal_normal" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(normal_normal, (), nn_obs, N)
+        traces, lw, log_Z = likelihood_weighting(normal_normal, (), nn_obs, N)
+        @test sum(exp, lw) ≈ 1 # normalised log weights (A1)
+        @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
         @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.03
         @test wstd(traces[:μ], lw) ≈ R.NN_POST_SD atol = 0.03
         @test wmean(retvals(traces), lw) ≈ R.NN_POST_MEAN atol = 0.03
     end
     @testset "gamma_scale" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(gamma_scale, (), gs_obs, N)
+        traces, lw, log_Z = likelihood_weighting(gamma_scale, (), gs_obs, N)
         @test wmean(traces[:s], lw) ≈ R.GS_POST_MEAN atol = 0.05
     end
     @testset "beta_bernoulli" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(beta_bernoulli, (), bb_obs, N)
+        traces, lw, log_Z = likelihood_weighting(beta_bernoulli, (), bb_obs, N)
         @test wmean(traces[:p], lw) ≈ R.BB_POST_MEAN atol = 0.01
     end
     @testset "discrete_network" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(discrete_network, (), dn_obs, N)
+        traces, lw, log_Z = likelihood_weighting(discrete_network, (), dn_obs, N)
         @test [wprob(traces[:z], lw, k) for k in 1:3] ≈ R.DN_POST_Z atol = 0.01
         @test wprob(traces[:b], lw, 1) ≈ R.DN_POST_B[2] atol = 0.01
     end
     @testset "mixed" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(mixed, (), mx_obs, N)
+        traces, lw, log_Z = likelihood_weighting(mixed, (), mx_obs, N)
         @test wprob(traces[:z], lw, 1) ≈ R.MX_POST_Z1 atol = 0.01
         @test wmean(traces[:x], lw) ≈ R.MX_POST_MEAN_X atol = 0.03
     end
     @testset "branching" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(branching, (), br_obs, N)
+        traces, lw, log_Z = likelihood_weighting(branching, (), br_obs, N)
         @test wmean(retvals(traces), lw) ≈ R.BR_POST_POSITIVE atol = 0.01
     end
     @testset "geometric" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(geometric, (), geo_obs, N)
+        traces, lw, log_Z = likelihood_weighting(geometric, (), geo_obs, N)
         @test wmean(retvals(traces), lw) ≈ R.GEO_POST_MEAN atol = 0.05
     end
     @testset "retval completion" begin
         Random.seed!(0)
-        rets, lw = likelihood_weighting(normal_normal, (), nn_obs, N, E.retval_completion)
+        rets, lw, log_Z = likelihood_weighting(normal_normal, (), nn_obs, N, E.retval_completion)
         @test wmean(rets, lw) ≈ R.NN_POST_MEAN atol = 0.03
+        @test sum(exp, lw) ≈ 1
+        @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
     end
     @testset "trace completion returns distinct traces" begin # B15
         Random.seed!(0)
@@ -330,7 +334,8 @@ end
 @testset "imcmc" begin
     @testset "random walk normal_normal" begin
         Random.seed!(0)
-        traces, lps = imcmc(normal_normal, (), nn_obs, rw_aux, (), swap_involution!, 50_000)
+        traces = imcmc(normal_normal, (), nn_obs, rw_aux, (), swap_involution!, 50_000)
+        @test traces isa UniversalTraces && retvals(traces) == traces[:μ]
         @test mean(burn(traces[:μ])) ≈ R.NN_POST_MEAN atol = 0.05
         @test std(burn(traces[:μ])) ≈ R.NN_POST_SD atol = 0.05
     end
@@ -347,7 +352,8 @@ end
     @testset "normal_normal" begin # C1
         Random.seed!(0)
         result = non_parametric_hmc(normal_normal, (), nn_obs, 5_000, 10, 0.1)
-        μ = burn([X[:μ] for X in result])
+        @test result isa UniversalTraces && retvals(result) == result[:μ] # A1
+        μ = burn(result[:μ])
         @test mean(μ) ≈ R.NN_POST_MEAN atol = 0.05
         @test std(μ) ≈ R.NN_POST_SD atol = 0.05
     end
@@ -355,15 +361,16 @@ end
         Random.seed!(0)
         result = non_parametric_hmc(branching, (), br_obs, 5_000, 10, 0.1)
         # every trace contains exactly the branch address that matches the sign of b
-        @test all(haskey(X, X[:b] > 0 ? :c : :d) && !haskey(X, X[:b] > 0 ? :d : :c) for X in result)
-        @test mean(burn([X[:b] > 0 for X in result])) ≈ R.BR_POST_POSITIVE atol = 0.05
+        @test all(haskey(X, X[:b] > 0 ? :c : :d) && !haskey(X, X[:b] > 0 ? :d : :c) for X in result.data)
+        @test mean(burn([X[:b] > 0 for X in result.data])) ≈ R.BR_POST_POSITIVE atol = 0.05
         # E[c | b > 0, y] = (1 + y) / 2
-        @test mean(X[:c] for X in burn(result) if haskey(X, :c)) ≈ (1 + R.BR_Y) / 2 atol = 0.05
+        @test mean(X[:c] for X in burn(result.data) if haskey(X, :c)) ≈ (1 + R.BR_Y) / 2 atol = 0.05
     end
-    @testset "gamma_scale" begin # values are unconstrained: s = exp(X[:s])
+    @testset "gamma_scale" begin # chain runs on unconstrained values, traces are constrained (A1)
         Random.seed!(0)
         result = non_parametric_hmc(gamma_scale, (), gs_obs, 5_000, 10, 0.2)
-        s = burn([exp(X[:s]) for X in result])
+        @test all(>(0), result[:s])
+        s = burn(result[:s])
         @test mean(s) ≈ R.GS_POST_MEAN atol = 0.1
         @test std(s) ≈ R.GS_POST_SD atol = 0.1
     end
@@ -372,7 +379,7 @@ end
         result = non_parametric_hmc(normal_normal, (), nn_obs, 10, 10, 0.1; x_initial=UniversalTrace(:μ => 1.0))
         @test length(result) == 10
         result = non_parametric_hmc(gamma_scale, (), gs_obs, 1, 10, 0.2; x_initial=UniversalTrace(:s => 1.0))
-        @test haskey(result[1], :s) # x_initial is constrained and must be transformed
+        @test haskey(result.data[1], :s) # x_initial is constrained and must be transformed
     end
 end
 

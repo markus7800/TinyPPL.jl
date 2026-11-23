@@ -11,6 +11,18 @@ function normalise(logprobs::Vector{Float64})
 end
 export normalise
 
+"""
+Result convention of importance sampling algorithms (likelihood weighting, SMC):
+they return `(traces, logw, log_Z)`, where `logw` are the normalised log weights (`sum(exp.(logw)) == 1`)
+and `log_Z` is the estimate of the log evidence log p(Y).
+For importance sampling with unnormalised log weights log w_i, log_Z = log(1/N ∑ w_i).
+"""
+function normalise_with_log_evidence(logw::Vector{Float64})
+    log_Z = logsumexp(logw)
+    return logw .- log_Z, log_Z - log(length(logw))
+end
+export normalise_with_log_evidence
+
 function logsumexp(x)
     m = maximum(x)
     if m == -Inf

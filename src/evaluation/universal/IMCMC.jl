@@ -49,6 +49,8 @@ involution has to be implemented according to the TraceTransformation protocol.
 
 if check_involution = true, then we check at each iteration if passed function
 is indeed involution for current proposed value.
+
+Returns traces (like all MCMC algorithms).
 """
 function imcmc(model::UniversalModel, args::Tuple, observations::Observations,
     aux_model::UniversalModel, aux_args::Tuple, involution::Function,
@@ -65,7 +67,6 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Observations,
 
     traces = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
-    lps = Vector{Float64}(undef, n_samples) # log p(X,Y)
 
     n_accepted = 0
     @progress for i in 1:n_samples
@@ -106,13 +107,12 @@ function imcmc(model::UniversalModel, args::Tuple, observations::Observations,
         end
 
         traces[i] = trace_current
-        lps[i] = W_current
         retvals[i] = retval_current
     end
     
     @info "iMCMC" n_accepted/n_samples
 
-    return UniversalTraces(traces, retvals), lps
+    return UniversalTraces(traces, retvals)
 end
 
 export imcmc

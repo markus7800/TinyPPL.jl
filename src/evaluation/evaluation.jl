@@ -1,7 +1,7 @@
 module Evaluation
     import ..TinyPPL.Distributions: Distribution, logpdf
     import ProgressLogging: @progress
-    import TinyPPL: Address, AbstractTraces, VIResult, VIParameters, normalise
+    import TinyPPL: Address, AbstractTraces, VIResult, VIParameters, normalise, normalise_with_log_evidence
     export Address
 
     include("sampler.jl")

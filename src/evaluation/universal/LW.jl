@@ -29,6 +29,7 @@ the program prior p(X).
 We repeatedly sample from the program prior X_i ~ p(X) and record the Likelihood w_i = p(Y|X_i).
 The posterior can be approximated with ∑ w̃_i δ_{X_i},
 where w̃_i are the normalised weights w̃_i = w_i / ∑ w_i
+Returns traces, normalised log weights log w̃_i and the log evidence estimate log(1/N ∑ w_i).
 """
 function likelihood_weighting(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int)
     traces = Vector{UniversalTrace}(undef, n_samples)
@@ -42,7 +43,7 @@ function likelihood_weighting(model::UniversalModel, args::Tuple, observations::
         logprobs[i] = sampler.W
         traces[i] = sampler.trace
     end
-    return UniversalTraces(traces, retvals), normalise(logprobs)
+    return UniversalTraces(traces, retvals), normalise_with_log_evidence(logprobs)...
 end
 
 
@@ -67,6 +68,7 @@ The same behavior as likelihood weighting but you may specify a completion handl
 which takes for each iteration the trace and return value and maps it to an return type.
 This may be used if you do not care about the entire trace of a program and want
 to save memory.
+Returns the completion results, normalised log weights and the log evidence estimate.
 """
 function likelihood_weighting(model::UniversalModel, args::Tuple, observations::Dict, n_samples::Int, completion::Function)
     result =  Vector{Any}(undef, n_samples)
@@ -81,7 +83,7 @@ function likelihood_weighting(model::UniversalModel, args::Tuple, observations::
         logprobs[i] = sampler.W
         result[i] = completion(sampler.trace, retval)
     end
-    return result, logprobs
+    return result, normalise_with_log_evidence(logprobs)...
 end
 
 export likelihood_weighting

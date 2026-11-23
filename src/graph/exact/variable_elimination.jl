@@ -55,6 +55,17 @@ struct VariableEliminationResult
     log_evidence::Float64
 end
 
+"""
+Result convention of exact inference algorithms (variable_elimination, greedy_variable_elimination,
+belief_propagation, junction_tree_message_passing): the result has fields `log_evidence` (and `evidence`, which may underflow)
+and `get_posterior(res)` returns the normalised posterior table (linear space) over the query variables:
+the marginal variables for variable elimination and the scope of the root factor for belief propagation / junction trees
+(the return variables with `return_factor_as_root=true`).
+Calibrated belief propagation / junction tree results also provide the marginals of all variables with `get_marginals(res)`.
+"""
+get_posterior(res::VariableEliminationResult) = exp.(res.factor.table .- res.log_evidence)
+export get_posterior
+
 # factors with empty scope (e.g. observations that do not depend on latent variables)
 # they are not neighbours of any variable node
 get_scalar_factors(factor_nodes::Vector{FactorNode}) = FactorNode[f for f in factor_nodes if isempty(f.neighbours)]

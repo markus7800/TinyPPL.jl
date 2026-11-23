@@ -9,13 +9,15 @@ include("aux_model.jl");
 include("involution.jl");
 
 Random.seed!(0)
-@time traces, lp = imcmc(
+@time traces = imcmc(
     gmm, (n,), observations,
     aux_model, (n,),
     involution!,
     100_000 * 6;
     check_involution=true
 );
+# log p(X,Y) of each trace (MCMC algorithms only return traces)
+lp = [score_trace(gmm, (n,), observations, X) for X in traces.data]
 
 # number of times k changes
 sum(traces[:k,i] != traces[:k,i+1] for i in 1:(length(traces)-1))

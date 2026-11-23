@@ -257,9 +257,8 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
         if method == :ve
             for node in variable_nodes
                 ve_result = variable_elimination(pgm, variable_nodes, factor_nodes, [node.variable], :Greedy)
-                f, log_Z = ve_result.factor, ve_result.log_evidence
                 Δ = aqua_cell_width(node.support) # is not observed variable_node
-                result[node.address] =  (node.support, exp.(f.table .- log_Z) / Δ)
+                result[node.address] = (node.support, get_posterior(ve_result) / Δ)
             end
         elseif method == :bp
             
@@ -268,7 +267,7 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
                 error("Factor graph is not a tree :(")
             end
             be_result = belief_propagation(factor_nodes[1], true)
-            f, evidence, marginals = get_posterior_for_root_factor(be_result), be_result.evidence, get_marginals(be_result)
+            f, evidence, marginals = get_posterior(be_result), be_result.evidence, get_marginals(be_result)
             for (node, ps) in marginals
                 Δ = aqua_cell_width(node.support)
                 result[node.address] = (node.support, ps / Δ)
@@ -277,7 +276,7 @@ function aqua(pgm::PGM, N::Int; method::Symbol=:bp)
             elimination_order = get_elimination_order(pgm, variable_nodes, Int[], :Greedy)
             junction_tree, root_cluster_node, root_factor = get_junction_tree(variable_nodes, elimination_order, factor_nodes[1]; scalar_factors=get_scalar_factors(factor_nodes))
             jt_result = junction_tree_message_passing(junction_tree, root_cluster_node, root_factor, true)
-            f, evidence, marginals = get_posterior_for_root_factor(jt_result), jt_result.evidence, get_marginals(jt_result)
+            f, evidence, marginals = get_posterior(jt_result), jt_result.evidence, get_marginals(jt_result)
             for (node, ps) in marginals
                 Δ = aqua_cell_width(node.support)
                 result[node.address] = (node.support, ps / Δ)

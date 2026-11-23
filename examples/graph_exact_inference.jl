@@ -87,7 +87,7 @@ evaluate_return_expr_over_factor(model, ve_result.factor)
 ve_result = variable_elimination(variable_nodes, variable_nodes)
 
 jt_result = junction_tree_message_passing(model; return_factor_as_root=true)
-get_posterior_for_root_factor(jt_result)
+get_posterior(jt_result)
 
 
 model = @pgm Student begin
@@ -348,7 +348,7 @@ junction_tree, root_cluster_node, root_factor = get_junction_tree(model)
 print_junction_tree(root_cluster_node)
 
 res = belief_propagation(model, calibrate_tree=false)
-get_posterior_for_root_factor(res)
+get_posterior(res)
 
 res = belief_propagation(model, calibrate_tree=true)
 get_marginals_from_calibrated_belief_tree(res)
@@ -421,7 +421,7 @@ bar(post)
 
 
 res = junction_tree_message_passing(model, return_factor_as_root=true, calibrate_tree=true)
-get_posterior_for_root_factor(res)
+get_posterior(res)
 get_marginals(res)
 
 print_junction_tree(res.root)
@@ -435,7 +435,7 @@ q_joint, q_e = query(res, collect(1:model.n_latents))
 joint.table ≈ q_joint.table
 
 res = belief_propagation(model, calibrate_tree=true)
-get_posterior_for_root_factor(res)
+get_posterior(res)
 get_marginals(res)
 
 
@@ -608,7 +608,7 @@ exp_normalised_table(res.factor)
 
 res = junction_tree_message_passing(model, return_factor_as_root=true, calibrate_tree=true)
 print_dot_junction_tree(res.junction_tree)
-get_posterior_for_root_factor(res)
+get_posterior(res)
 
 q = query(res, parse_variables(model, [:c]))
 exp_normalised_table(q.factor)

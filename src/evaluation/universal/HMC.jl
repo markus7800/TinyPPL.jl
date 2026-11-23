@@ -202,6 +202,8 @@ If no `x_initial` is given, the chain starts at a random prior sample (the first
 For models with discontinuities this sample may lie in a region that HMC cannot leave,
 e.g. see examples/universal_non_parametric_hmc.jl. Then, it helps to initialise the chain with a likely trace
 (for instance the trace with the largest weight among some likelihood weighting samples).
+
+Returns traces with constrained values (like all MCMC algorithms), although the chain runs on unconstrained values.
 """
 function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Observations, n_samples::Int, L::Int, eps::Float64;
     x_initial::Union{Nothing,AbstractUniversalTrace}=nothing)
@@ -211,14 +213,16 @@ function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Ob
         X_current = NPHMCTrace()
         U_current = Inf # first proposal is always accepted
         retval_current = nothing
+        X_current_constrained = UniversalTrace()
     else
         X_unconstrained, _ = transform_to_unconstrained(x_initial, model, args, observations)
         X_current = NPHMCTrace(X_unconstrained)
         U_current, _, retval_current, used = get_U(model, args, observations, X_current)
         X_current = NPHMCTrace(addr => X_current[addr] for addr in used)
+        X_current_constrained, _ = transform_to_constrained(X_current, model, args, observations)
     end
 
-    result = Vector{NPHMCTrace}(undef, n_samples)
+    result = Vector{UniversalTrace}(undef, n_samples)
     retvals = Vector{Any}(undef, n_samples)
     n_accepted = 0
     @progress for i in 1:n_samples
@@ -234,16 +238,17 @@ function non_parametric_hmc(model::UniversalModel, args::Tuple, observations::Ob
             X_current = NPHMCTrace(addr => X_proposed[addr] for addr in used)
             U_current = U_proposed
             retval_current = retval_proposed
+            X_current_constrained, _ = transform_to_constrained(X_current, model, args, observations)
             n_accepted += 1
         end
         # Store regardless of acceptance
-        result[i] = X_current
+        result[i] = X_current_constrained
         retvals[i] = retval_current
     end
 
     @info "HMC" n_accepted/n_samples
 
-    return result
+    return UniversalTraces(result, retvals)
 end
 
 export non_parametric_hmc

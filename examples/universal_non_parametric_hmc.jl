@@ -36,8 +36,8 @@ x_initial = traces.data[argmax(lw)]
 
 Random.seed!(0); @time result = non_parametric_hmc(pedestrian, args, observations, 10_000, 10, 0.05; x_initial=x_initial);
 
-# result contains unconstrained values
-start_position = [transform_to_constrained(X, pedestrian, args, observations)[2] for X in result]
+# result contains constrained values and return values
+start_position = retvals(result)
 
 histogram(start_position, normalize=true, legend=false)
 density!(lw_retvals, weights=W)

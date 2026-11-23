@@ -28,6 +28,7 @@ end
 Likelihood weighting is a special case of importance sampling where the reference distribution is
 the program prior p(X).
 See evaluation/universal/LW.jl
+Returns traces, normalised log weights and the log evidence estimate.
 """
 function likelihood_weighting(model::StaticModel, args::Tuple, observations::Observations, n_samples::Int)
     addresses_to_ix = get_address_to_ix(model, args, observations)
@@ -40,7 +41,7 @@ function likelihood_weighting(model::StaticModel, args::Tuple, observations::Obs
         traces.retvals[i] = model(args, sampler, observations)
         logprobs[i] = sampler.W
     end
-    return traces, logprobs
+    return traces, normalise_with_log_evidence(logprobs)...
 end
 
 """
@@ -87,7 +88,7 @@ function likelihood_weighting(model::StaticModel, args::Tuple, observations::Dic
         traces.data[:,i] = sampler.trace[1:K]
         logprobs[i] = sampler.W
     end
-    return traces, logprobs
+    return traces, normalise_with_log_evidence(logprobs)...
 end
 
 export likelihood_weighting

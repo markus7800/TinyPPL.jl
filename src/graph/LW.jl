@@ -1,5 +1,6 @@
 import ..TinyPPL.Distributions: logpdf
 
+# returns traces, normalised log weights and the log evidence estimate
 function likelihood_weighting(pgm::PGM, n_samples::Int)
 
     retvals = Vector{Any}(undef, n_samples)
@@ -27,7 +28,7 @@ function likelihood_weighting(pgm::PGM, n_samples::Int)
         trace[:,i] = X
     end
 
-    return GraphTraces(pgm, trace, retvals), logprobs
+    return GraphTraces(pgm, trace, retvals), normalise_with_log_evidence(logprobs)...
 end
 
 export likelihood_weighting

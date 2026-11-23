@@ -209,13 +209,13 @@ function _compute_factor_from_messages(beliefnode::BeliefNode)
     return FactorNode(beliefnode.node.neighbours, table)
 end
 
-function get_posterior_for_root_factor(res::BeliefPropagationResult)
+# posterior over the scope of the root factor, see get_posterior(::VariableEliminationResult)
+function get_posterior(res::BeliefPropagationResult)
     # [root.neighbours].node are root.node.neighbours
     root_factor = _compute_factor_from_messages(res.root)
     # sum(exp, root_factor.table) should be equal to evidence
     return exp.(root_factor.table .- res.log_evidence)
 end
-export get_posterior_for_root_factor
 
 function get_marginals(res::BeliefPropagationResult)
     @assert res.is_calibrated

@@ -290,18 +290,23 @@ end
         @test ve_return_probs(discrete_network, res, [1., 2., 3.]) ≈ R.DN_POST_Z
         @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
     end
+    @testset "get_posterior of variable_elimination" begin # A1
+        res = variable_elimination(discrete_network; marginal_variables=[:z])
+        node = only(res.factor.neighbours)
+        @test get_posterior(res)[[findfirst(==(v), node.support) for v in (1., 2., 3.)]] ≈ R.DN_POST_Z
+    end
     @testset "variable_elimination marginal b" begin
         @test ve_marginal(discrete_network, :b, [0., 1.]) ≈ R.DN_POST_B
     end
     @testset "belief_propagation" begin
         res = belief_propagation(discrete_network; calibrate_tree=true, return_factor_as_root=true)
-        @test get_posterior_for_root_factor(res) ≈ R.DN_POST_Z
+        @test get_posterior(res) ≈ R.DN_POST_Z
         @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
         @test marginal(get_marginals(res), :b, [0., 1.]) ≈ R.DN_POST_B
     end
     @testset "junction_tree_message_passing" begin
         res = junction_tree_message_passing(discrete_network; calibrate_tree=true, return_factor_as_root=true)
-        @test get_posterior_for_root_factor(res) ≈ R.DN_POST_Z
+        @test get_posterior(res) ≈ R.DN_POST_Z
         @test res.log_evidence ≈ R.DN_LOG_EVIDENCE
         @test marginal(get_marginals(res), :b, [0., 1.]) ≈ R.DN_POST_B
     end
@@ -407,13 +412,13 @@ end
     end
     @testset "belief_propagation" begin
         res = belief_propagation(many_observations; calibrate_tree=true, return_factor_as_root=true)
-        @test get_posterior_for_root_factor(res) ≈ R.MO_POST_Z
+        @test get_posterior(res) ≈ R.MO_POST_Z
         @test res.log_evidence ≈ R.MO_LOG_EVIDENCE
         @test [p for (_, p) in get_marginals(res)] ≈ [R.MO_POST_Z]
     end
     @testset "junction_tree_message_passing" begin
         res = junction_tree_message_passing(many_observations; calibrate_tree=true, return_factor_as_root=true)
-        @test get_posterior_for_root_factor(res) ≈ R.MO_POST_Z
+        @test get_posterior(res) ≈ R.MO_POST_Z
         @test res.log_evidence ≈ R.MO_LOG_EVIDENCE
         @test [p for (_, p) in get_marginals(res)] ≈ [R.MO_POST_Z]
     end
@@ -424,7 +429,7 @@ end
     @test ve_return_probs(burglary, variable_elimination(burglary), [0., 1.]) ≈ ref
     @test ve_return_probs(burglary, greedy_variable_elimination(burglary), [0., 1.]) ≈ ref
     res = junction_tree_message_passing(burglary; return_factor_as_root=true)
-    @test get_posterior_for_root_factor(res) ≈ ref
+    @test get_posterior(res) ≈ ref
 end
 
 # ------------------------------------------------------------------------ AQUA

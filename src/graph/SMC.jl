@@ -179,7 +179,7 @@ function _smc_worker(pgm::PGM, n_particles::Int, X_ref::Union{Nothing,Vector{Flo
         retvals[i] = get_retval(pgm, X)
     end
     traces = reduce(hcat, particles)
-    return GraphTraces(pgm, traces, retvals), log_w, log_marginal_lik
+    return GraphTraces(pgm, traces, retvals), normalise(log_w), log_marginal_lik
 end
 
 function smc(pgm::PGM, n_particles::Int; addr2proposal::Addr2Proposal=Addr2Proposal())

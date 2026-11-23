@@ -49,7 +49,7 @@ end
 Q = Addr2Proposal(:X => StaticProposal(Normal()), :Y => ContinuousRandomWalkProposal(0.5, -Inf, Inf))
 
 Random.seed!(0)
-traces, lps = imcmc(
+traces = imcmc(
     model, (), observations,
     static_lmh_aux, (Q,),
     static_lmh_involution!,
@@ -155,7 +155,7 @@ old_model_trace_2, old_proposal_trace_2 = apply(hmc_transformation, new_model_tr
 
 
 Random.seed!(0)
-traces, lps = imcmc(
+traces = imcmc(
     model, (), observations,
     hmc_aux, (),
     hmc_involution!,

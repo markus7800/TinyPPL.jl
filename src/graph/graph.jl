@@ -1,6 +1,6 @@
 module Graph
     import ProgressLogging: @progress
-    import TinyPPL: Address, AbstractTraces, VIResult, normalise, logsumexp
+    import TinyPPL: Address, AbstractTraces, VIResult, normalise, normalise_with_log_evidence, logsumexp
     export Address
 
     # model functions are generated at runtime as RuntimeGeneratedFunctions, see notes/graph_codegen.md

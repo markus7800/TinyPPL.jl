@@ -409,7 +409,8 @@ end
 
 export junction_tree_message_passing
 
-function get_posterior_for_root_factor(res::JunctionTreeMessagePassingResult)
+# posterior over the scope of the root factor, see get_posterior(::VariableEliminationResult)
+function get_posterior(res::JunctionTreeMessagePassingResult)
     # The message δ_{k → i}(S_ki) multiplies all factors that are reachable from i through k
     # Thus, β_i(C_i) = ψ_i ∏ δ_{k → i} = ∑_{X - C_i} P(X) (Corollary 10.2)
     # This, holds for root C_r after forward pass and for all other nodes after backward pass (Corollary 10.1)
@@ -419,7 +420,6 @@ function get_posterior_for_root_factor(res::JunctionTreeMessagePassingResult)
     return_factor = factor_sum(return_factor, setdiff(return_factor.neighbours, root_factor.neighbours))
     return exp.(return_factor.table .- res.log_evidence)
 end
-export get_posterior_for_root_factor
 
 function get_marginals(res::JunctionTreeMessagePassingResult)
     @assert res.is_calibrated

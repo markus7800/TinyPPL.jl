@@ -105,42 +105,43 @@ end
     N = 50_000
     @testset "normal_normal" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(normal_normal, (), nn_obs, N)
+        traces, lw, log_Z = likelihood_weighting(normal_normal, (), nn_obs, N)
+        @test sum(exp, lw) ≈ 1 # normalised log weights (A1)
         @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.03
         @test wstd(traces[:μ], lw) ≈ R.NN_POST_SD atol = 0.03
-        @test is_log_evidence(lw) ≈ R.NN_LOG_EVIDENCE atol = 0.02
+        @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
     end
     @testset "gamma_scale" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(gamma_scale, (), gs_obs, N)
+        traces, lw, log_Z = likelihood_weighting(gamma_scale, (), gs_obs, N)
         @test wmean(traces[:s], lw) ≈ R.GS_POST_MEAN atol = 0.05
-        @test is_log_evidence(lw) ≈ R.GS_LOG_EVIDENCE atol = 0.02
+        @test log_Z ≈ R.GS_LOG_EVIDENCE atol = 0.02
     end
     @testset "beta_bernoulli" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(beta_bernoulli, (), bb_obs, N)
+        traces, lw, log_Z = likelihood_weighting(beta_bernoulli, (), bb_obs, N)
         @test wmean(traces[:p], lw) ≈ R.BB_POST_MEAN atol = 0.01
-        @test is_log_evidence(lw) ≈ R.BB_LOG_EVIDENCE atol = 0.02
+        @test log_Z ≈ R.BB_LOG_EVIDENCE atol = 0.02
     end
     @testset "discrete_network" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(discrete_network, (), dn_obs, N)
+        traces, lw, log_Z = likelihood_weighting(discrete_network, (), dn_obs, N)
         @test [wprob(traces[:z], lw, k) for k in 1:3] ≈ R.DN_POST_Z atol = 0.01
-        @test is_log_evidence(lw) ≈ R.DN_LOG_EVIDENCE atol = 0.02
+        @test log_Z ≈ R.DN_LOG_EVIDENCE atol = 0.02
     end
     @testset "mixed" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(mixed, (), mx_obs, N)
+        traces, lw, log_Z = likelihood_weighting(mixed, (), mx_obs, N)
         @test wprob(traces[:z], lw, 1) ≈ R.MX_POST_Z1 atol = 0.01
         @test wmean(traces[:x], lw) ≈ R.MX_POST_MEAN_X atol = 0.03
-        @test is_log_evidence(lw) ≈ R.MX_LOG_EVIDENCE atol = 0.02
+        @test log_Z ≈ R.MX_LOG_EVIDENCE atol = 0.02
     end
     @testset "linear_regression with address subset" begin
         Random.seed!(0)
-        traces, lw = likelihood_weighting(linear_regression, lr_args, lr_obs, 200_000, Address[:slope])
+        traces, lw, log_Z = likelihood_weighting(linear_regression, lr_args, lr_obs, 200_000, Address[:slope])
         @test size(traces.data, 1) == 1
         @test wmean(traces[:slope], lw) ≈ R.LR_POST_MEAN[1] atol = 0.1
-        @test is_log_evidence(lw) ≈ R.LR_LOG_EVIDENCE atol = 0.2
+        @test log_Z ≈ R.LR_LOG_EVIDENCE atol = 0.2
     end
 end
 
@@ -336,6 +337,7 @@ end
     @testset "normal_normal" begin # C3
         Random.seed!(0)
         traces, lw, log_marginal_lik = smc(normal_normal, (), nn_obs, N)
+        @test sum(exp, lw) ≈ 1 # normalised log weights (A1)
         @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.05
         @test log_marginal_lik ≈ R.NN_LOG_EVIDENCE atol = 0.05
     end
