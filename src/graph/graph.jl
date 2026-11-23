@@ -3,6 +3,10 @@ module Graph
     import TinyPPL: Address, AbstractTraces, VIResult, normalise, logsumexp
     export Address
 
+    # model functions are generated at runtime as RuntimeGeneratedFunctions, see notes/graph_codegen.md
+    import RuntimeGeneratedFunctions
+    RuntimeGeneratedFunctions.init(@__MODULE__)
+
     include("core/core.jl")
 
     """

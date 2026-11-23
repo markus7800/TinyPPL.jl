@@ -33,8 +33,8 @@ function get_compute_W_block_args(pgm::PGM, plates::Vector{Plate}, children::Vec
     block_args = []
     for child in children
         if child in plates
-            plate_f_name = plate_function_name(pgm.name, :lp, child)
-            push!(block_args, Expr(op, log_α, :($plate_f_name($X, $Y))))
+            plate_f = plate_function(pgm.plate_info, :lp, child)
+            push!(block_args, Expr(op, log_α, :($plate_f($X, $Y))))
         else
             child_d_sym = gensym("child_dist_$child")
             push!(block_args, :($child_d_sym = $(symbolic_dists[child])))
@@ -162,8 +162,6 @@ function compile_single_site(pgm::PGM, kernel::Function)
     end
 
     # compile one update function for each variable
-    # unique prefix, such that compiling kernels again (e.g. compile_rwmh after compile_lmh) does not overwrite these functions
-    f_prefix = gensym("$(pgm.name)_single_site")
     lmh_functions = Function[]
     value_current = gensym("value_current")
     for node in 1:pgm.n_latents
@@ -202,22 +200,20 @@ function compile_single_site(pgm::PGM, kernel::Function)
             end)
         )  
 
-        f_name = Symbol("$(f_prefix)_$node")
-        f = rmlines(:(
-            function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
+        f = :(
+            function ($X::Vector{Float64}, $Y::Vector{Float64})
                 $(Expr(:block, block_args...))
             end
-        ))
+        )
         # display(f)
-        f = eval(f)
-        push!(lmh_functions, f)
+        push!(lmh_functions, make_function(f))
     end
 
     X = Vector{Float64}(undef, pgm.n_latents);
     pgm.sample!(X) # initialise
     for f in lmh_functions
         # println(f)
-        Base.invokelatest(f, X, pgm.observations)
+        f(X, pgm.observations)
     end
     return lmh_functions
 end

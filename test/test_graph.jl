@@ -12,8 +12,7 @@ using ..TestUtils
 
 # ---------------------------------------------------------------------- models
 # see references.jl for the mathematical definitions.
-# Data is inlined, since @pgm cannot see variables of this module.
-# Model names must be globally unique (REVIEW.md J2), hence the `graph_test_` prefix.
+# Data is mostly inlined, but @pgm can also use variables of the calling module (see "models in other modules").
 
 const normal_normal = @pgm graph_test_normal_normal begin
     let μ ~ Normal(0., 2.),
@@ -298,6 +297,34 @@ end
     @test all(all(x .> 0) for x in samples)
 end
 
+# static parts of the program (ranges, observations, $(...)) are evaluated in the module where @pgm is called,
+# and models can be created and used inside the same function (no world age issues) (J2, J4)
+module GraphTestsOtherModule
+    using TinyPPL.Graph, TinyPPL.Distributions
+    ys = [1., 2.]
+    n = 2
+    shift = 10.
+    function make_and_logpdf(x::Float64)
+        scale = 1. # local variable, can be interpolated
+        m = @pgm graph_test_other_module begin
+            let x ~ Normal(0., 1.)
+                [({:y => i} ~ Normal(x + $(shift), $(scale)) ↦ ys[i]) for i in 1:n]
+                x
+            end
+        end
+        lw = compile_likelihood_weighting(m)
+        X = Vector{Float64}(undef, m.n_variables)
+        lw(X, m.observations) # compiled in this function as well
+        return m.observations, m.logpdf([x], m.observations)
+    end
+end
+
+@testset "models in other modules and functions" begin # J2, J4
+    observations, lp = GraphTestsOtherModule.make_and_logpdf(0.5)
+    @test observations == [1., 2.]
+    @test lp ≈ logpdf(Normal(0., 1.), 0.5) + logpdf(Normal(10.5, 1.), 1.) + logpdf(Normal(10.5, 1.), 2.)
+end
+
 @testset "model redefinition does not affect existing PGMs" begin # J2
     m1 = @pgm graph_test_redefine begin
         let x ~ Normal(0., 1.)
@@ -329,6 +356,9 @@ end
     end
     @test p1.logpdf([0.5, 0.5, 0.5], Float64[]) ≈ plp ≈ 3 * logpdf(Normal(0., 1.), 0.5)
     @test p2.logpdf([0.5, 0.5, 0.5], Float64[]) ≈ 3 * logpdf(Normal(100., 1.), 0.5)
+    lw_p1 = compile_likelihood_weighting(p1) # calls plate functions
+    _, lp_p1 = lw_p1(zeros(3), Float64[])
+    @test lp_p1 == 0. # no observations
 
     # compiled kernels of the same model
     lmh_kernels = compile_lmh(normal_normal)

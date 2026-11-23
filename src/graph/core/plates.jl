@@ -177,11 +177,7 @@ function get_plates(n_variables::Int, edges::Set{Pair{Int,Int}}, addresses::Vect
     return plates, plated_edges
 end
 
-function plate_function_name(name::Symbol, kind::Symbol, plate::Plate)
-    Symbol("$(name)_$(kind)_plate_$(plate.symbol)")
-end
-
-function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edges::Set{PlatedEdge}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, Y::Symbol, X_unconstrained::Symbol, kind::Symbol)
+function get_plate_functions(plates::Vector{Plate}, plated_edges::Set{PlatedEdge}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, Y::Symbol, X_unconstrained::Symbol, kind::Symbol)
     n_latents = length(is_observed) - sum(is_observed)
     @assert kind in (:sample, :lp, :lp_unconstrained, :to_constrained, :to_unconstrained)
     static_observes = true
@@ -370,29 +366,27 @@ function get_plate_functions(pgm_name::Symbol, plates::Vector{Plate}, plated_edg
             push!(block_args, :($lp))
         end
     
-        f_name = plate_function_name(pgm_name, kind, plate)
         if kind in (:to_constrained, :to_unconstrained)
-            f = rmlines(:(
-                function $f_name($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
+            f = :(
+                function ($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
                     $(Expr(:block, block_args...)) # TODO: replace ...
                 end
-            ))
+            )
         elseif kind in (:lp, :lp_unconstrained)
-            f = rmlines(:(
-                function $f_name($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
+            f = :(
+                function ($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
                     $(Expr(:block, block_args...)) # TODO: replace ...
                 end
-            ))
+            )
         elseif kind == :sample
-            f = rmlines(:(
-                function $f_name($X::INPUT_VECTOR_TYPE)
+            f = :(
+                function ($X::INPUT_VECTOR_TYPE,)
                     $(Expr(:block, block_args...)) # TODO: replace ...
                 end
-            ))
+            )
         end
         # display(f)
-        f = eval(f)
-        push!(plate_functions, f)
+        push!(plate_functions, make_function(f))
     end
     return plate_functions
 end
@@ -406,6 +400,27 @@ struct PlateInfo
     plate_sample_fs::Vector{Function}
     plate_to_constrained::Vector{Function}
     plate_to_unconstrained::Vector{Function}
+end
+
+# Returns the generated function of kind `kind` for `plate`.
+# Generated code calls it by interpolating the function itself (not a global name), e.g. :($(plate_function(...))(X, Y))
+function plate_function(plate_info::PlateInfo, kind::Symbol, plate::Plate)
+    i = findfirst(==(plate), plate_info.plates)
+    @assert !isnothing(i) "$plate not in plates"
+    fs = if kind == :lp
+        plate_info.plate_lp_fs
+    elseif kind == :lp_unconstrained
+        plate_info.plate_lp_unconstrained_fs
+    elseif kind == :sample
+        plate_info.plate_sample_fs
+    elseif kind == :to_constrained
+        plate_info.plate_to_constrained
+    elseif kind == :to_unconstrained
+        plate_info.plate_to_unconstrained
+    else
+        error("Unknown plate function kind $kind.")
+    end
+    return fs[i]
 end
 
 function get_topolocial_order(n_variables::Int, plate_info::PlateInfo)

@@ -8,6 +8,18 @@ import TinyPPL: rmlines, isbraced
 # Vector{Float64}, Tracker.TrackedVector, Vector{Tracker.TrackedReal}, Vector{ForwardDiff.Dual}, ReverseDiff.TrackedArray, ...
 const INPUT_VECTOR_TYPE = AbstractVector{<:Real}
 
+# Generated model functions (distributions, sample!, logpdf, transforms, plate functions, compiled kernels)
+# are RuntimeGeneratedFunctions instead of eval'ed global functions (see notes/graph_codegen.md):
+# - they are values (no global names), so compiling a model again does not overwrite the functions of existing PGMs,
+# - they can be called in the world in which they are created (no world age errors / invokelatest),
+# - each one has its own concrete type, so a function interpolated into the body of another one
+#   (e.g. plate functions in logpdf) is called statically and can be inlined, like a global named function.
+# Global names in the body are resolved in TinyPPL.Graph.
+# Note: RuntimeGeneratedFunctions ignore type annotations of the arguments.
+function make_function(f::Expr)
+    return RuntimeGeneratedFunctions.RuntimeGeneratedFunction(@__MODULE__, @__MODULE__, rmlines(f))
+end
+
 include("metaprogramming_utils.jl")
 include("symbolic_pgm.jl")
 include("plates.jl")
@@ -71,11 +83,11 @@ macro pgm(annotations, name, foppl)
     else
         annotations = Set{Symbol}(annotations.args)
     end
-    return pgm_macro(annotations, name, foppl)
+    return pgm_macro(annotations, name, foppl, __module__)
 end
 
 macro pgm(name, foppl)
-    return pgm_macro(Set{Symbol}(), name, foppl)
+    return pgm_macro(Set{Symbol}(), name, foppl, __module__)
 end
 
 # function pgm_macro(annotations, name, foppl)
@@ -93,8 +105,14 @@ end
 #     return pgm
 # end
 
-function pgm_macro(annotations, name, _foppl)
+# `mod` is the module in which @pgm is called, static parts of the program (addresses, ranges, observations)
+# are evaluated there (global variables of `mod` are visible).
+# $(...) interpolations are evaluated when the @pgm expression is run, in the scope where @pgm is called
+# (also local variables are visible).
+function pgm_macro(annotations, name, _foppl, mod::Module)
     lazy_ifs = :lazy_ifs in annotations
+    # escape interpolated expressions, otherwise they are resolved in TinyPPL.Graph (macro hygiene)
+    _foppl = MacroTools.postwalk(x -> x isa Expr && x.head == :$ ? Expr(:$, esc(x.args[1])) : x, _foppl)
     return quote
         foppl = $(Expr(:quote, _foppl))
         foppl = rmlines(foppl);
@@ -105,7 +123,7 @@ function pgm_macro(annotations, name, _foppl)
         foppl = MacroTools.postwalk(expr -> MacroTools.@capture(expr, var_ ~ dist_) ? :($var = $(Expr(:sample, QuoteNode(var), dist))) : expr,  foppl);
         foppl = unwrap_let(foppl)
 
-        G, E, variable_to_address, translation_order = transpile_program(foppl, $lazy_ifs);
+        G, E, variable_to_address, translation_order = transpile_program(foppl, $lazy_ifs, $mod);
         compile_symbolic_pgm($(QuoteNode(name)), G, E, variable_to_address, translation_order, $annotations);
     end
 end
@@ -258,7 +276,7 @@ function should_transform_to_unconstrained(symbolic_dist)
     return !isempty(dist_names ∩ CONSTRAINED_DISTRIBUTIONS)
 end
 
-function get_sample(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol)
+function get_sample(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol)
     sample_block_args = []
 
     ordered_nodes = if isnothing(plate_info)
@@ -271,8 +289,8 @@ function get_sample(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     for node in ordered_nodes
         
         if node isa Plate
-            plate_f_name = plate_function_name(name, :sample, node)
-            push!(sample_block_args, :($plate_f_name($X)))
+            plate_f = plate_function(plate_info, :sample, node)
+            push!(sample_block_args, :($plate_f($X)))
         else
             if !is_observed[node]
                 d = symbolic_dists[node]
@@ -283,18 +301,16 @@ function get_sample(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     end
 
     push!(sample_block_args, :($nothing))
-    f_name = Symbol("$(name)_sample")
-    f = rmlines(:(
-        function $f_name($X::INPUT_VECTOR_TYPE)
+    f = :(
+        function ($X::INPUT_VECTOR_TYPE,)
             $(Expr(:block, sample_block_args...))
         end
-    ))
+    )
     # display(f)
-    sample = eval(f)
-    return sample
+    return make_function(f)
 end
 
-function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists::Vector, is_observed::Vector{Bool}, X::Symbol, Y::Symbol; unconstrained::Bool=false)
+function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists::Vector, is_observed::Vector{Bool}, X::Symbol, Y::Symbol; unconstrained::Bool=false)
     n_latents = n_variables - sum(is_observed)
     lp = gensym(:lp)
     lp_block_args = []
@@ -327,8 +343,8 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     d_sym = gensym("dist")
     for node in ordered_nodes
         if node isa Plate
-            plate_f_name = plate_function_name(name, unconstrained ? :lp_unconstrained : :lp, node)
-            push!(lp_block_args, :($lp += $plate_f_name($X, $Y)))
+            plate_f = plate_function(plate_info, unconstrained ? :lp_unconstrained : :lp, node)
+            push!(lp_block_args, :($lp += $plate_f($X, $Y)))
         else
             d = substitute_constrained(symbolic_dists[node])
             
@@ -358,20 +374,17 @@ function get_logpdf(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, p
     push!(lp_block_args, :($lp))
 
     
-    f_name = !unconstrained ? Symbol("$(name)_logpdf") : Symbol("$(name)_logpdf_unconstrained")
-
-    f = rmlines(:(
-        function $f_name($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
+    f = :(
+        function ($X::INPUT_VECTOR_TYPE, $Y::Vector{Float64})
             $(Expr(:block, lp_block_args...)) # TODO: replace ...
         end
-    ))
+    )
     # display(f)
-    logpdf = eval(f)
-    return logpdf
+    return make_function(f)
 end
 
 
-function get_transform(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, X_unconstrained::Symbol; to::Symbol)
+function get_transform(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Union{Nothing,PlateInfo}, symbolic_dists, is_observed::Vector{Bool}, X::Symbol, X_unconstrained::Symbol; to::Symbol)
     # X is constrained, Y is unconstrained
     # distributions arguments are written in terms of X
     # to = :unconstrained leaves X unchanged, writes into Y
@@ -393,8 +406,8 @@ function get_transform(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}
     d_sym = gensym("dist")
     for node in ordered_nodes
         if node isa Plate
-            plate_f_name = plate_function_name(name, to == :constrained ? :to_constrained : :to_unconstrained, node)
-            push!(block_args, :($plate_f_name($X,$X_unconstrained)))
+            plate_f = plate_function(plate_info, to == :constrained ? :to_constrained : :to_unconstrained, node)
+            push!(block_args, :($plate_f($X,$X_unconstrained)))
         else
             d = symbolic_dists[node]
             
@@ -425,16 +438,13 @@ function get_transform(name::Symbol, n_variables::Int, edges::Set{Pair{Int,Int}}
     end
 
     
-    f_name = Symbol("$(name)_transform_to_$(to)!")
-
-    f = rmlines(:(
-        function $f_name($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
+    f = :(
+        function ($X::INPUT_VECTOR_TYPE, $X_unconstrained::INPUT_VECTOR_TYPE)
             $(Expr(:block, block_args...))
         end
-    ))
+    )
     # display(f)
-    transform = eval(f)
-    return transform
+    return make_function(f)
 end
 
 function is_topological_order(spgm::SymbolicPGM, order::Vector{Symbol})
@@ -462,10 +472,6 @@ function compile_symbolic_pgm(
     translation_order::Vector{Symbol},
     annotations::Set{Symbol}
     )
-
-    # unique prefix for all generated functions (global functions in TinyPPL.Graph),
-    # such that compiling another model with the same name does not overwrite the functions of this model
-    f_prefix = gensym(name)
 
     n_variables = length(spgm.V)
     n_observes = length(spgm.Y)
@@ -501,29 +507,27 @@ function compile_symbolic_pgm(
         sym = ix_to_sym[i]
         addresses[i] = variable_to_address[sym]
 
-        f_name = Symbol("$(f_prefix)_dist_$i")
-        f = rmlines(:(
-            function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_latents
+        f = :(
+            function ($X::INPUT_VECTOR_TYPE,) # length($X) = n_latents
                 $(symbolic_dists[i])
             end
-        ))
+        )
         # display(f)
-        distributions[i] = eval(f)
+        distributions[i] = make_function(f)
         if isobserved(spgm, ix_to_sym[i])
             observations[i-n_latents] = spgm.Y[sym]
         end
     end
 
     # wrap return expression in function
-    f_name = Symbol("$(f_prefix)_return")
     new_E = subtitute_for_syms(var_to_expr, deepcopy(E), X)
-    f = rmlines(:(
-        function $f_name($X::INPUT_VECTOR_TYPE) # length($X) = n_latents
+    f = :(
+        function ($X::INPUT_VECTOR_TYPE,) # length($X) = n_latents
             $new_E
         end
-    ))
+    )
     # display(f)
-    return_expr = eval(f)
+    return_expr = make_function(f)
 
 
     X_unconstrained = gensym(:X_unconstrained) # unconstrained
@@ -539,11 +543,11 @@ function compile_symbolic_pgm(
         for edge in plated_edges
             println(edge)
         end
-        plate_lp_fs = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp)
-        plate_lp_unconstrained_fs = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp_unconstrained)
-        plate_sample_fs = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :sample)
-        plate_to_constrained = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_constrained)
-        plate_to_unconstrained = get_plate_functions(f_prefix, plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_unconstrained)
+        plate_lp_fs = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp)
+        plate_lp_unconstrained_fs = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :lp_unconstrained)
+        plate_sample_fs = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :sample)
+        plate_to_constrained = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_constrained)
+        plate_to_unconstrained = get_plate_functions(plates, plated_edges, symbolic_dists, is_observed, X, Y, X_unconstrained, :to_unconstrained)
         plate_info = PlateInfo(plate_symbols, plates, plated_edges,
             plate_lp_fs,
             plate_lp_unconstrained_fs,
@@ -555,29 +559,29 @@ function compile_symbolic_pgm(
         plate_info = nothing
     end
 
-    sample! = get_sample(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X)
-    logpdf = get_logpdf(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=false)
-    unconstrained_logpdf = get_logpdf(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=true)
-    transform_to_constrained! = get_transform(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:constrained)
-    transform_to_unconstrained! = get_transform(f_prefix, n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:unconstrained)
+    sample! = get_sample(n_variables, edges, plate_info, symbolic_dists, is_observed, X)
+    logpdf = get_logpdf(n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=false)
+    unconstrained_logpdf = get_logpdf(n_variables, edges, plate_info, symbolic_dists, is_observed, X, Y; unconstrained=true)
+    transform_to_constrained! = get_transform(n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:constrained)
+    transform_to_unconstrained! = get_transform(n_variables, edges, plate_info, symbolic_dists, is_observed, X, X_unconstrained; to=:unconstrained)
 
     if !(:uninvoked in annotations)
         # force compilation
         X = Vector{Float64}(undef, n_latents)
         # invokes plate functions as well
-        Base.invokelatest(sample!, X)
-        Base.invokelatest(logpdf, X, observations)
+        sample!(X)
+        logpdf(X, observations)
         Y = Vector{Float64}(undef, n_latents)
-        Y = Base.invokelatest(transform_to_unconstrained!, X, Y)
+        Y = transform_to_unconstrained!(X, Y)
         Z = Vector{Float64}(undef, n_latents)
-        Base.invokelatest(transform_to_constrained!, Z, Y)
+        transform_to_constrained!(Z, Y)
         @assert all(broadcast(approx_same_value, X, Z)) (X,Z)
 
-        # Base.invokelatest(unconstrained_logpdf, Y, observations) # TODO: need to transform to constrained if variables are parameters of distributions!
+        # unconstrained_logpdf(Y, observations) # TODO: need to transform to constrained if variables are parameters of distributions!
 
-        Base.invokelatest(return_expr, X)
+        return_expr(X)
         for i in 1:n_variables
-            Base.invokelatest(distributions[i], X)
+            distributions[i](X)
         end
     end
 

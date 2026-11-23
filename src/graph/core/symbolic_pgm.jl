@@ -50,13 +50,14 @@ end
 struct PGMTranspiler
     # be careful sampling with lazy_ifs, it is fine for logjoint based inference
     lazy_ifs::Bool
+    mod::Module # module in which static parts of the program are evaluated (where @pgm is called)
     procs::Dict{Symbol, Expr}
     all_let_variables::Set{Symbol}
     variables::Set{Symbol}
     variable_to_address::Dict{Symbol, Any}
     translation_order::Vector{Symbol}
-    function PGMTranspiler(lazy_ifs::Bool)
-        return new(lazy_ifs, Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Dict{Symbol, Any}(), Vector{Symbol}())
+    function PGMTranspiler(lazy_ifs::Bool, mod::Module)
+        return new(lazy_ifs, mod, Dict{Symbol, Expr}(), Set{Symbol}(), Set{Symbol}(), Dict{Symbol, Any}(), Vector{Symbol}())
     end
 end
 
@@ -260,7 +261,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
 
         G = EmptyPGM()
         E = []
-        for i in eval(range)
+        for i in Core.eval(t.mod, range)
             e = substitute(loop_var, i, body)
             Gi, Ei = transpile(t, phi, e)
             G = graph_disjoint_union(G, Gi)
@@ -269,7 +270,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         return G, Expr(:vect, E...)
 
     elseif expr.head == :sample
-        addr = eval(expr.args[1])
+        addr = Core.eval(t.mod, expr.args[1])
         dist = expr.args[2]
         G, E = transpile(t, phi, dist)
 
@@ -300,7 +301,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         return G, v
 
     elseif expr.head == :observe
-        addr = eval(expr.args[1])
+        addr = Core.eval(t.mod, expr.args[1])
         dist = expr.args[2]
         observation = expr.args[3]
 
@@ -309,7 +310,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
         # G = graph_disjoint_union(G1, G2)
         G = G1
         @assert isempty(get_free_variables(observation) ∩ t.all_let_variables) "$observation is not static."
-        E2 = eval(observation) # static observations
+        E2 = Core.eval(t.mod, observation) # static observations
     
         # generate fresh variable
         v = gensym(:observe)
@@ -344,7 +345,7 @@ function transpile(t::PGMTranspiler, phi, expr::Expr)
 
     elseif expr.head == :$
         @assert length(expr.args) == 1
-        v = eval(expr.args[1])
+        v = Core.eval(t.mod, expr.args[1])
         if typeof(v) <: AbstractVector
             return EmptyPGM(), Expr(:vect, v...)
         else
@@ -388,8 +389,8 @@ function Distributions.rand(::Flat)
     return NaN
 end
 
-function transpile_program(expr::Expr, lazy_ifs::Bool)
-    t = PGMTranspiler(lazy_ifs)
+function transpile_program(expr::Expr, lazy_ifs::Bool, mod::Module)
+    t = PGMTranspiler(lazy_ifs, mod)
     all_let_variables = get_let_variables(expr)
     
     if !isempty(all_let_variables)

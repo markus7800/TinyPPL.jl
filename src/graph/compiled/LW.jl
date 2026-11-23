@@ -24,12 +24,12 @@ function compile_likelihood_weighting(pgm::PGM)
     for node in ordered_nodes
         if node isa Plate
             if all(isobserved(pgm, child) for child in node.nodes)
-                plate_f_name = plate_function_name(pgm.name, :lp, node)
-                push!(block_args, :($lp += $plate_f_name($X, $Y)))
+                plate_f = plate_function(pgm.plate_info, :lp, node)
+                push!(block_args, :($lp += $plate_f($X, $Y)))
             else
                 @assert all(!isobserved(pgm, child) for child in node.nodes)
-                plate_f_name = plate_function_name(pgm.name, :sample, node)
-                push!(block_args, :($plate_f_name($X)))
+                plate_f = plate_function(pgm.plate_info, :sample, node)
+                push!(block_args, :($plate_f($X)))
             end
         else
             push!(block_args, :($d_sym = $(symbolic_dists[node])))
@@ -47,15 +47,14 @@ function compile_likelihood_weighting(pgm::PGM)
 
     push!(block_args, :($return_value, $lp))
 
-    f_name = gensym("$(pgm.name)_lw") # unique name, see compile_symbolic_pgm
-    f = rmlines(:(
-        function $f_name($X::Vector{Float64}, $Y::Vector{Float64})
+    f = :(
+        function ($X::Vector{Float64}, $Y::Vector{Float64})
             $(Expr(:block, block_args...))
         end
-    ))
+    )
     # display(f)
-    lw = eval(f)
-    X = Vector{Float64}(undef, pgm.n_variables); Base.invokelatest(lw, X, pgm.observations); # compilation
+    lw = make_function(f)
+    X = Vector{Float64}(undef, pgm.n_variables); lw(X, pgm.observations); # compilation
     return lw
 end
 
