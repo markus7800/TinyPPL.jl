@@ -44,7 +44,7 @@ module Graph
         return traces.data[:,ix]
     end
     
-    function Base.getindex(traces::GraphTraces, ::Colon, ixs)
+    function Base.getindex(traces::GraphTraces, ::Colon, ixs::AbstractVector{<:Integer})
         return subset(traces, ixs)
     end
 
@@ -59,6 +59,11 @@ module Graph
     function Base.getindex(traces::GraphTraces, addr::Address, i::Int)
         @assert haskey(traces.addresses_to_ix, addr) "$addr not in addresses_to_ix"
         return traces.data[traces.addresses_to_ix[addr], i]
+    end
+
+    function Base.getindex(traces::GraphTraces, addr::Address, ixs::AbstractVector{<:Integer})
+        @assert haskey(traces.addresses_to_ix, addr) "$addr not in addresses_to_ix"
+        return traces.data[traces.addresses_to_ix[addr], ixs]
     end
     
     export GraphTraces

@@ -472,6 +472,12 @@ const MH_MODELS = [
     end),
 ]
 
+@testset "trace indexing with ranges and masks" begin
+    Random.seed!(0)
+    traces, _, _ = likelihood_weighting(normal_normal, 100)
+    test_trace_indexing(traces, :μ)
+end
+
 @testset "lmh" begin
     for (name, pgm, check) in MH_MODELS
         @testset "$name" begin

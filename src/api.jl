@@ -12,6 +12,10 @@ end
 function Base.getindex(::AbstractTraces, ::Address, ::Int)
     error("Not implemented!")
 end
+# values of address at samples ixs (range, index vector or Bool mask)
+function Base.getindex(::AbstractTraces, ::Address, ::AbstractVector{<:Integer})
+    error("Not implemented!")
+end
 function retvals(::AbstractTraces)
     error("Not implemented!")
 end

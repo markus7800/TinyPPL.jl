@@ -25,6 +25,9 @@ end
 function Base.getindex(traces::UniversalTraces, addr::Address, i::Int)
     return get(traces.data[i], addr, missing)
 end
+function Base.getindex(traces::UniversalTraces, addr::Address, ixs::AbstractVector{<:Integer})
+    return [get(t, addr, missing) for t in view(traces.data, ixs)]
+end
 Base.length(traces::UniversalTraces) = length(traces.data)
 
 function subset(traces::UniversalTraces, ixs)
@@ -36,7 +39,7 @@ function Base.getindex(traces::UniversalTraces, ::Colon, ix::Int)
     return traces.data[ix]
 end
 
-function Base.getindex(traces::UniversalTraces, ::Colon, ixs)
+function Base.getindex(traces::UniversalTraces, ::Colon, ixs::AbstractVector{<:Integer})
     return subset(traces::UniversalTraces, ixs)
 end
 

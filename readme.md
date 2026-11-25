@@ -439,7 +439,7 @@ end
 ### Results of Inference Algorithms
 
 The results are consistent for each category of inference algorithm and backend
-(`UniversalTraces`, `StaticTraces` or `GraphTraces`, indexed by address: `traces[addr]`, `traces[addr, i]`, `retvals(traces)`, `subset(traces, ixs)`):
+(`UniversalTraces`, `StaticTraces` or `GraphTraces`, indexed by address: `traces[addr]`, `traces[addr, i]`, `traces[addr, ixs]` (range, index vector or Bool mask), `retvals(traces)`, `subset(traces, ixs)`):
 
 - Importance sampling / particle methods (`likelihood_weighting`, `smc`, `light_smc`, `conditional_smc`) return `(traces, logw, log_Z)`,
   where `logw` are the normalised log weights (`sum(exp.(logw)) == 1`) and `log_Z` is the estimate of the log evidence log p(Y).

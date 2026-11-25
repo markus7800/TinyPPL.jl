@@ -161,6 +161,12 @@ end
 
 # ---------------------------------------------------------------------- HMC
 
+@testset "trace indexing with ranges and masks" begin
+    Random.seed!(0)
+    traces, _, _ = likelihood_weighting(normal_normal, (), nn_obs, 100)
+    test_trace_indexing(traces, :μ)
+end
+
 @testset "hmc" begin
     @testset "normal_normal" begin
         Random.seed!(0)

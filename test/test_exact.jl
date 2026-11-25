@@ -481,7 +481,7 @@ aqua_mean(result, addr) = ((xs, ps) = result[addr]; sum(xs .* ps) * G.aqua_cell_
 end
 
 @testset "bif" begin # B10
-    survey = joinpath(@__DIR__, "..", "examples", "bif_models", "survey.bif")
+    survey = joinpath(@__DIR__, "survey.bif") # bnlearn survey network
     tables_by_scope(factor_nodes) = Dict([v.variable for v in f.neighbours] => f.table for f in factor_nodes)
 
     variable_nodes, factor_nodes = read_bif(survey)

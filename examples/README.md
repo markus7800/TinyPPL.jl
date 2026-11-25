@@ -39,7 +39,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 
 | Script | What it shows | Inference |
 |---|---|---|
-| [models.jl](static/models.jl) | Introduction to static models | likelihood weighting |
+| [models.jl](static/models.jl) | Introduction to static models: address indexing, trace matrix, storing a subset of addresses, checked against the exact posterior and evidence of a Gaussian random walk | likelihood weighting |
 | [advi.jl](static/advi.jl) | ADVI on linear regression with mean-field and custom guides | ADVI |
 | [constrained_dynamic_support.jl](static/constrained_dynamic_support.jl) | Variables whose support depends on other variables | ADVI, BBVI, HMC |
 

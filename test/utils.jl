@@ -1,6 +1,8 @@
 module TestUtils
 
-export logsumexp, normalise_logw, wmean, wstd, wprob, burn, frequencies
+using Test
+
+export logsumexp, normalise_logw, wmean, wstd, wprob, burn, frequencies, test_trace_indexing
 
 logsumexp(x) = (m = maximum(x); m == -Inf ? -Inf : m + log(sum(exp, x .- m)))
 
@@ -29,5 +31,17 @@ burn(xs, frac=0.1) = xs[floor(Int, length(xs) * frac)+1:end]
 
 "empirical frequency of each value in `values`"
 frequencies(xs, values) = [sum(xs .== v) / length(xs) for v in values]
+
+# traces[addr, ixs] agrees with traces[addr][ixs] for ranges, index vectors and Bool masks,
+# and traces[:, ixs] still selects a subset of the traces (no method ambiguity between the two)
+function test_trace_indexing(traces, addr)
+    values = traces[addr]
+    @test traces[addr, 2:5] == values[2:5]
+    @test traces[addr, [3, 1]] == [traces[addr, 3], traces[addr, 1]]
+    mask = values .> 0
+    @test traces[addr, mask] == values[mask]
+    @test length(traces[:, 2:5]) == 4
+    @test traces[:, 2:5][addr] == values[2:5]
+end
 
 end # module TestUtils
