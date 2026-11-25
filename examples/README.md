@@ -48,7 +48,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 
 | Script | What it shows | Inference |
 |---|---|---|
-| [pgm.jl](graph/pgm.jl) | Introduction to `@pgm` models | likelihood weighting, MCMC |
+| [pgm.jl](graph/pgm.jl) | Introduction to `@pgm` models: model structure, functions and data, plates, `@iterate`/`@loop`, eager vs. lazy branching, calling outside functions | likelihood weighting |
 | [linear_regression.jl](graph/linear_regression.jl) | Bayesian linear regression vs. analytic posterior | IS, MCMC, VI |
 | [bbvi.jl](graph/bbvi.jl) | Variational inference on a chain of normals | ADVI, BBVI |
 | [conditioning.jl](graph/conditioning.jl) | Observing deterministic expressions (Holtzen, Dice) | likelihood weighting |
