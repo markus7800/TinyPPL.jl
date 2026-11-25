@@ -26,9 +26,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [geometric.jl](universal/geometric.jl) | Geometric distribution via loop and recursion, compared to exact posterior | likelihood weighting |
 | [dice_paradox.jl](universal/dice_paradox.jl) | "Six in a row" dice paradox | likelihood weighting |
 | [milch_urn.jl](universal/milch_urn.jl) | Urn with unknown number of balls (Milch et al.) | likelihood weighting |
-| [linear_regression.jl](universal/linear_regression.jl) | Bayesian linear regression vs. analytic posterior | IS, MCMC, VI |
-| [advi.jl](universal/advi.jl) | ADVI with mean-field and custom guides | ADVI |
-| [bbvi.jl](universal/bbvi.jl) | BBVI on a model with a random number of variables | BBVI |
+| [vi.jl](universal/vi.jl) | Variational inference with a mean-field Q over addresses: linear regression, and a model with a random number of variables | ADVI, guide, BBVI |
 | [hmm_lgss.jl](universal/hmm_lgss.jl) | Hidden Markov model and linear Gaussian state space model | SMC, particle Gibbs |
 | [imcmc.jl](universal/imcmc.jl) | LMH and HMC written as involutive MCMC | iMCMC |
 | [trace_transform.jl](universal/trace_transform.jl) | Trace transformations (Box-Muller, Dirichlet) | — |
@@ -40,7 +38,8 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | Script | What it shows | Inference |
 |---|---|---|
 | [models.jl](static/models.jl) | Introduction to static models: address indexing, trace matrix, storing a subset of addresses, checked against the exact posterior and evidence of a Gaussian random walk | likelihood weighting |
-| [advi.jl](static/advi.jl) | ADVI on linear regression with mean-field and custom guides | ADVI |
+| [linear_regression.jl](static/linear_regression.jl) | Bayesian linear regression, every sampling algorithm checked against the exact posterior and evidence | likelihood weighting, LMH, RWMH, HMC, SMC, particle IMH |
+| [vi.jl](static/vi.jl) | Variational inference on linear regression: mean-field vs. full-rank, ELBO gradient estimators, custom guide | ADVI, BBVI |
 | [constrained_dynamic_support.jl](static/constrained_dynamic_support.jl) | Variables whose support depends on other variables | ADVI, BBVI, HMC |
 
 ### Graph-based models ([graph/](graph/))
@@ -49,8 +48,8 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | Script | What it shows | Inference |
 |---|---|---|
 | [pgm.jl](graph/pgm.jl) | Introduction to `@pgm` models: model structure, functions and data, plates, `@iterate`/`@loop`, eager vs. lazy branching, calling outside functions | likelihood weighting |
-| [linear_regression.jl](graph/linear_regression.jl) | Bayesian linear regression vs. analytic posterior | IS, MCMC, VI |
-| [bbvi.jl](graph/bbvi.jl) | Variational inference on a chain of normals | ADVI, BBVI |
+| [linear_regression.jl](graph/linear_regression.jl) | Bayesian linear regression, every sampling algorithm checked against the exact posterior and evidence | likelihood weighting, LMH, RWMH, HMC, SMC, particle IMH |
+| [vi.jl](graph/vi.jl) | Variational inference on a correlated chain of normals, Rao-Blackwellised BBVI using the graph structure | ADVI, BBVI |
 | [conditioning.jl](graph/conditioning.jl) | Observing deterministic expressions (Holtzen, Dice) | likelihood weighting |
 | [constrained_support.jl](graph/constrained_support.jl) | Variables whose support depends on other variables | HMC, ADVI |
 | [lgss.jl](graph/lgss.jl) | Linear Gaussian state space model vs. exact posterior | SMC, particle Gibbs, PGAS |
