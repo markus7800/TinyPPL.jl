@@ -469,5 +469,5 @@ Pkg.add(url="https://github.com/markus7800/TinyPPL.jl")
 See [examples/README.md](examples/README.md) for an overview of the examples. They have their own environment:
 ```console
 julia --project=examples -e 'using Pkg; Pkg.instantiate()'
-julia --project=examples examples/universal/models.jl
+julia --project=examples examples/universal/pedestrian.jl
 ```

@@ -7,7 +7,7 @@ From the repository root:
 
 ```console
 julia --project=examples -e 'using Pkg; Pkg.instantiate()'
-julia --project=examples examples/universal/models.jl
+julia --project=examples examples/universal/pedestrian.jl
 ```
 
 Scripts run top to bottom and print their results. When run as a script, plots are saved to `examples/output/`;
@@ -20,8 +20,8 @@ Models may instantiate an unbounded number of random variables; inference runs t
 
 | Script | What it shows | Inference |
 |---|---|---|
-| [models.jl](universal/models.jl) | Introduction: a model with an unbounded number of random variables, and why reparameterisation gradients fail on a discontinuous model | likelihood weighting, LMH, RWMH, ADVI, BBVI, guide with `ReinforceELBO` |
-| [pedestrian.jl](universal/pedestrian.jl) | Pedestrian random walk with unbounded number of steps | likelihood weighting, LMH |
+| [pedestrian.jl](universal/pedestrian.jl) | Introduction to universal models: a random walk with an unbounded number of steps, posterior over the number of steps, custom MH proposals (Mak et al.) | likelihood weighting, LMH, RWMH |
+| [discontinuous_vi.jl](universal/discontinuous_vi.jl) | Why reparameterisation gradients fail on a discontinuous density, and a custom guide | ADVI, BBVI, guide with `ReinforceELBO` |
 | [non_parametric_hmc.jl](universal/non_parametric_hmc.jl) | HMC on a model with varying dimension | NP-HMC |
 | [geometric.jl](universal/geometric.jl) | Geometric distribution via loop and recursion, compared to exact posterior | likelihood weighting |
 | [dice_paradox.jl](universal/dice_paradox.jl) | "Six in a row" dice paradox | likelihood weighting |
