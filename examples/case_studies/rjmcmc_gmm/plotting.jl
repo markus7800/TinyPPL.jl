@@ -1,5 +1,5 @@
 
-include("../gmm/common.jl");
+include("../../common/gmm_plotting.jl")
 
 function to_plotting_format(tr)
     tr = copy(tr)

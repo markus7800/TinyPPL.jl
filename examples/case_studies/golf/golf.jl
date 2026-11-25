@@ -11,7 +11,7 @@ plt_box = pyimport("matplotlib.offsetbox");
 plt_cm = pyimport("matplotlib.cm");
 np = pyimport("numpy");
 
-include("utils.jl");
+include("utils.jl")
 
 # The Power of Probabilistic Programming
 

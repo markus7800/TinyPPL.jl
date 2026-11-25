@@ -5,8 +5,8 @@ import Random
 import Distributions: mean, var, std, MvNormal
 import LinearAlgebra: diag
 
-include("lgss/lgss_data.jl")
-include("lgss/posterior.jl")
+include("../common/lgss_data.jl")
+include("../common/lgss_posterior.jl")
 
 # T = 3
 # y = y[1:T]
@@ -296,7 +296,7 @@ function PGAS_SSM(y::Vector{Float64}, T::Int, n_particles::Int, n_samples::Int; 
 end
 
 
-include("lgss/lgss_data.jl")
+include("../common/lgss_data.jl")
 get_update_freq(traces, n_samples) = [mean(traces[t, i] != traces[t, i+1] for i in 1:n_samples-1) for t in 1:T]
 
 

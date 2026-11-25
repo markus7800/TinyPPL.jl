@@ -4,8 +4,8 @@ using TinyPPL.Evaluation
 using TinyPPL: logsumexp
 import Random
 
-include("gmm/data.jl")
-include("gmm/common.jl")
+include("../common/gmm_data.jl")
+include("../common/gmm_plotting.jl")
 
 @time begin
     println("Compile model")

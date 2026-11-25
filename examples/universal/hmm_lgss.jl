@@ -58,8 +58,8 @@ end
 
 
 
-include("lgss/lgss_data.jl")
-include("lgss/posterior.jl")
+include("../common/lgss_data.jl")
+include("../common/lgss_posterior.jl")
 
 @ppl static function LGSS(T)
     a = 0.9

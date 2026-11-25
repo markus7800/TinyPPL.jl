@@ -1,4 +1,20 @@
 using TinyPPL.Graph
+import Downloads
+
+# Bayesian networks from the bnlearn repository (https://www.bnlearn.com/bnrepository/),
+# downloaded to exact_inference/bif/ on first use (needs `gunzip`).
+function bif_path(name::String)
+    dir = joinpath(@__DIR__, "bif")
+    path = joinpath(dir, name * ".bif")
+    if !isfile(path)
+        mkpath(dir)
+        url = "https://www.bnlearn.com/bnrepository/$name/$name.bif.gz"
+        println("Downloading ", url)
+        Downloads.download(url, path * ".gz")
+        run(`gunzip $(path * ".gz")`)
+    end
+    return path
+end
 
 
 function read_bif_2(pathname::String)
@@ -100,7 +116,7 @@ function read_bif_2(pathname::String)
     return variable_nodes, factor_nodes
 end
 
-variable_nodes, factor_nodes = read_bif_2("examples/bif_models/alarm.bif");
+variable_nodes, factor_nodes = read_bif_2(bif_path("alarm"));
 
 function topological_sort(variable_nodes::Vector{VariableNode}, factor_nodes::Vector{FactorNode})
     var_to_factor = Dict{VariableNode,FactorNode}(factor_node.neighbours[1] => factor_node for factor_node in factor_nodes)

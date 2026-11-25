@@ -4,3 +4,7 @@
 *.txt
 *.DS_Store
 *.bif
+examples/Manifest.toml
+examples/output/
+examples/exact_inference/bif/
+!examples/case_studies/golf/resources/*.png

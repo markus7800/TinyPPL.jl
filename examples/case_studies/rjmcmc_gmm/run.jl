@@ -2,11 +2,11 @@ using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
 
-include("../gmm/data.jl");
-include("model.jl");
-include("helpers.jl");
-include("aux_model.jl");
-include("involution.jl");
+include("../../common/gmm_data.jl")
+include("model.jl")
+include("helpers.jl")
+include("aux_model.jl")
+include("involution.jl")
 
 Random.seed!(0)
 @time traces = imcmc(

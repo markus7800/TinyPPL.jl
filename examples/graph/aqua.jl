@@ -1,7 +1,6 @@
 using TinyPPL.Distributions
 using TinyPPL.Graph
 
-import Pkg; Pkg.activate("test")
 import Distributions as Dists
 using Plots
 
@@ -428,7 +427,7 @@ plot!(z -> exp(logpdf(Normal(0.5, sqrt(1 + 0.5^2)),z)))
 
 
 
-include("gmm/data.jl")
+include("../common/gmm_data.jl")
 
 model = @pgm GMM begin
     function dirichlet(δ, k)

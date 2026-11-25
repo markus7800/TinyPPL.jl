@@ -2,7 +2,7 @@ using TinyPPL.Graph
 # using BenchmarkTools
 
 # julia --project=. examples/exact_inference/exact_inference.jl burglary
-include(ARGS[1]*".jl")
+include("models/" * ARGS[1] * ".jl")
 
 const BENCHMARK = false
 

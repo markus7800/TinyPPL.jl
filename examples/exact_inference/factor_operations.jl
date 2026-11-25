@@ -143,7 +143,7 @@ function inference(show_results=false; algo=:VE, kwargs...)
 end
 
 begin
-    include("../exact_inference/caesar.jl")
+    include("models/caesar.jl")
     model = get_model()
     println(model.name)
 
@@ -217,12 +217,12 @@ end
 modelname = "diamond"
 modelname = "ladder"
 N = 5000
-include("exact_inference/$modelname.jl")
+include("models/$modelname.jl")
 model = get_model();
 variable_nodes, factor_nodes, marginal_variables, return_factor = get_model_factor_graph(N);
 
 modelname = "caesar"
-include("exact_inference/caesar.jl")
+include("models/caesar.jl")
 model = get_model();
 variable_nodes, factor_nodes = get_factor_graph(model);
 return_factor = add_return_factor!(model, variable_nodes, factor_nodes)

@@ -1,3 +1,4 @@
+import TinyPPL: sigmoid
 
 const RVValue = Real # currently only univariate distributions are supported
 const Observations = Dict{Address, RVValue} # default container, e.g. Observations(:y => 1.)

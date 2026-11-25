@@ -21,9 +21,9 @@ function plot_golfcourse(golf_course; fig_height::Int=8)
 
     scale = fig_height/8
 
-    golfer = plt_image.imread("examples/tutorials/golf/golf_resources/golf_player.jpg")
-    pond = plt_image.imread("examples/tutorials/golf/golf_resources/golf_pond.png")
-    hole = plt_image.imread("examples/tutorials/golf/golf_resources/golf_hole.png")
+    golfer = plt_image.imread(joinpath(@__DIR__, "resources", "golf_player.jpg"))
+    pond = plt_image.imread(joinpath(@__DIR__, "resources", "golf_pond.png"))
+    hole = plt_image.imread(joinpath(@__DIR__, "resources", "golf_hole.png"))
     golfer_box = plt_box.OffsetImage(golfer, zoom=0.20*scale)
     pond_box = plt_box.OffsetImage(pond, zoom=0.22*scale)
     hole_box = plt_box.OffsetImage(hole, zoom=0.22*scale)
