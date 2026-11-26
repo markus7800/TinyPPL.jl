@@ -27,7 +27,6 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [dice_paradox.jl](universal/dice_paradox.jl) | Expected rolls until N sixes (in a row) given all rolls are even, conditioning with `Dirac`, checked against the exact answer | likelihood weighting |
 | [milch_urn.jl](universal/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.), posterior over the number of balls checked against the exact posterior, noisy or noise-free observations | likelihood weighting |
 | [vi.jl](universal/vi.jl) | Variational inference with a mean-field Q over addresses: linear regression, and a model with a random number of variables | ADVI, guide, BBVI |
-| [hmm_lgss.jl](universal/hmm_lgss.jl) | Hidden Markov model and linear Gaussian state space model | SMC, particle Gibbs |
 | [imcmc.jl](universal/imcmc.jl) | LMH and HMC written as involutive MCMC | iMCMC |
 | [trace_transform.jl](universal/trace_transform.jl) | Trace transformations (Box-Muller, Dirichlet) | — |
 | [lda.jl](universal/lda.jl) | Latent Dirichlet allocation | LMH |
@@ -40,6 +39,8 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [models.jl](static/models.jl) | Introduction to static models: address indexing, trace matrix, storing a subset of addresses, checked against the exact posterior and evidence of a Gaussian random walk | likelihood weighting |
 | [linear_regression.jl](static/linear_regression.jl) | Bayesian linear regression, every sampling algorithm checked against the exact posterior and evidence | likelihood weighting, LMH, RWMH, HMC, SMC, particle IMH |
 | [vi.jl](static/vi.jl) | Variational inference on linear regression: mean-field vs. full-rank, ELBO gradient estimators, custom guide | ADVI, BBVI |
+| [hmm.jl](static/hmm.jl) | Hidden Markov model (guessing the weather from activities), checked against the exact posterior | likelihood weighting, SMC |
+| [lgss.jl](static/lgss.jl) | Linear Gaussian state space model with a custom SMC proposal, checked against the exact posterior and evidence | SMC, particle Gibbs |
 | [constrained_support.jl](static/constrained_support.jl) | Variables whose support depends on other variables, unconstrained vs. constrained HMC, checked against the exact distribution | HMC, ADVI, BBVI |
 
 ### Graph-based models ([graph/](graph/))
@@ -51,7 +52,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [linear_regression.jl](graph/linear_regression.jl) | Bayesian linear regression, every sampling algorithm checked against the exact posterior and evidence | likelihood weighting, LMH, RWMH, HMC, SMC, particle IMH |
 | [vi.jl](graph/vi.jl) | Variational inference on a correlated chain of normals, Rao-Blackwellised BBVI using the graph structure | ADVI, BBVI |
 | [constrained_support.jl](graph/constrained_support.jl) | Variables whose support depends on other variables, checked against the exact distribution | HMC, ADVI, BBVI |
-| [lgss.jl](graph/lgss.jl) | Linear Gaussian state space model vs. exact posterior | SMC, particle Gibbs, PGAS |
+| [lgss.jl](graph/lgss.jl) | Linear Gaussian state space model over 400 steps: likelihood weighting collapses, SMC path degeneracy, particle Gibbs with and without ancestral sampling, custom proposals | likelihood weighting, SMC, particle Gibbs |
 | [milch_urn.jl](graph/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.) as one model per number of balls, keeping factors small, noisy or noise-free observations | variable elimination |
 | [plated_gmm.jl](graph/plated_gmm.jl) | Gaussian mixture model, plated vs. unplated compilation | compiled LW, LMH, RWMH |
 | [aqua.jl](graph/aqua.jl) | Quantised density approximation | AQUA |
