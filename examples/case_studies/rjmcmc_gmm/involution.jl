@@ -234,7 +234,7 @@ function involution!(tt::TraceTransformation,
 
     move = read_discrete(tt, old_proposal_trace, :move)
     k = read_discrete(tt, old_model_trace, :k)
-    n = length(gt_ys) # TODO get n
+    n = length(gt_ys) # the data is fixed
 
     if move == 1
         mh_means_involution!(tt, old_model_trace, old_proposal_trace, new_model_trace, new_proposal_trace, k, n)

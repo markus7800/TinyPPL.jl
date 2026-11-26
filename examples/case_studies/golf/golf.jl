@@ -1,32 +1,19 @@
+# The power of probabilistic programming: inferring the unknowns of an existing physics simulation of golf strikes.
+#
+# 1. We have an existing physics simulation of a golf ball.
+# 2. Some of its parameters are unknown: the goal angle and power of the strike, the deviation of the golfer from it,
+#    and the wind.
+# 3. We use Bayesian inference to infer these unknowns from observations, e.g. that the ball ended up in the hole.
+#
+# Run: julia --project=examples examples/case_studies/golf/golf.jl
+
 using TinyPPL.Distributions
 using TinyPPL.Evaluation
 import Random
-import PyPlot
-using PyCall
-import ForwardDiff
-
-plt = pyimport("matplotlib.pyplot");
-plt_image = pyimport("matplotlib.image");
-plt_box = pyimport("matplotlib.offsetbox");
-plt_cm = pyimport("matplotlib.cm");
-np = pyimport("numpy");
-
 include("utils.jl")
 
-# The Power of Probabilistic Programming
-
-## Scenario:
-# 1. **We have existing physics simulation.**
-# 2. **We have some unknown parameters of the simulation.**
-# 3. **We want to use Bayesian statistics to infer those unknowns.**
-
-
-## The Environment:
-# A golf course which has
-# - a player position
-# - a target hole position
-# - a pond position
-
+# ===== The environment =====
+# A golf course with the positions of the player, the target hole and a pond.
 struct GolfCourse
     player_x::Float64
     hole_x::Float64
@@ -37,19 +24,15 @@ struct GolfCourse
 end
 
 pond_x0(course::GolfCourse) = course.pond_x - 0.95
-pond_x1(course::GolfCourse) = course.pond_x + 0.9 #+ 0.7
+pond_x1(course::GolfCourse) = course.pond_x + 0.9
 
 function inpond(course::GolfCourse, x)
     return pond_x0(course) < x && x < pond_x1(course)
-end;
+end
 
-## The simulation:
-# Simple classical mechanics simulation with
-# - initial velocity = `strike`
-# - acceleration = `[drag + wind, gravity]`, where `drag = -0.1` and `gravity = -1`  
-
-# The ball stays in pond if it hits the pond.  
-# Otherwise, we allow the ball to bounce 3 times.
+# ===== The simulation =====
+# Simple classical mechanics with initial velocity `strike` and acceleration [drag + wind, gravity],
+# where drag = -0.1 and gravity = -1. The ball stays in the pond if it lands there, otherwise it bounces twice.
 
 function get_trajectory(golf_course::GolfCourse, start::Vector{Float64}, strike::Vector{Float}, wind::Float, dt::Float64=0.1) where Float <: Real
     position = start
@@ -93,15 +76,8 @@ function get_trajectory(golf_course::GolfCourse, start::Vector{Float64}, strike:
         end
     end
     
-    # if position[2] != 0.
-    #     _strike = ForwardDiff.value.(strike)
-    #     _wind = ForwardDiff.value(wind)
-    #     _end_x_position = ForwardDiff.value(position[2])
-    #     @warn "Simulation did not finish" _strike _wind _end_x_position
-    # end
-
     return trajectory, end_x_position
-end;
+end
 
 function get_strike(angle::Float, power::Float) where Float <: Real
     # angle in [0,pi/2]
@@ -111,29 +87,18 @@ function get_strike(angle::Float, power::Float) where Float <: Real
     return [cos(angle) * p, sin(angle) * p]
 end
 
-# Plotting some trajectories
-
 course = GolfCourse(player_x=0., hole_x=8., pond_x=5.5)
-fig, ax = plot_golfcourse(course)
-trajectory, end_x_position = get_trajectory(course, [0.,0.], get_strike(deg2rad(30),0.6), 0.)
-trajectory, end_x_position = get_trajectory(course, [0.,0.], get_strike(deg2rad(65),0.6), 0.)
-trajectory, end_x_position = get_trajectory(course, [0.,0.], get_strike(deg2rad(60),0.9), 0.)
-#trajectory, end_x_position = get_trajectory(course, [0.,0.], get_strike(deg2rad(60),0.9), -0.1)
-trajectory = hcat(trajectory...)
-ax.scatter(trajectory[1,:], trajectory[2,:]);
-# ax.vlines([pond_x0(course),pond_x1(course)],-1,1)
-plt.gcf()
+p = plot_golfcourse(course)
+for (angle, power) in [(30, 0.6), (65, 0.6), (60, 0.9)]
+    trajectory, _ = get_trajectory(course, [0., 0.], get_strike(deg2rad(angle), power), 0.)
+    scatter!(p, first.(trajectory), last.(trajectory), markersize=2, markerstrokewidth=0)
+end
+show_plot(p, "golf_example_trajectories")
 
 
-## Modelling the unknowns:
-
-# - Golfer has `goal_angle` and `goal_power`
-# - But depending on his `skill_level` he may deviate from the desired strike.
-# - This is expressed by Normal distribution with deviations depending on the `skill_level`:
-
-# angle ~ Normal(goal_angle, angle_deviation)
-# power ~ Normal(goal_power, power_deviation)
-
+# ===== The model =====
+# The golfer has a goal angle and power, but depending on their skill level (1, 2 or 3),
+# the strike deviates from it: angle ~ Normal(goal_angle, deviation), power ~ Normal(goal_power, deviation).
 struct Golfer
     skill_level::Int # (1,2,3)
     function Golfer(;skill_level::Int)
@@ -142,8 +107,6 @@ struct Golfer
 end
 
 @ppl static function strike(golfer::Golfer, goal_angle::Real, goal_power::Real)
-    # @assert golfer.skill_level in (1,2,3)
-        
     if golfer.skill_level == 1
         angle_deviation = 0.05
         power_deviation = 0.05
@@ -159,14 +122,13 @@ end
     power ~ Normal(goal_power, power_deviation)
     
     return get_strike(angle, power)
-end;
+end
 
-# In the `play_golf` model, we simply wrap our physics simulation.
-# - `goal_angle` can range from 0 to 85 degrees.
-# - `goal_power` can range from 0.25 to 1.00 percent.
-# - We instantiate a golfer with set `skill_level` and sample a strike.
-# - The `wind` is also unknown.
-# - We simulate the trajectory and record it's end position.
+# The play_golf model wraps the physics simulation:
+# - goal_angle ranges from 5 to 85 degrees and goal_power from 0.25 to 1.
+# - The golfer strikes with some deviation from the goal, depending on their skill level.
+# - The wind is unknown.
+# - We simulate the trajectory and record its end position.
 
 @ppl static function play_golf(
     course::GolfCourse,
@@ -184,8 +146,7 @@ end;
 
 
     if inverse_problem
-        # hitting the golf holf perfectly has probability 0.
-        # we have to allow some margin 0.1
+        # observing the exact end position has probability 0, so we allow some noise
         end_position ~ Normal(end_x_position, 0.1)
     else
         # just for tracking the end position
@@ -193,161 +154,91 @@ end;
     end
 
     return end_x_position
-end;
-
-# To get a feel for the model, we will sample from the prior distribution.
-
-Random.seed!(0);
-traces = sample_from_prior(
-    play_golf, (course, Golfer(skill_level=3), false),
-    Observations(:goal_angle => deg2rad(55), :goal_power => 0.7),
-    1000);
-plot_traces(course, traces);
-plt.gcf()
+end
 
 
-## Inverting the Model:
+# Sampling from the prior for fixed goal angle and power shows the possible strikes of a professional golfer.
+Random.seed!(0)
+traces = sample_from_prior(play_golf, (course, Golfer(skill_level=3), false), Observations(:goal_angle => deg2rad(55), :goal_power => 0.7), 1000)
+show_plot(plot_traces(course, traces), "golf_prior")
 
-# Up until now we simply generated random golf strikes.
-# But we can also use probabilistic programming to infer unkown values.
-# In fact, we can use probabilistic programming to answer following question:
 
-### GIVEN that we hit the golf hole, what are angle and power?
+# ===== Inverting the model =====
+# Given that the ball ended up in the hole, what are the goal angle and power?
+# Likelihood weighting gives a joint posterior distribution over angle and power: not one solution, but all that work.
+Random.seed!(0)
+traces_LW, lps = likelihood_weighting(play_golf, (course, Golfer(skill_level=3), true), Observations(:end_position => course.hole_x), 500_000)
+W_LW = exp.(lps)
+goal_angle = rad2deg.(traces_LW[:goal_angle])
+goal_power = traces_LW[:goal_power]
+p_LW = histogram2d(goal_angle, goal_power, weights=W_LW, bins=50, xlabel="goal angle", ylabel="goal power", xlims=(5, 85), ylims=(0.25, 1), title="likelihood weighting", color=:Blues)
+show_plot(p_LW, "golf_posterior_angle_power")
 
-Random.seed!(0);
-traces_LW, lps = likelihood_weighting(
-    play_golf, (course, Golfer(skill_level=3), true),
-    Observations(:end_position => course.hole_x),
-    500_000);
-weights_LW = exp.(lps)
-goal_angle = rad2deg.(traces_LW[:goal_angle]);
-goal_power = traces_LW[:goal_power];
+# The trajectories of posterior samples, drawn proportionally to their weights.
+Random.seed!(0)
+ixs = rand(Categorical(W_LW), 1000)
+show_plot(plot_traces(course, subset(traces_LW, ixs)), "golf_posterior_trajectories")
 
-# Visualising the results allows us to interpret the joint posterior distribution of angle and power.
-# That means we do not only get one solution, but an entire distribution over angle and power that works well.
+# The most likely goal angle and power, estimated as the centre of the highest bin of a weighted 2D histogram.
+function weighted_mode(xs, ys, W; bins=100)
+    x_edges = range(minimum(xs), maximum(xs), length=bins+1)
+    y_edges = range(minimum(ys), maximum(ys), length=bins+1)
+    counts = zeros(bins, bins)
+    for (x, y, w) in zip(xs, ys, W)
+        counts[clamp(searchsortedlast(x_edges, x), 1, bins), clamp(searchsortedlast(y_edges, y), 1, bins)] += w
+    end
+    i, j = Tuple(argmax(counts))
+    return (x_edges[i] + x_edges[i+1]) / 2, (y_edges[j] + y_edges[j+1]) / 2
+end
+map_angle, map_power = weighted_mode(goal_angle, goal_power, W_LW)
+println("most likely goal angle ≈ ", round(map_angle, digits=1), "°, goal power ≈ ", round(map_power, digits=3))
 
-plt.figure()
-plt.hexbin(goal_angle, goal_power, C=weights_LW, reduce_C_function=np.sum, gridsize=50);
-plt.xlabel("angle"); plt.ylabel("power");
-plt.gcf()
 
-# We can also visualise the trajectories that belong to these solution values.
+# ===== Golfers with different skill levels =====
+# So far we assumed a professional golfer (skill level 3). What happens if less experienced golfers aim for the same strike?
+plots = []
+for skill_level in [3, 2, 1]
+    Random.seed!(0)
+    local traces = sample_from_prior(play_golf, (course, Golfer(skill_level=skill_level), false),
+        Observations(:goal_angle => deg2rad(map_angle), :goal_power => map_power), 1000)
+    println("skill level ", skill_level, ": P(ball in pond) ≈ ", mean(x -> inpond(course, x), traces[:end_position]))
+    push!(plots, plot(plot_traces(course, traces), title="skill level $skill_level"))
+end
+show_plot(plot(plots..., layout=(3, 1), size=(900, 1200)), "golf_skill_levels")
+
+
+# ===== Explaining an unexpected observation =====
+# A golfer with skill level 2 aims for the most likely angle and power, but the ball lands far behind the hole.
+# What went wrong: the angle, the power or the wind?
+observed_trajectory = get_observed_trajectory(course)
+p = plot_golfcourse(course)
+plot!(p, observed_trajectory[1, :], observed_trajectory[2, :], linewidth=2)
+show_plot(p, "golf_observed_trajectory")
 
 Random.seed!(0)
-ixs = rand(Categorical(weights_LW),1000)
-plot_traces(course, subset(traces_LW, ixs));
-plt.gcf()
-
-# Maybe it is also interesting to see, which are the angle and power values that are the most likely to hit the goal.
-
-# Estimates the MAP by finding the highest weighted bin of the posterior histogram.
-counts, x, y = np.histogram2d(goal_angle, goal_power, weights=weights_LW, bins=100);
-i, j = Tuple(argmax(counts))
-map_angle = 0.5 * (x[i+1] + x[i])
-map_power = 0.5 * (y[j+1] + y[j])
-map_angle, map_power
-
-Random.seed!(0);
-traces_3 = sample_from_prior(
-    play_golf, (course, Golfer(skill_level=3), false),
-    Observations(:goal_angle => deg2rad(map_angle), :goal_power => map_power),
-    1000);
-plot_traces(course, traces_3);
-plt.gcf()
-
-# Results look fine so far, but we always assume that we have professional golfer with `skill_level = 3`.
-
-### What happens if we let a less experienced golfer give it a shot?
-
-Random.seed!(0);
-traces_1 = sample_from_prior(
-    play_golf, (course, Golfer(skill_level=1), false),
-    Observations(:goal_angle => deg2rad(map_angle), :goal_power => map_power),
-    1000);
-plot_traces(course, traces_1);
-plt.gcf()
-
-#### What is the probability of hitting the pond?
-
-mean(map(x -> inpond(course, x), vec(traces_1[:end_position])))
+traces, lps = likelihood_weighting(play_golf, (course, Golfer(skill_level=2), true),
+    Observations(:goal_angle => deg2rad(map_angle), :goal_power => map_power, :end_position => observed_trajectory[1, end]), 100_000)
+W = exp.(lps)
+println("posterior means: power ≈ ", round(W'traces[:power], digits=3), " (goal ", round(map_power, digits=3), "), angle ≈ ",
+    round(rad2deg(W'traces[:angle]), digits=1), "° (goal ", round(map_angle, digits=1), "°), wind ≈ ", round(W'traces[:wind], digits=4), " (prior mean 0)")
+p = plot(layout=(1, 3), size=(1200, 350), legend=:topleft)
+histogram!(p[1], traces[:power], weights=W, normalize=:pdf, bins=25, label="power", linewidth=0); vline!(p[1], [map_power], label="goal power", linewidth=2)
+histogram!(p[2], rad2deg.(traces[:angle]), weights=W, normalize=:pdf, bins=25, label="angle", linewidth=0); vline!(p[2], [map_angle], label="goal angle", linewidth=2)
+histogram!(p[3], traces[:wind], weights=W, normalize=:pdf, bins=25, label="wind", linewidth=0); vline!(p[3], [0.], label="prior mean", linewidth=2)
+show_plot(p, "golf_observed_trajectory_posterior")
 
 
-Random.seed!(0);
-traces_2 = sample_from_prior(
-    play_golf, (course, Golfer(skill_level=1), false),
-    Observations(:goal_angle => deg2rad(map_angle), :goal_power => map_power),
-    1000);
-plot_traces(course, traces_2);
-plt.gcf()
-
-
-println("Prob. of hitting pond skill_level = 3: ", mean(map(x -> inpond(course, x), vec(traces_3[:end_position]))))
-println("Prob. of hitting pond skill_level = 2: ", mean(map(x -> inpond(course, x), vec(traces_2[:end_position]))))
-println("Prob. of hitting pond skill_level = 1: ", mean(map(x -> inpond(course, x), vec(traces_1[:end_position]))))
-
-### Golfer with skill level 2, seems to be good choice, but we observe bad trajectory!?
-
-observed_trajectory = get_observed_trajectory(course)
-fig, ax = plot_golfcourse(course)
-ax.plot(observed_trajectory[1,:], observed_trajectory[2,:]);
-plt.gcf()
-
-
-
-Random.seed!(0);
-result, lps = likelihood_weighting(
-    play_golf, (course, Golfer(skill_level=2), true),
-    Observations(
-        :goal_angle => deg2rad(map_angle),
-        :goal_power => map_power,
-        :end_position => observed_trajectory[1,end]),
-    100_000);
-weights= exp.(lps);
-
-
-fig, axs = plt.subplots(1,3,figsize=(15,5));
-axs[1].hist(result[:power], weights=weights, bins=25, label="simulated power");
-axs[1].vlines([map_power], 0, 0.5, color="tab:orange", label="goal power");
-axs[1].legend();
-axs[2].hist(rad2deg.(result[:angle]), weights=weights, bins=25, label="simulated angle");
-axs[2].vlines([map_angle], 0, 0.5, color="tab:orange", label="goal angle");
-axs[2].legend();
-axs[3].hist(result[:wind], weights=weights, bins=25, label="simulated wind");
-axs[3].vlines([0.], 0, 0.5, color="tab:orange", label="expected wind");
-axs[3].legend();
-plt.gcf()
-
-
-## Gradient-Based Methods
-
-# Since the simulation is differentiable with respect to angle and power,  
-# we can use more sophisticated inference algorithms that leverage automatic differentiation.
-
+# ===== Gradient-based inference =====
+# The simulation is differentiable with respect to angle, power and wind, so we can use HMC with automatic differentiation.
+# We start the chain at the most likely goal angle and power (the order of the initial values follows the addresses).
 inverse_model = (play_golf, (course, Golfer(skill_level=3), true), Observations(:end_position => course.hole_x))
-get_address_to_ix(inverse_model...)
-
-initial_params = [deg2rad(map_angle),map_power,deg2rad(map_angle),map_power,0.1];
-
-Random.seed!(0);
-traces_HMC = hmc(inverse_model..., 10_000, 10, 0.003; ad_backend=:forwarddiff, x_initial=initial_params);
-
-
-
-function plot_HMC_result(traces_HMC)
-    fig, axs = plt.subplots(1,2,figsize=(12,4))
-
-    goal_angle_IS = rad2deg.(traces_LW[:goal_angle])
-    goal_power_IS = traces_LW[:goal_power]
-    axs[1].hexbin(goal_angle_IS, goal_power_IS, C=weights_LW, reduce_C_function=np.sum, gridsize=50);
-    axs[1].set_xlabel("angle"); axs[1].set_ylabel("power");
-    axs[1].set_ylim((0.25,1.)); axs[1].set_xlim((5, 85))
-
-    goal_angle_HMC = rad2deg.(traces_HMC[:goal_angle])
-    goal_power_HMC = traces_HMC[:goal_power];
-
-    axs[2].hexbin(goal_angle_HMC, goal_power_HMC, gridsize=50);
-    axs[2].set_ylim((0.25,1.)); axs[2].set_xlim((5, 85))
-    axs[2].set_xlabel("angle"); axs[2].set_ylabel("power");
+addresses_to_ix = get_address_to_ix(inverse_model...)
+x_initial = zeros(length(addresses_to_ix))
+for (addr, value) in [:goal_angle => deg2rad(map_angle), :goal_power => map_power, :angle => deg2rad(map_angle), :power => map_power, :wind => 0.]
+    x_initial[addresses_to_ix[addr]] = value
 end
-plot_HMC_result(traces_HMC);
-plt.gcf()
+
+Random.seed!(0)
+traces_HMC = hmc(inverse_model..., 10_000, 10, 0.003; ad_backend=:forwarddiff, x_initial=x_initial)
+p_HMC = histogram2d(rad2deg.(traces_HMC[:goal_angle]), traces_HMC[:goal_power], bins=50, xlabel="goal angle", ylabel="goal power", xlims=(5, 85), ylims=(0.25, 1), title="HMC", color=:Blues)
+show_plot(plot(p_LW, p_HMC, layout=(1, 2), size=(1000, 400)), "golf_HMC")

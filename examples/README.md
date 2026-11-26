@@ -78,7 +78,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 
 | Script | What it shows | Inference |
 |---|---|---|
-| [rjmcmc_gmm/run.jl](case_studies/rjmcmc_gmm/run.jl) | Gaussian mixture with unknown number of components via split/merge moves | reversible jump as iMCMC |
-| [golf/golf.jl](case_studies/golf/golf.jl) | Inferring the parameters of a golf physics simulation | IS, MCMC |
+| [rjmcmc_gmm/run.jl](case_studies/rjmcmc_gmm/run.jl) | Gaussian mixture with an unknown number of components (Richardson, Green): Gibbs updates and split / merge moves as involutions | reversible jump MCMC as iMCMC |
+| [golf/golf.jl](case_studies/golf/golf.jl) | Inverting a golf physics simulation: which strikes reach the hole, how skill changes the risk of the pond, and what explains an unexpected shot | likelihood weighting, HMC |
 
 Shared data and plotting helpers live in [common/](common/).

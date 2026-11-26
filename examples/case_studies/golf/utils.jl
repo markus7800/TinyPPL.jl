@@ -1,67 +1,44 @@
-function normalise(logprobs::AbstractVector{<:Real})
-    m = maximum(logprobs)
-    l = m + log(sum(exp, logprobs .- m))
-    return logprobs .- l
+# Plotting helpers for golf.jl.
+
+using Plots
+import FileIO
+include("../../common/plotting.jl")
+
+const GOLFER_IMAGE = FileIO.load(joinpath(@__DIR__, "resources", "golf_player.jpg"))
+const POND_IMAGE = FileIO.load(joinpath(@__DIR__, "resources", "golf_pond.png"))
+const HOLE_IMAGE = FileIO.load(joinpath(@__DIR__, "resources", "golf_hole.png"))
+
+# Draws an image with its centre at (x, y) and the given height in data coordinates (keeping its aspect ratio).
+function draw_image!(p, image, x, y, height)
+    width = height * size(image, 2) / size(image, 1)
+    plot!(p, range(x - width / 2, x + width / 2, length=size(image, 2)), range(y - height / 2, y + height / 2, length=size(image, 1)),
+        reverse(image, dims=1), yflip=false)
 end
 
-
-function plot_golfcourse(golf_course; fig_height::Int=8)
-    positions = [golf_course.player_x, golf_course.hole_x]
-    if !isnothing(golf_course.pond_x)
-        push!(positions, golf_course.pond_x)
-    end
-    xlims = (minimum(positions)-2, maximum(positions)+4)
-    ylims = (-0.5, 7)#(xlims[1]-xlims[0])/2)
-
-    plt.close();
-    fig, ax = plt.subplots(figsize = ((xlims[2]-xlims[1])/(ylims[2]-ylims[1])*fig_height, fig_height))
-    ax.set_aspect("equal")
-    ax.set_xlim(xlims)
-    ax.set_ylim(ylims)
-
-    scale = fig_height/8
-
-    golfer = plt_image.imread(joinpath(@__DIR__, "resources", "golf_player.jpg"))
-    pond = plt_image.imread(joinpath(@__DIR__, "resources", "golf_pond.png"))
-    hole = plt_image.imread(joinpath(@__DIR__, "resources", "golf_hole.png"))
-    golfer_box = plt_box.OffsetImage(golfer, zoom=0.20*scale)
-    pond_box = plt_box.OffsetImage(pond, zoom=0.22*scale)
-    hole_box = plt_box.OffsetImage(hole, zoom=0.22*scale)
-
-
-    ab = plt_box.AnnotationBbox(hole_box, (golf_course.hole_x+0.18,0.4), frameon=false, zorder=0)
-    ax.add_artist(ab)
-
-    ab = plt_box.AnnotationBbox(golfer_box, (golf_course.player_x-0.33,0.75), frameon=false, zorder=0)
-    ax.add_artist(ab)
-
-    if !isnothing(golf_course.pond_x)
-        ab = plt_box.AnnotationBbox(pond_box, (golf_course.pond_x,0.3), frameon=false, zorder=0)
-        ax.add_artist(ab)
-    end
-    return fig, ax
+function plot_golfcourse(course)
+    xlims = (min(course.player_x, course.hole_x, course.pond_x) - 2, max(course.player_x, course.hole_x, course.pond_x) + 4)
+    p = plot(xlims=xlims, ylims=(-0.5, 7), aspect_ratio=:equal, legend=false, size=(900, 500), grid=false)
+    draw_image!(p, HOLE_IMAGE, course.hole_x + 0.18, 0.5, 1.0)
+    draw_image!(p, POND_IMAGE, course.pond_x, 0.1, 0.8)
+    draw_image!(p, GOLFER_IMAGE, course.player_x - 0.33, 0.75, 1.2)
+    return p
 end
 
-# Plotting the golf strikes
-function plot_traces(course, result)
-    plt.close()
-    fig, ax = plot_golfcourse(course, fig_height=8)
-    end_x_positions = Vector{Float64}(undef,length(result))
-    for t in 1:length(result)
-        angle = result[:angle][t]
-        power = result[:power][t]
-        wind = result[:wind][t]
-        golfer_strike = get_strike(angle, power)
-        trajectory, end_x_positions[t] = get_trajectory(course, [course.player_x,0.], golfer_strike, wind)
-        ax.plot([pos[1] for pos in trajectory], [pos[2] for pos in trajectory], color="black", alpha=0.01)
+# Trajectories of the strikes in the traces (transparent), and a histogram of where the balls end up.
+function plot_traces(course, traces)
+    p = plot_golfcourse(course)
+    end_positions = zeros(length(traces))
+    for t in 1:length(traces)
+        strike = get_strike(traces[:angle][t], traces[:power][t])
+        trajectory, end_positions[t] = get_trajectory(course, [course.player_x, 0.], strike, traces[:wind][t])
+        plot!(p, first.(trajectory), last.(trajectory), color=:black, alpha=0.02)
     end
-    
-    bins = LinRange(course.player_x,course.hole_x+4,100)
-    plt.hist(end_x_positions, density=true, bins=bins, alpha=0.75)
+    histogram!(p, end_positions, normalize=:pdf, bins=range(course.player_x, course.hole_x + 4, length=100), alpha=0.75, linewidth=0)
+    return p
 end
 
+# A strike with angle 58.1° and power 0.66 in a tail wind of 0.03, which we observe in golf.jl.
 function get_observed_trajectory(course)
-    trajectory, end_x_position = get_trajectory(course, [0.,0.], get_strike(deg2rad(58.1),0.66), 0.03)
-    trajectory = hcat(trajectory...)
-    return trajectory
+    trajectory, _ = get_trajectory(course, [0., 0.], get_strike(deg2rad(58.1), 0.66), 0.03)
+    return hcat(trajectory...)
 end
