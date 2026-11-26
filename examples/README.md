@@ -23,9 +23,9 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [pedestrian.jl](universal/pedestrian.jl) | Introduction to universal models: a random walk with an unbounded number of steps, posterior over the number of steps, custom MH proposals (Mak et al.) | likelihood weighting, LMH, RWMH |
 | [discontinuous_vi.jl](universal/discontinuous_vi.jl) | Why reparameterisation gradients fail on a discontinuous density, and a custom guide | ADVI, BBVI, guide with `ReinforceELBO` |
 | [non_parametric_hmc.jl](universal/non_parametric_hmc.jl) | HMC on a model with varying dimension | NP-HMC |
-| [geometric.jl](universal/geometric.jl) | Geometric distribution via loop and recursion, compared to exact posterior | likelihood weighting |
-| [dice_paradox.jl](universal/dice_paradox.jl) | "Six in a row" dice paradox | likelihood weighting |
-| [milch_urn.jl](universal/milch_urn.jl) | Urn with unknown number of balls (Milch et al.) | likelihood weighting |
+| [geometric.jl](universal/geometric.jl) | Unbounded loop vs. recursion with `@subppl`, checked against the exact posterior | likelihood weighting |
+| [dice_paradox.jl](universal/dice_paradox.jl) | Expected rolls until N sixes (in a row) given all rolls are even, conditioning with `Dirac`, checked against the exact answer | likelihood weighting |
+| [milch_urn.jl](universal/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.), posterior over the number of balls checked against the exact posterior, noisy or noise-free observations | likelihood weighting |
 | [vi.jl](universal/vi.jl) | Variational inference with a mean-field Q over addresses: linear regression, and a model with a random number of variables | ADVI, guide, BBVI |
 | [hmm_lgss.jl](universal/hmm_lgss.jl) | Hidden Markov model and linear Gaussian state space model | SMC, particle Gibbs |
 | [imcmc.jl](universal/imcmc.jl) | LMH and HMC written as involutive MCMC | iMCMC |
@@ -53,7 +53,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [conditioning.jl](graph/conditioning.jl) | Observing deterministic expressions (Holtzen, Dice) | likelihood weighting |
 | [constrained_support.jl](graph/constrained_support.jl) | Variables whose support depends on other variables | HMC, ADVI |
 | [lgss.jl](graph/lgss.jl) | Linear Gaussian state space model vs. exact posterior | SMC, particle Gibbs, PGAS |
-| [milch_urn.jl](graph/milch_urn.jl) | Urn model as factor graph (Milch et al.) | exact inference |
+| [milch_urn.jl](graph/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.) as one model per number of balls, keeping factors small, noisy or noise-free observations | variable elimination |
 | [plated_gmm.jl](graph/plated_gmm.jl) | Gaussian mixture model, plated vs. unplated compilation | compiled LW, LMH, RWMH |
 | [aqua.jl](graph/aqua.jl) | Quantised density approximation | AQUA |
 | [hur_slicing.jl](graph/hur_slicing.jl) | Program slicing (Hur et al.) | variable elimination |

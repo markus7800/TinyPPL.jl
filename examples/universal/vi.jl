@@ -65,6 +65,7 @@ print_posterior("guide", [params["mu_intercept"], params["mu_slope"]], [params["
     end
     return x
 end
+# TODO: try this with observed number of steps and categorical variational distribution for n
 
 # BBVI fits a distribution of each variable's prior family (here Geometric for n and Uniform for the steps),
 # so it can handle the discrete n. The score function gradient estimator needs many samples per step (L = 100).
