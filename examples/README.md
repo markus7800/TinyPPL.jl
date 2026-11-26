@@ -29,7 +29,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [vi.jl](universal/vi.jl) | Variational inference with a mean-field Q over addresses: linear regression, and a model with a random number of variables | ADVI, guide, BBVI |
 | [imcmc.jl](universal/imcmc.jl) | Single-site MH and HMC written as involutive MCMC with auxiliary programs and trace transformations, checked against the exact moments | iMCMC |
 | [trace_transform.jl](universal/trace_transform.jl) | Trace transformations with automatic Jacobians: Box-Muller, a transformation with auxiliary variables used as importance sampling proposal, stick-breaking Dirichlet | importance sampling |
-| [lda.jl](universal/lda.jl) | Latent Dirichlet allocation | LMH |
+| [lda.jl](universal/lda.jl) | Latent Dirichlet allocation with Dirichlet distributions as normalised Gammas, label switching between chains | LMH |
 
 ### Evaluation-based, static models ([static/](static/))
 `@ppl static` models have a fixed, finite set of random variables, which enables more efficient inference.
