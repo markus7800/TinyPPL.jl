@@ -62,9 +62,9 @@ Models may instantiate an unbounded number of random variables; inference runs t
 
 | Script | What it shows | Inference |
 |---|---|---|
-| [run.jl](exact_inference/run.jl) | Runs a discrete model from [models/](exact_inference/models/): `julia --project=examples examples/exact_inference/run.jl burglary` | VE, BP, junction tree |
-| [factor_operations.jl](exact_inference/factor_operations.jl) | Factor products, divisions and benchmarks | VE, BP, junction tree |
-| [bif_networks.jl](exact_inference/bif_networks.jl) | Reads Bayesian networks from the [bnlearn repository](https://www.bnlearn.com/bnrepository/) (downloaded on first use) | — |
+| [run.jl](exact_inference/run.jl) | Runs the discrete models in [models/](exact_inference/models/) (all, or e.g. `run.jl burglary monty_hall`) and compares with their reference solutions | VE, BP, junction tree |
+| [building_blocks.jl](exact_inference/building_blocks.jl) | Factor operations, elimination orders, scaling to networks with thousands of variables, junction trees, queries, conditioning, exact sampling | VE, BP, junction tree |
+| [bif_networks.jl](exact_inference/bif_networks.jl) | Bayesian networks from the [bnlearn repository](https://www.bnlearn.com/bnrepository/) (downloaded on first use): marginals, many queries on a network with 1041 variables, export as model code for other PPLs | VE, junction tree |
 
 ### Semantics ([semantics/](semantics/))
 

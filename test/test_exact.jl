@@ -590,6 +590,13 @@ end
         push!(fs, f); push!(vs[1].neighbours, f); push!(vs[N].neighbours, f)
         @test !redirect_stdout(() -> is_tree(vs, fs), devnull)
     end
+    @testset "belief tree of a factor graph with a cycle" begin
+        # unrolled the cycle forever (until out of memory) before
+        vs, fs, _, _ = chain_factor_graph(5)
+        f = FactorNode([vs[1], vs[5]], zeros(2, 2))
+        push!(fs, f); push!(vs[1].neighbours, f); push!(vs[5].neighbours, f)
+        @test_throws ErrorException get_belief_tree(fs[1])
+    end
     @testset "belief_propagation with_division=$with_division" for with_division in (false, true)
         vs, fs, log_evidence, posterior_xN = chain_factor_graph(N)
         res = belief_propagation(get_belief_tree(fs[1]), fs[1], true; with_division=with_division)

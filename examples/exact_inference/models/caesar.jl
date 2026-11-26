@@ -7,7 +7,6 @@ const P = [0.08167, 0.01492, 0.02782, 0.04253, 0.12702, 0.02228, 0.02015,
     0.00978, 0.02360, 0.00150, 0.01974, 0.00075]
 const K = 4
 const msg = [8,5,12,12,15, 23,15,18,12,4, 9, 1,13, 13,1,18,11,21,19]
-# const msg = rand(1:26, 100)
 const Os = ((msg .+ K) .% 26 .+ 1)
 
 function get_model()
@@ -55,7 +54,7 @@ function get_model_2()
     end
 end
 
-function print_reference_solution(N::Int=0) # argument to be compatible with ladder / diamond
+function print_reference_solution()
     p_f = 0.0001
     W = zeros(26)
     for k in 1:26

@@ -37,9 +37,11 @@ mutable struct BeliefNode
 end
 
 # Constructor already creates tree from factor graph.
-# Make sure that factor graph is indeed tree.
+# If the factor graph has a cycle, a node is reached twice and we throw an error
+# (otherwise the cycle would be unrolled forever).
 function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,BeliefNode})
     root = BeliefNode(node, parent, 0)
+    visited = Set{FactorGraphNode}([node])
     stack = BeliefNode[root]
     while !isempty(stack)
         this = pop!(stack)
@@ -48,6 +50,8 @@ function BeliefNode(node::FactorGraphNode, parent::Union{Nothing,BeliefNode})
                 this.parent_index = i
                 this.neighbours[i] = this.parent
             else
+                n in visited && error("Factor graph is not a tree: $n can be reached on two paths.")
+                push!(visited, n)
                 child = BeliefNode(n, this, i)
                 this.neighbours[i] = child
                 push!(stack, child)

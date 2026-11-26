@@ -1,29 +1,6 @@
 
 using TinyPPL.Graph
 
-# model = @pgm uninvoked Diamond begin
-#     function or(x, y)
-#         max(x, y)
-#     end
-#     function and(x, y)
-#         min(x, y)
-#     end
-#     function diamond(s1)
-#         let route ~ Bernoulli(0.5), # Bernoulli(s1 == 1 ? 0.4 : 0.6),
-#             s2 = route == 1. ? s1 : false,
-#             s3 = route == 1. ? false : s1,
-#             drop ~ Bernoulli(0.0001)
-
-#             or(s2, and(s3, 1-drop))
-#         end
-#     end
-#     let net1 ~ Dirac(diamond(1.)),
-#         net2 ~ Dirac(diamond(net1)),
-#         net3 ~ Dirac(diamond(net2))
-
-#         net3
-#     end
-# end
 function get_model()
     @pgm uninvoked Diamond begin
         function or(x, y)
