@@ -27,8 +27,8 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [dice_paradox.jl](universal/dice_paradox.jl) | Expected rolls until N sixes (in a row) given all rolls are even, conditioning with `Dirac`, checked against the exact answer | likelihood weighting |
 | [milch_urn.jl](universal/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.), posterior over the number of balls checked against the exact posterior, noisy or noise-free observations | likelihood weighting |
 | [vi.jl](universal/vi.jl) | Variational inference with a mean-field Q over addresses: linear regression, and a model with a random number of variables | ADVI, guide, BBVI |
-| [imcmc.jl](universal/imcmc.jl) | LMH and HMC written as involutive MCMC | iMCMC |
-| [trace_transform.jl](universal/trace_transform.jl) | Trace transformations (Box-Muller, Dirichlet) | — |
+| [imcmc.jl](universal/imcmc.jl) | Single-site MH and HMC written as involutive MCMC with auxiliary programs and trace transformations, checked against the exact moments | iMCMC |
+| [trace_transform.jl](universal/trace_transform.jl) | Trace transformations with automatic Jacobians: Box-Muller, a transformation with auxiliary variables used as importance sampling proposal, stick-breaking Dirichlet | importance sampling |
 | [lda.jl](universal/lda.jl) | Latent Dirichlet allocation | LMH |
 
 ### Evaluation-based, static models ([static/](static/))
