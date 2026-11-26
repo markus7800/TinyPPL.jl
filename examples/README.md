@@ -54,9 +54,9 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [constrained_support.jl](graph/constrained_support.jl) | Variables whose support depends on other variables, checked against the exact distribution | HMC, ADVI, BBVI |
 | [lgss.jl](graph/lgss.jl) | Linear Gaussian state space model over 400 steps: likelihood weighting collapses, SMC path degeneracy, particle Gibbs with and without ancestral sampling, custom proposals | likelihood weighting, SMC, particle Gibbs |
 | [milch_urn.jl](graph/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.) as one model per number of balls, keeping factors small, noisy or noise-free observations | variable elimination |
-| [plated_gmm.jl](graph/plated_gmm.jl) | Gaussian mixture model, plated vs. unplated compilation | compiled LW, LMH, RWMH |
-| [aqua.jl](graph/aqua.jl) | Quantised density approximation | AQUA |
-| [hur_slicing.jl](graph/hur_slicing.jl) | Program slicing (Hur et al.) | variable elimination |
+| [plated_gmm.jl](graph/plated_gmm.jl) | Gaussian mixture model: plates speed up compilation, compiled inference reproduces the generic chains faster, comparison with an evaluation-based model | likelihood weighting, LMH, RWMH (generic and compiled) |
+| [aqua.jl](graph/aqua.jl) | Approximate inference by quantising continuous variables (Huang et al.): a conjugate model, return value distributions, benchmarks from the paper | AQUA (VE, BP, junction tree) |
+| [hur_slicing.jl](graph/hur_slicing.jl) | Program slicing (Hur et al.): a slice that ignores what the observation depends on gives the wrong posterior | variable elimination |
 
 ### Exact inference ([exact_inference/](exact_inference/))
 

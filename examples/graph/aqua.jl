@@ -1,19 +1,144 @@
+# AQUA: approximate inference by quantising continuous distributions
+# (Huang, Dutta, Misailovic: AQUA: Automated Quantized Inference for Probabilistic Programs, ATVA 2021).
+#
+# AQUA splits the support of each continuous variable into N intervals, which turns a graph-based model with
+# continuous variables into a discrete factor graph. Exact inference on this factor graph (variable elimination :ve,
+# belief propagation :bp, or the junction tree algorithm :jt) gives approximate marginal densities.
+# Belief propagation is only exact for factor graphs that are trees, otherwise use :ve or :jt.
+# aqua(model, N; method) returns a dictionary from addresses to (grid points, density values).
+#
+# Run: julia --project=examples examples/graph/aqua.jl
+
 using TinyPPL.Distributions
 using TinyPPL.Graph
-
 import Distributions as Dists
+import Random
 using Plots
+include("../common/plotting.jl")
 
+# mean and standard deviation of a density on a uniform grid
+function moments(xs, ps)
+    W = ps ./ sum(ps)
+    m = W'xs
+    return m, sqrt(W' * (xs .- m) .^ 2)
+end
 
-model = @pgm PriorMix begin
+# ===== A conjugate model =====
+# X ~ Normal(0, 1), Y ~ Normal(X, 1), and we observe 3 ~ Normal(Y, 1).
+# Exact posterior: X | 3 ~ Normal(1, sqrt(2/3)) and Y | 3 ~ Normal(2, sqrt(2/3)).
+model = @pgm conjugate begin
+    let X ~ Normal(0., 1.),
+        Y ~ Normal(X, 1.)
+
+        Normal(Y, 1.) ↦ 3.
+    end
+end
+
+println("exact:  X ≈ 1.0 ± ", round(sqrt(2/3), digits=3), ", Y ≈ 2.0 ± ", round(sqrt(2/3), digits=3))
+for method in [:ve, :bp, :jt] # the factor graph is a chain, so belief propagation works
+    result = aqua(model, 200, method=method)
+    println("AQUA ", rpad(method, 3), " X ≈ ", join(round.(moments(result[:X]...), digits=3), " ± "),
+        ", Y ≈ ", join(round.(moments(result[:Y]...), digits=3), " ± "))
+end
+
+# ===== Distribution of the return value =====
+# aqua_get_return_distribution evaluates the return expression on the quantised joint distribution of its variables.
+# Here, there are no observations, so the result is the distribution of a function of independent random variables.
+function return_distribution_error(model, N, exact_pdf; kwargs...)
+    zs, ps = aqua_get_return_distribution(model, N, aqua(model, N, method=:ve); kwargs...)
+    return zs, ps, maximum(abs, ps .- exact_pdf.(zs))
+end
+
+sum_model = @pgm sum_model begin
+    let X ~ Normal(0., 1.),
+        Y ~ Normal(0., 1.)
+        X + Y
+    end
+end
+zs_sum, ps_sum, err = return_distribution_error(sum_model, 100, z -> Dists.pdf(Normal(0., sqrt(2.)), z))
+println("\nX + Y for independent standard normal X, Y: max. density error vs. Normal(0, √2): ", round(err, digits=4))
+
+ratio_model = @pgm ratio_model begin
+    let X ~ Normal(0., 1.),
+        Y ~ Normal(0., 1.)
+        X / Y
+    end
+end
+zs_ratio, ps_ratio, err = return_distribution_error(ratio_model, 200, z -> Dists.pdf(Dists.Cauchy(), z); z0=-10., z1=10.)
+println("X / Y: max. density error vs. Cauchy: ", round(err, digits=4))
+
+mixture_model = @pgm mixture_model begin
+    let X ~ Normal(-2., 1.),
+        Y ~ Normal(2., 1.),
+        B ~ Bernoulli(0.5)
+
+        if B == 1.
+            X
+        else
+            Y
+        end
+    end
+end
+mixture_pdf(z) = 0.5 * Dists.pdf(Normal(-2., 1.), z) + 0.5 * Dists.pdf(Normal(2., 1.), z)
+mixture_cdf(z) = 0.5 * Dists.cdf(Normal(-2., 1.), z) + 0.5 * Dists.cdf(Normal(2., 1.), z)
+zs_mix, ps_mix, err = return_distribution_error(mixture_model, 200, mixture_pdf)
+_, _, err_cdf = return_distribution_error(mixture_model, 200, mixture_cdf; mode=:cdf)
+println("if B then X else Y: max. density error vs. mixture: ", round(err, digits=4), ", max. cdf error: ", round(err_cdf, digits=4))
+
+# X * Y has no elementary density, but X * Y = ((X + Y)^2 - (X - Y)^2) / 4, and (X + Y)/√2 and (X - Y)/√2 are
+# independent standard normal, so X * Y has the same distribution as U/2 - V/2 for independent U, V ~ χ²(1).
+# We compare the two AQUA results on the same grid. The density is infinite at 0, so the grid cannot resolve it there.
+product_model = @pgm product_model begin
+    let X ~ Normal(0., 1.),
+        Y ~ Normal(0., 1.)
+        X * Y
+    end
+end
+chisq_model = @pgm chisq_model begin
+    let U ~ Main.Dists.Chisq(1.),
+        V ~ Main.Dists.Chisq(1.)
+        0.5 * U - 0.5 * V
+    end
+end
+grid = (z0=-5., z1=5.)
+zs_prod, ps_prod = aqua_get_return_distribution(product_model, 100, aqua(product_model, 100, method=:ve); grid...)
+_, ps_chisq = aqua_get_return_distribution(chisq_model, 100, aqua(chisq_model, 100, method=:ve); grid...)
+_, cdf_prod = aqua_get_return_distribution(product_model, 100, aqua(product_model, 100, method=:ve); mode=:cdf, grid...)
+_, cdf_chisq = aqua_get_return_distribution(chisq_model, 100, aqua(chisq_model, 100, method=:ve); mode=:cdf, grid...)
+println("X * Y vs. U/2 - V/2: max. cdf difference: ", round(maximum(abs, cdf_prod .- cdf_chisq), digits=4),
+    ", max. density difference for |z| > 0.5: ", round(maximum(abs, (ps_prod .- ps_chisq)[abs.(zs_prod) .> 0.5]), digits=4))
+
+# For discrete variables, the return distribution is a probability mass function.
+bernoulli_sum = @pgm bernoulli_sum begin
+    let X ~ Bernoulli(0.2),
+        Y ~ Bernoulli(0.5)
+        X + Y
+    end
+end
+result = aqua(bernoulli_sum, 100, method=:ve)
+zs, pmf = aqua_get_return_distribution(bernoulli_sum, 100, result)
+_, cdf = aqua_get_return_distribution(bernoulli_sum, 100, result, mode=:cdf)
+println("X + Y for X ~ Bernoulli(0.2), Y ~ Bernoulli(0.5): P(X + Y = ", Int.(zs), ") = ", round.(pmf, digits=4),
+    " (exact: [0.4, 0.5, 0.1]), cdf: ", round.(cdf, digits=4), " (exact: [0.4, 0.9, 1.0])")
+
+p = plot(layout=(1, 4), size=(1300, 300), legend=false)
+plot!(p[1], zs_sum, ps_sum, title="X + Y"); plot!(p[1], z -> Dists.pdf(Normal(0., sqrt(2.)), z), color=:black, linestyle=:dash)
+plot!(p[2], zs_ratio, ps_ratio, title="X / Y"); plot!(p[2], z -> Dists.pdf(Dists.Cauchy(), z), color=:black, linestyle=:dash)
+plot!(p[3], zs_mix, ps_mix, title="if B then X else Y"); plot!(p[3], mixture_pdf, color=:black, linestyle=:dash)
+plot!(p[4], zs_prod, ps_prod, title="X * Y vs. U/2 - V/2"); plot!(p[4], zs_prod, ps_chisq, color=:black, linestyle=:dash)
+show_plot(p, "graph_aqua_return_distributions")
+
+# ===== Benchmarks from the AQUA paper =====
+# Without a closed-form posterior, we compare the posterior mean of one variable with likelihood weighting.
+# Grid sizes N are chosen such that each model takes a few seconds.
+
+# Student-t observations with a bimodal prior for their location.
+PriorMix = @pgm PriorMix begin
     let N = 10,
         y = [1.6024, 0.880643, -0.792556, -1.02184, -0.530578, 0.494777, -1.51075, -0.630318, -1.18208, 0.187967],
-        
+
         b ~ Bernoulli(0.8),
         m = (2 * b - 1) * 4,
-        
-        # u ~ Uniform(0.,1.),
-        # m = (2 * (u < 0.8) - 1) * 4,
 
         mu ~ Main.Dists.truncated(Normal(m,0.5),-5.,5)
 
@@ -23,49 +148,12 @@ model = @pgm PriorMix begin
     end
 end
 
-N = 40400
-
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:mu]
-plot(xs, ps)
-
-xs, ps = result[:u]
-plot(xs, ps, ylim=(0,5))
-sum(ps[xs .< 0.8]) / sum(ps) # u < 0.8 == true
-sum(ps[xs .> 0.8]) / sum(ps) # u < 0.8 == false
-
-xs, ps = result[:b]
-
-
-ys = [1.6024, 0.880643, -0.792556, -1.02184, -0.530578, 0.494777, -1.51075, -0.630318, -1.18208, 0.187967]
-mus = LinRange(-5,5,1000)
-prior = log.([0.8 * Dists.pdf(Normal(4,0.5), mu) + 0.2 * Dists.pdf(Normal(-4,0.5), mu) for mu in mus])
-lik = [(sum(logpdf(TransformedDistribution(TDist(5), AffineTransform(2., mu)), y) for y in ys)) for mu in mus]
-#lik = [exp(sum(logpdf(Normal(mu,0.5),y) for y in ys)) for mu in mus]
-plot(mus, exp.(prior))
-plot(mus, exp.(lik))
-plot(mus, exp.(prior .+ lik))
-
-Random.seed!(0)
-@time traces, lps = likelihood_weighting(model, 10^6)
-histogram(traces[:mu], weights=exp.(lps), normalize=true, legend=false, lc=1)
-
-Random.seed!(0)
-@time traces = lmh(model, 10^6, addr2proposal=Addr2Proposal(:mu => StaticProposal(Uniform(-5,5))))#, :u => StaticProposal(Bernoulli(0.2))))
-histogram(traces[:mu], normalize=true, legend=false, lc=1)
-traces[:u]
-
-
-
-
-model = @pgm ZeroOne begin
+# A linear classifier: each correctly classified point multiplies the density by e (Exponential(1/e) at 0).
+ZeroOne = @pgm ZeroOne begin
     let N = 20,
         y = [1, -1, 1, -1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, -1, -1, 1, 1, 1, 1],
         x1 = [6, 8, -1, 0, 5, 1.2, -2, 9.8, 4, 12, 1, 10, 1, 2.2, -6, 9.8, 1, 1, 1, 1],
-        
+
         w1 ~ Uniform(-10,10),
         w2 ~ Uniform(-10,10)
 
@@ -75,19 +163,8 @@ model = @pgm ZeroOne begin
     end
 end
 
-f = π
-logpdf(Exponential(1/exp(f)),0.)
-
-N = 200
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:w2]
-plot(xs, ps)
-
-
-model = @pgm Tug begin
+# Tug of war: each match outcome y[i] that agrees with who is stronger multiplies the density by e.
+Tug = @pgm Tug begin
     let N = 40,
         y = [0,1,1,1,0,0,1,0,0,1,0,1,1,1,1,1,1,0,0,0,1,1,0,0,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1],
 
@@ -103,17 +180,8 @@ model = @pgm Tug begin
     end
 end
 
-N = 60
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:alice]
-plot(xs, ps)
-
-
-
-model = @pgm AlterMu begin
+# Only 3 mu1 mu2 - mu3 is identified by the data.
+AlterMu = @pgm AlterMu begin
     let N = 40,
         y = [-2.57251482,  0.33806206,  2.71757796,  1.09861336,  2.85603752,
         -0.91651351,  0.15555127, -2.68160347,  2.47043789,  3.47459025,
@@ -129,23 +197,13 @@ model = @pgm AlterMu begin
         mu3 ~ Main.Dists.truncated(Normal(0.,5.), -2, 2)
 
         [Normal((3.0 * mu1 * mu2) - mu3, 1.) ↦ y[i] for i in 1:N]
-        
+
         mu1
     end
 end
 
-
-N = 60
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:mu1]
-plot(xs, ps)
-
-
-
-model = @pgm AlterMu2 begin
+# Only mu1 + mu2 is identified by the data.
+AlterMu2 = @pgm AlterMu2 begin
     let N = 40,
         y = [-2.57251482,  0.33806206,  2.71757796,  1.09861336,  2.85603752,
         -0.91651351,  0.15555127, -2.68160347,  2.47043789,  3.47459025,
@@ -160,27 +218,14 @@ model = @pgm AlterMu2 begin
         mu2 ~ Uniform(-10,10)
 
         [Normal(mu1 + mu2, 1.) ↦ y[i] for i in 1:N]
-        
+
         mu1
     end
 end
 
-N = 200
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:mu1]
-plot(xs, ps)
-
-
-model = @pgm AnovaRP begin
+# Robust estimation of a mean a, with a separate precision for each observation.
+AnovaRP = @pgm AnovaRP begin
     let N = 40,
-        J = 1,
-        # county = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        # 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        # x = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        # 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0],
         y = [0.617007250574049, 0.895262019894671, -0.729874754380836,
         0.301471152630035, 0.929871984146596, 1.70686064033886, 1.09782179678289,
         1.27082634042846, 1.75132331738128, 1.03490015378005, 1.71226194303743,
@@ -200,262 +245,19 @@ model = @pgm AnovaRP begin
 
         [Normal(a, sigma_y / sqrt(max(1e-5,robust_local_tau[i]))) ↦ y[i] for i in 1:N]
 
-        
         a
     end
 end
 
-N = 60
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:a]
-plot(xs, ps)
-
-Random.seed!(0)
-@time traces = lmh(model, 10^6)
-histogram(traces[:a], normalize=true, legend=false, lc=1,bins=100)
-plot!(xs, ps)
-
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Normal(X, 1.)
-
-        Normal(Y, 1.) ↦ 3.
-    end
+function lw_mean(model, addr)
+    Random.seed!(0)
+    traces, logw = likelihood_weighting(model, 1_000_000)
+    return exp.(logw)'traces[addr]
 end
 
-result = aqua(model, 500);
-
-xs, x_ps = result[:X]
-ys, y_ps = result[:Y]
-plot(xs, x_ps)
-plot!(ys, y_ps)
-
-Random.seed!(0)
-@time traces, lps = likelihood_weighting(model, 10^6)
-histogram(traces[:X], weights=exp.(lps), normalize=true, legend=false, lc=1)
-plot!(xs, x_ps)
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Normal(0, 1.),
-        Z ~ Normal(X + Y, 1e-1)
-
-        Z
-    end
+println()
+for (model, addr, N) in [(PriorMix, :mu, 1000), (ZeroOne, :w2, 200), (Tug, :alice, 60), (AlterMu, :mu1, 30), (AlterMu2, :mu1, 200), (AnovaRP, :a, 30)]
+    result = aqua(model, N, method=:ve)
+    m, _ = moments(result[addr]...)
+    println(rpad(string(model.name), 9), " E[", addr, "]: AQUA (N = ", N, ") ≈ ", round(m, digits=3), ", likelihood weighting ≈ ", round(lw_mean(model, addr), digits=3))
 end
-
-result = aqua(model, 100, method=:ve);
-
-xs, x_ps = result[:X]
-ys, y_ps = result[:Y]
-zs, z_ps = result[:Z]
-plot(xs, x_ps)
-plot!(ys, y_ps)
-plot!(zs, z_ps)
-
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Normal(0, 1.)
-        
-        Normal(X + Y, 1.) ↦ 1.
-    end
-end
-
-result = aqua(model, 100, method=:ve);
-
-
-xs, x_ps = result[:X]
-ys, y_ps = result[:Y]
-plot(xs, x_ps)
-plot!(ys, y_ps)
-
-support, joint = aqua_get_joint(model, 100, result, Address[:X,:Y])
-sum(joint) * (xs[2]-xs[1]) * (ys[2]-ys[1])
-
-heatmap(support[1], support[2], joint)
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Normal(0, 1.)
-        X + Y
-    end
-end
-
-result = aqua(model, 100, method=:ve);
-
-xs, x_ps = result[:X]
-ys, y_ps = result[:Y]
-plot(xs, x_ps)
-plot!(ys, y_ps)
-
-zs, zps = aqua_get_return_distribution(model, 100, result)
-plot(zs, zps)
-plot!(z -> exp(logpdf(Normal(0,sqrt(2.)),z)))
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Uniform(0, 1.)
-        X + Y
-    end
-end
-result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, 100, result)
-plot(zs, zps)
-plot!(z -> exp(logpdf(Normal(0.5,sqrt(1+Dists.var(Uniform(0,1)))),z)))
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Normal(0, 1.)
-        X * Y
-    end
-end
-result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, 100, result)
-
-model = @pgm Model begin
-    let X ~ Main.Dists.Chisq(1.),
-        Y ~ Main.Dists.Chisq(1.)
-        0.5 * X - 0.5* Y
-    end
-end
-result = aqua(model, 100, method=:ve);
-chi_zs, chi_zps = aqua_get_return_distribution(model, 100, result)
-plot(zs, zps)
-plot!(chi_zs, chi_zps)
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Normal(0, 1.)
-        X / Y
-    end
-end
-N = 200
-result = aqua(model, N, method=:ve);
-zs, zps = aqua_get_return_distribution(model, N, result, z0=-10.,z1=10.)
-plot(zs, zps)
-plot!(z -> exp(logpdf(Cauchy(),z)))
-
-
-
-model = @pgm Model begin
-    let X ~ Bernoulli(0.2),
-        Y ~ Bernoulli(0.5)
-        X + Y
-    end
-end
-result = aqua(model, 100, method=:ve);
-zs, zps = aqua_get_return_distribution(model, 100, result, mode=:pdf)
-zs, zps = aqua_get_return_distribution(model, 100, result, mode=:cdf)
-
-
-model = @pgm Model begin
-    let X ~ Normal(-2,1),
-        Y ~ Normal(2,1),
-        B ~ Bernoulli(0.5)
-
-        if B == 1.
-            X
-        else
-            Y
-        end
-    end
-end
-N = 200
-
-result = aqua(model, N, method=:ve);
-zs, zps = aqua_get_return_distribution(model, N, result, mode=:pdf)
-plot(zs, zps)
-plot!(z -> 0.5 * Dists.pdf(Normal(-2,1),z) + 0.5 * Dists.pdf(Normal(2,1),z))
-
-zs_cdf, zps_cdf = aqua_get_return_distribution(model, N, result, mode=:cdf)
-plot(zs_cdf, zps_cdf)
-plot!(z -> 0.5 * Dists.cdf(Normal(-2,1),z) + 0.5 * Dists.cdf(Normal(2,1),z))
-
-
-function rolling_mean_cdf(x::AbstractVector{Float64}, n::Int)
-    y = similar(x)
-    for i in 1:length(x)
-        y[i] = mean(x[max(1,i-n) : min(length(x),i+n)])
-    end
-    y / y[end]
-end
-repeatf(f, x, n) = n > 1 ? f(repeatf(f, x, n-1)) : f(x)
-
-plot(zs_cdf, rolling_mean_cdf(zps_cdf,2))
-plot!(z -> 0.5 * Dists.cdf(Normal(-2,1),z) + 0.5 * Dists.cdf(Normal(2,1),z))
-
-zps_from_cdf = diff(vcat(0,repeatf(_zps -> rolling_mean_cdf(_zps,1), zps_cdf, 6)))
-zps_from_cdf = zps_from_cdf / sum(zps_from_cdf) / (zs_cdf[2] - zs_cdf[1])
-plot(zs_cdf, zps_from_cdf)
-plot!(z -> 0.5 * Dists.pdf(Normal(-2,1),z) + 0.5 * Dists.pdf(Normal(2,1),z))
-
-
-model = @pgm Model begin
-    let X ~ Normal(0.,1.),
-        Y ~ Bernoulli(0.5)
-        X + Y
-    end
-end
-N = 500
-result = aqua(model, N, method=:ve);
-zs, zps = aqua_get_return_distribution(model, N, result, mode=:cdf)
-plot(zs, zps)
-plot!(z -> Dists.cdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
-
-plot(diff(zps))
-sum(diff(zps)) * (zs[2] - zs[1])
-
-
-result = aqua(model, N, method=:ve);
-zs, zps = aqua_get_return_distribution(model, N, result, mode=:pdf)
-plot(zs, zps)
-plot!(z -> Dists.pdf(Normal(0.5, sqrt(1 + 0.5^2)),z))
-
-histogram(randn(10^6) .+ (rand(10^6) .< 0.5), lc=1, normalize=true)
-plot!(z -> exp(logpdf(Normal(0.5, sqrt(1 + 0.5^2)),z)))
-
-
-
-include("../common/gmm_data.jl")
-
-model = @pgm GMM begin
-    function dirichlet(δ, k)
-        let w = [{:w=>i} ~ Gamma(δ, 1) for i in 1:k]
-            w / sum(w)
-        end
-    end
-    let λ = 3, δ = 5.0, ξ = 0.0, κ = 0.01, α = 2.0, β = 10.0,
-        k = ({:k} ~ Poisson(λ-1) ↦ 3) + 1,
-        y = $(Main.gt_ys[1:10]),
-        n = length(y),
-        w = dirichlet(δ, k),
-        means = [{:μ=>j} ~ Normal(ξ, 1/sqrt(κ)) for j in 1:k],
-        vars = [{:σ²=>j} ~ InverseGamma(α, β) for j in 1:k],
-        z = [{:z=>i} ~ Categorical(w) for i in 1:n]
-
-        [{:y=>i} ~ Normal(means[Int(z[i])], sqrt(vars[Int(z[i])])) ↦ y[i] for i in 1:n]
-        
-        means
-    end
-end
-    
-
-N = 60
-
-@time result = aqua(model, N, method=:ve);
-@time result = aqua(model, N, method=:bp);
-@time result = aqua(model, N, method=:jt);
-
-xs, ps = result[:μ=>1]
-plot(xs, ps)

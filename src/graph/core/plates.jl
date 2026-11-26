@@ -397,6 +397,7 @@ struct PlateInfo
     plate_sample_fs::Vector{Function}
     plate_to_constrained::Vector{Function}
     plate_to_unconstrained::Vector{Function}
+    program_order::Vector{Int} # topological order of the nodes as in the program, used to order plates
 end
 
 # Returns the generated function of kind `kind` for `plate`.
@@ -447,10 +448,19 @@ function get_topological_order(n_variables::Int, plate_info::PlateInfo)
         n_parents[to] += 1
     end
 
+    # Among the units without unordered parents, always choose the one that comes first in the program.
+    # Then plated code (sample!, logpdf, compiled inference) visits the nodes in the same order as algorithms that
+    # follow pgm.topological_order, if the latent nodes of each plate are consecutive in the program.
+    # In particular, they draw the same random numbers.
+    position = zeros(Int, n_variables)
+    position[plate_info.program_order] = 1:n_variables
+    program_position(u::Plate) = minimum(position[node] for node in u.nodes)
+    program_position(u::Int) = position[u]
+
     ordered_nodes = Union{Int,Plate}[] # topological order
     roots = Union{Int,Plate}[u for u in unique_nodes if n_parents[u] == 0]
     while !isempty(roots)
-        u = pop!(roots)
+        u = popat!(roots, argmin(program_position.(roots)))
         push!(ordered_nodes, u)
         for (from, to) in unit_edges
             if from == u

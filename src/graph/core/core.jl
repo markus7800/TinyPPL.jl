@@ -472,7 +472,7 @@ function compile_symbolic_pgm(
 
     @assert is_topological_order(spgm, translation_order)
     # topolical_ordered = get_topological_order(n_variables, edges) # includes observed variables
-    topolical_ordered = [sym_to_ix[sym] for sym in translation_order]
+    topological_ordered = [sym_to_ix[sym] for sym in translation_order]
 
     X = gensym(:X)
     Y = gensym(:Y)
@@ -526,7 +526,8 @@ function compile_symbolic_pgm(
             plate_lp_unconstrained_fs,
             plate_sample_fs,
             plate_to_constrained,
-            plate_to_unconstrained
+            plate_to_unconstrained,
+            topological_ordered
             )
     else
         plate_info = nothing
@@ -582,7 +583,7 @@ function compile_symbolic_pgm(
         spgm,
         E,
 
-        topolical_ordered
+        topological_ordered
     )
 end
 

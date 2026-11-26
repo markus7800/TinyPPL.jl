@@ -141,6 +141,19 @@ const plated_single_member = @pgm plated graph_test_plated_single_member begin
     end
 end
 
+# several latent plates and nodes: the plate order has to follow the program order,
+# such that compiled likelihood weighting draws the same random numbers as likelihood weighting
+const plated_mixture = @pgm plated graph_test_plated_mixture begin
+    let ys = [-1., 0.5, 2.],
+        σ = [{:σ => j} ~ Gamma(2., 1.) for j in 1:2],
+        a ~ Normal(0., 1.),
+        μ = [{:μ => j} ~ Normal(a, 1.) for j in 1:2],
+        z = [{:z => i} ~ Categorical([0.5, 0.5]) for i in 1:3]
+        [({:y => i} ~ Normal(μ[Int(z[i])], σ[Int(z[i])]) ↦ ys[i]) for i in 1:3]
+        a
+    end
+end
+
 # x only exists if c == 1
 #   P(c = 1 | y) ∝ 0.3 N(y; 2, √2),   P(c = 0 | y) ∝ 0.7 N(y; -1, 1)
 const lazy_branching = @pgm lazy_ifs graph_test_lazy_branching begin
@@ -430,6 +443,16 @@ end
         @test sum(exp, lw) ≈ 1
         @test wmean(traces[:μ], lw) ≈ R.NN_POST_MEAN atol = 0.03
         @test log_Z ≈ R.NN_LOG_EVIDENCE atol = 0.02
+    end
+    @testset "compiled equals generic (plated)" begin
+        lw_f = compile_likelihood_weighting(plated_mixture)
+        Random.seed!(0)
+        traces, lw, log_Z = likelihood_weighting(plated_mixture, 1000)
+        Random.seed!(0)
+        compiled_traces, compiled_lw, compiled_log_Z = compiled_likelihood_weighting(plated_mixture, lw_f, 1000)
+        @test traces.data == compiled_traces.data
+        @test lw ≈ compiled_lw
+        @test log_Z ≈ compiled_log_Z
     end
     @testset "compiled discrete_network" begin
         Random.seed!(0)
