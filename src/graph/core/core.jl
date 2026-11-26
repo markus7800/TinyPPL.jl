@@ -306,23 +306,14 @@ function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
     end
 
     push!(lp_block_args, :($lp = 0.0))
-    if unconstrained && !isnothing(plate_info)
-        # plate functions read constrained values from X and write constrained values into X
-        # -> work on copy to not mutate input.
+    if unconstrained
+        # X contains unconstrained values, but the distributions are written in terms of constrained values X[node].
+        # We transform each node in topological order and write its constrained value into X, such that
+        # its children read the constrained value (also for dynamic indices like X[k + Int(X[i])]).
+        # Plate functions do the same. We work on a copy to not mutate the input.
         # The copy is a Vector of scalars (e.g. Vector{Tracker.TrackedReal} for a Tracker.TrackedVector),
         # because tracked arrays (Tracker, ReverseDiff) do not support setindex!, but gradients flow through getindex.
         push!(lp_block_args, :($X = [$X[i] for i in eachindex($X)]))
-    end
-    # For unconstrained logpdf, X contains unconstrained values, but the distributions are written
-    # in terms of constrained values X[node]. As setindex! is not differentiable, we store the constrained
-    # value of each transformed node in a local variable and substitute X[node] with it in all distributions.
-    # (only for non-plated nodes, plate functions mutate X instead, see above)
-    constrained_values = Dict{Int,Symbol}()
-    function substitute_constrained(d)
-        for (node, x_sym) in constrained_values
-            d = substitute_expr(:($X[$node]), x_sym, d)
-        end
-        return d
     end
     d_sym = gensym("dist")
     for node in ordered_nodes
@@ -330,8 +321,8 @@ function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
             plate_f = plate_function(plate_info, unconstrained ? :lp_unconstrained : :lp, node)
             push!(lp_block_args, :($lp += $plate_f($X, $Y)))
         else
-            d = substitute_constrained(symbolic_dists[node])
-            
+            d = symbolic_dists[node]
+
             if is_observed[node]
                 push!(lp_block_args, :($d_sym = $d))
                 push!(lp_block_args, :($lp += logpdf($d_sym, $Y[$(node-n_latents)])))
@@ -340,13 +331,7 @@ function get_logpdf(n_variables::Int, edges::Set{Pair{Int,Int}}, plate_info::Uni
                     push!(lp_block_args, :($d_sym = $d))
                     push!(lp_block_args, :($d_sym = to_unconstrained($d_sym)))
                     push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node]))) # unconstrained value
-                    x_sym = gensym("x_$node")
-                    push!(lp_block_args, :($x_sym = $d_sym.T_inv($X[$node]))) # to constrained value
-                    if isnothing(plate_info)
-                        constrained_values[node] = x_sym
-                    else
-                        push!(lp_block_args, :($X[$node] = $x_sym)) # X is a copy
-                    end
+                    push!(lp_block_args, :($X[$node] = $d_sym.T_inv($X[$node]))) # to constrained value (X is a copy)
                 else
                     push!(lp_block_args, :($d_sym = $d))
                     push!(lp_block_args, :($lp += logpdf($d_sym, $X[$node])))

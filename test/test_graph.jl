@@ -154,6 +154,16 @@ const plated_mixture = @pgm plated graph_test_plated_mixture begin
     end
 end
 
+# transformed (positive) variables read through a slice w[1:3] and a dynamic index s[Int(z)]
+const unplated_transformed = @pgm uninvoked graph_test_unplated_transformed begin
+    let w = [{:w => i} ~ Gamma(2., 1.) for i in 1:3],
+        s = [{:s => i} ~ InverseGamma(2., 1.) for i in 1:3],
+        z ~ Categorical(w / sum(w))
+        {:y} ~ Normal(0., sqrt(s[Int(z)])) ↦ 0.5
+        z
+    end
+end
+
 # x only exists if c == 1
 #   P(c = 1 | y) ∝ 0.3 N(y; 2, √2),   P(c = 0 | y) ∝ 0.7 N(y; -1, 1)
 const lazy_branching = @pgm lazy_ifs graph_test_lazy_branching begin
@@ -770,6 +780,22 @@ end
     @test G.retvals === TinyPPL.Evaluation.retvals === TinyPPL.retvals
     @test G.subset === TinyPPL.Evaluation.subset
     @test length(subset(traces, [2])) == 1
+end
+
+@testset "unconstrained logpdf of transformed variables" begin
+    # Gamma and InverseGamma are transformed with log, so log p(y) = log p(x) + Σ y_i over the transformed nodes.
+    # Before, children read the unconstrained values through slices and dynamic indices (log w can be negative).
+    m = unplated_transformed
+    transformed = [i for i in 1:m.n_latents if m.addresses[i] isa Pair]
+    Random.seed!(0)
+    X = zeros(m.n_latents); Y = zeros(m.n_latents)
+    all_equal = true
+    for _ in 1:500
+        m.sample!(X)
+        m.transform_to_unconstrained!(X, Y)
+        all_equal &= m.unconstrained_logpdf(Y, m.observations) ≈ m.logpdf(X, m.observations) + sum(Y[transformed])
+    end
+    @test all_equal
 end
 
 end # module GraphTests

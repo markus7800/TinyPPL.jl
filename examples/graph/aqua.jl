@@ -257,7 +257,7 @@ end
 
 println()
 for (model, addr, N) in [(PriorMix, :mu, 1000), (ZeroOne, :w2, 200), (Tug, :alice, 60), (AlterMu, :mu1, 30), (AlterMu2, :mu1, 200), (AnovaRP, :a, 30)]
-    result = aqua(model, N, method=:ve)
+    local result = aqua(model, N, method=:ve)
     m, _ = moments(result[addr]...)
     println(rpad(string(model.name), 9), " E[", addr, "]: AQUA (N = ", N, ") ≈ ", round(m, digits=3), ", likelihood weighting ≈ ", round(lw_mean(model, addr), digits=3))
 end

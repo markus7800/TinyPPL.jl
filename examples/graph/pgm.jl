@@ -54,7 +54,7 @@ model = @pgm plated linear_regression begin
 end
 println(model)
 println("Plates: ", model.plate_info.plates)
-println("Plated edges: ", collect(model.plate_info.plated_edges), "\n")
+println("Plated edges: ", sort(collect(model.plate_info.plated_edges), by=string), "\n")
 
 
 # ===== Loops =====
