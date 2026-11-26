@@ -21,7 +21,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | Script | What it shows | Inference |
 |---|---|---|
 | [pedestrian.jl](universal/pedestrian.jl) | Introduction to universal models: a random walk with an unbounded number of steps, posterior over the number of steps, custom MH proposals (Mak et al.) | likelihood weighting, LMH, RWMH |
-| [discontinuous_vi.jl](universal/discontinuous_vi.jl) | Why reparameterisation gradients fail on a discontinuous density, and a custom guide | ADVI, BBVI, guide with `ReinforceELBO` |
+| [discontinuous_vi.jl](universal/discontinuous_vi.jl) | Why reparameterisation gradients fail on discontinuous densities (a step function, and branching on a latent variable from Lee et al.), and a custom guide | ADVI, BBVI, guide with `ReinforceELBO` |
 | [non_parametric_hmc.jl](universal/non_parametric_hmc.jl) | HMC on a model with varying dimension | NP-HMC |
 | [geometric.jl](universal/geometric.jl) | Unbounded loop vs. recursion with `@subppl`, checked against the exact posterior | likelihood weighting |
 | [dice_paradox.jl](universal/dice_paradox.jl) | Expected rolls until N sixes (in a row) given all rolls are even, conditioning with `Dirac`, checked against the exact answer | likelihood weighting |
@@ -50,7 +50,6 @@ Models may instantiate an unbounded number of random variables; inference runs t
 | [pgm.jl](graph/pgm.jl) | Introduction to `@pgm` models: model structure, functions and data, plates, `@iterate`/`@loop`, eager vs. lazy branching, calling outside functions | likelihood weighting |
 | [linear_regression.jl](graph/linear_regression.jl) | Bayesian linear regression, every sampling algorithm checked against the exact posterior and evidence | likelihood weighting, LMH, RWMH, HMC, SMC, particle IMH |
 | [vi.jl](graph/vi.jl) | Variational inference on a correlated chain of normals, Rao-Blackwellised BBVI using the graph structure | ADVI, BBVI |
-| [conditioning.jl](graph/conditioning.jl) | Observing deterministic expressions (Holtzen, Dice) | likelihood weighting |
 | [constrained_support.jl](graph/constrained_support.jl) | Variables whose support depends on other variables | HMC, ADVI |
 | [lgss.jl](graph/lgss.jl) | Linear Gaussian state space model vs. exact posterior | SMC, particle Gibbs, PGAS |
 | [milch_urn.jl](graph/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.) as one model per number of balls, keeping factors small, noisy or noise-free observations | variable elimination |
@@ -70,8 +69,9 @@ Models may instantiate an unbounded number of random variables; inference runs t
 
 | Script | What it shows | Inference |
 |---|---|---|
-| [conditional_observe.jl](semantics/conditional_observe.jl) | Observations inside branches, universal vs. graph | likelihood weighting |
-| [discontinuities.jl](semantics/discontinuities.jl) | Densities with discontinuities from branching | — |
+| [conditional_observe.jl](semantics/conditional_observe.jl) | An observation inside a branch shifts the posterior towards the other branch (Kiselyov), universal vs. graph | likelihood weighting, LMH |
+| [observe_in_functions.jl](semantics/observe_in_functions.jl) | Two functions that always return 1, one with an observation, give different posteriors (Holtzen et al.) | likelihood weighting |
+| [varying_dimension.jl](semantics/varying_dimension.jl) | A variable that only exists in one branch: correct with universal MCMC, wrong when the model is declared static | LMH, RWMH, HMC |
 
 ### Case studies ([case_studies/](case_studies/))
 
