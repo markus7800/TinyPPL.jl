@@ -22,7 +22,7 @@ Models may instantiate an unbounded number of random variables; inference runs t
 |---|---|---|
 | [pedestrian.jl](universal/pedestrian.jl) | Introduction to universal models: a random walk with an unbounded number of steps, posterior over the number of steps, custom MH proposals (Mak et al.) | likelihood weighting, LMH, RWMH |
 | [discontinuous_vi.jl](universal/discontinuous_vi.jl) | Why reparameterisation gradients fail on discontinuous densities (a step function, and branching on a latent variable from Lee et al.), and a custom guide | ADVI, BBVI, guide with `ReinforceELBO` |
-| [non_parametric_hmc.jl](universal/non_parametric_hmc.jl) | HMC on a model with varying dimension | NP-HMC |
+| [non_parametric_hmc.jl](universal/non_parametric_hmc.jl) | HMC on the pedestrian model, whose traces have a varying number of steps (Mak et al.), checked against likelihood weighting | nonparametric HMC |
 | [geometric.jl](universal/geometric.jl) | Unbounded loop vs. recursion with `@subppl`, checked against the exact posterior | likelihood weighting |
 | [dice_paradox.jl](universal/dice_paradox.jl) | Expected rolls until N sixes (in a row) given all rolls are even, conditioning with `Dirac`, checked against the exact answer | likelihood weighting |
 | [milch_urn.jl](universal/milch_urn.jl) | Urn with an unknown number of balls (Milch et al.), posterior over the number of balls checked against the exact posterior, noisy or noise-free observations | likelihood weighting |
